@@ -1,0 +1,3337 @@
+{
+  "add_to_dictionary": {
+    "message": "Afegeix al diccionari"
+  },
+  "add_to_personal_dictionary": {
+    "message": "Afegeix al diccionari personal"
+  },
+  "add_word_to_dictionary": {
+    "message": "Afegeix \"$1\" al diccionari",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "advanced": {
+    "message": "Avan\u00e7ada"
+  },
+  "alt": {
+    "message": "alt"
+  },
+  "altgr": {
+    "message": "Alt Gr"
+  },
+  "always_auto_correct": {
+    "message": "Agressiu"
+  },
+  "am_phonetic_arm_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat fon\u00e8tic armeni"
+  },
+  "appnamejpkeyboard": {
+    "message": "M\u00e8tode d'introducci\u00f3 japon\u00e8s de Google (per a teclat japon\u00e8s)"
+  },
+  "appnameuskeyboard": {
+    "message": "M\u00e8tode d'introducci\u00f3 japon\u00e8s de Google (per a teclat nord-americ\u00e0)"
+  },
+  "auto_correction_level": {
+    "message": "Correcci\u00f3 autom\u00e0tica"
+  },
+  "backspace": {
+    "message": "tecla de retroc\u00e9s"
+  },
+  "basic": {
+    "message": "Informaci\u00f3 b\u00e0sica"
+  },
+  "be_fra_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat belga (franc\u00e8s)"
+  },
+  "be_ger_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat belga (alemany)"
+  },
+  "be_nld_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat belga (holand\u00e8s)"
+  },
+  "bg_bul_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat b\u00falgar"
+  },
+  "bg_phonetic_bul_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat fon\u00e8tic b\u00falgar"
+  },
+  "br_por_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat brasiler (portugu\u00e8s de Brasil)"
+  },
+  "by_bel_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat belar\u00fas"
+  },
+  "ca_eng_eng_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat canadenc (angl\u00e8s)"
+  },
+  "ca_fra_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat canadenc (franc\u00e8s)"
+  },
+  "ca_multix_fra_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat multiling\u00fce canadenc (franc\u00e8s)"
+  },
+  "capital": {
+    "message": "maj\u00fascules"
+  },
+  "capslock": {
+    "message": "bloq maj"
+  },
+  "ch_fr_fra_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat su\u00efs (franc\u00e8s)"
+  },
+  "ch_ger_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat su\u00efs (alemany)"
+  },
+  "chos_inputtool_description": {
+    "message": "Les Eines d'introducci\u00f3 de text de Google per a Chrome OS us permeten escriure en l'idioma que vulgueu a Chrome OS."
+  },
+  "chos_inputtool_title": {
+    "message": "Eines d'introducci\u00f3 de text de Google"
+  },
+  "compositionmodedirect": {
+    "message": "Introducci\u00f3 directa"
+  },
+  "compositionmodefullascii": {
+    "message": "Llat\u00ed ample"
+  },
+  "compositionmodefullkatakana": {
+    "message": "Katakana"
+  },
+  "compositionmodehalfascii": {
+    "message": "Llat\u00ed"
+  },
+  "compositionmodehalfkatakana": {
+    "message": "Katakana d'amplada mitjana"
+  },
+  "compositionmodehiragana": {
+    "message": "Hiragana"
+  },
+  "configbasicstitle": {
+    "message": "Informaci\u00f3 b\u00e0sica"
+  },
+  "configclearhistory": {
+    "message": "Esborra les dades de personalitzaci\u00f3..."
+  },
+  "configclearhistorycancelbutton": {
+    "message": "Cancel\u00b7la"
+  },
+  "configclearhistoryconversionhistory": {
+    "message": "Historial de conversions"
+  },
+  "configclearhistorymessage": {
+    "message": "Suprimeix els elements seg\u00fcents:"
+  },
+  "configclearhistoryokbutton": {
+    "message": "Esborra les dades de personalitzaci\u00f3"
+  },
+  "configclearhistorysuggestionhistory": {
+    "message": "Historial de suggeriments"
+  },
+  "configclearhistorytitle": {
+    "message": "Esborra les dades de personalitzaci\u00f3"
+  },
+  "configcreditsdescription": {
+    "message": "Copyright \u00a9 2013 Google Inc. Tots els drets reservats."
+  },
+  "configdialogcancel": {
+    "message": "Cancel\u00b7la"
+  },
+  "configdialogok": {
+    "message": "D'acord"
+  },
+  "configdictionarytoolbutton": {
+    "message": "Gestiona el diccionari de l'usuari..."
+  },
+  "configdictionarytooldescription": {
+    "message": "Afegiu paraules pr\u00f2pies al diccionari de l'usuari per personalitzar els candidats de la conversi\u00f3."
+  },
+  "configdictionarytooltitle": {
+    "message": "Diccionaris de l'usuari"
+  },
+  "configincognitomode": {
+    "message": "Desactiva les conversions i els suggeriments personalitzats i el diccionari de l'usuari"
+  },
+  "configinputassistancetitle": {
+    "message": "Assist\u00e8ncia per a la introducci\u00f3"
+  },
+  "configosscreditsdescription": {
+    "message": "This software is made possible by <a href=\"./credits_en.html\">open source software</a>."
+  },
+  "configpreeditmethod": {
+    "message": "Mode d'introducci\u00f3:"
+  },
+  "configpreeditmethodkana": {
+    "message": "Kana"
+  },
+  "configpreeditmethodromaji": {
+    "message": "Romaji"
+  },
+  "configprivacytitle": {
+    "message": "Privadesa"
+  },
+  "configpunctuationmethod": {
+    "message": "Estil de puntuaci\u00f3:"
+  },
+  "configselectionshortcut": {
+    "message": "Drecera de selecci\u00f3:"
+  },
+  "configselectionshortcutno": {
+    "message": "Sense drecera"
+  },
+  "configsessionkeymap": {
+    "message": "Estil de mapes de teclat:"
+  },
+  "configsessionkeymapatok": {
+    "message": "ATOK"
+  },
+  "configsessionkeymapchromeos": {
+    "message": "Chrome OS"
+  },
+  "configsessionkeymapcustom": {
+    "message": "Mapa de teclat personalitzat"
+  },
+  "configsessionkeymapkotoeri": {
+    "message": "Kotoeri"
+  },
+  "configsessionkeymapmsime": {
+    "message": "MS-IME"
+  },
+  "configsettingstitle": {
+    "message": "Configuraci\u00f3 de la introducci\u00f3 en japon\u00e8s"
+  },
+  "configshiftkeymodeswitch": {
+    "message": "Canvi de mode amb la tecla Maj:"
+  },
+  "configshiftkeymodeswitchalphanumeric": {
+    "message": "Alfanum\u00e8ric"
+  },
+  "configshiftkeymodeswitchkatakana": {
+    "message": "Katakana"
+  },
+  "configshiftkeymodeswitchoff": {
+    "message": "Desactivat"
+  },
+  "configspacecharacterform": {
+    "message": "Estil d'introducci\u00f3 d'espais:"
+  },
+  "configspacecharacterformfollow": {
+    "message": "Segueix el mode d'introducci\u00f3"
+  },
+  "configspacecharacterformfull": {
+    "message": "Amplada completa"
+  },
+  "configspacecharacterformhalf": {
+    "message": "Amplada mitjana"
+  },
+  "configsuggestionssize": {
+    "message": "Nombre de suggeriments:"
+  },
+  "configsuggesttitle": {
+    "message": "Suggereix"
+  },
+  "configsymbolmethod": {
+    "message": "Estil de s\u00edmbols:"
+  },
+  "configuploadusagestats": {
+    "message": "Envia autom\u00e0ticament estad\u00edstiques d'\u00fas i informes d'error a Google"
+  },
+  "configuseautoimeturnoff": {
+    "message": "Canvia autom\u00e0ticament a amplada mitjana"
+  },
+  "configusedictionarysuggest": {
+    "message": "Utilitza el diccionari del sistema"
+  },
+  "configusehistorysuggest": {
+    "message": "Utilitza l'historial d'introducci\u00f3"
+  },
+  "ctrl": {
+    "message": "ctrl"
+  },
+  "current_keyboard_prefix": {
+    "message": "teclat seleccionat actualment "
+  },
+  "current_lang": {
+    "message": "L'idioma d'introducci\u00f3 \u00e9s el xin\u00e8s"
+  },
+  "current_punc": {
+    "message": "L'amplada de la puntuaci\u00f3 \u00e9s completa"
+  },
+  "current_sbc": {
+    "message": "L'amplada dels car\u00e0cters \u00e9s completa"
+  },
+  "cz_cze_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat txec"
+  },
+  "cz_qwerty_cze_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat Qwerty txec"
+  },
+  "d83c_dc04": {
+    "message": "fitxa de Mahjong"
+  },
+  "d83c_dccf": {
+    "message": "carta de j\u00f2quer"
+  },
+  "d83c_dd70": {
+    "message": "grup sanguini A"
+  },
+  "d83c_dd71": {
+    "message": "grup sanguini B"
+  },
+  "d83c_dd7e": {
+    "message": "grup sanguini O"
+  },
+  "d83c_dd7f": {
+    "message": "aparcament"
+  },
+  "d83c_dd8e": {
+    "message": "grup sanguini AB"
+  },
+  "d83c_dd91": {
+    "message": "CL"
+  },
+  "d83c_dd92": {
+    "message": "fred"
+  },
+  "d83c_dd93": {
+    "message": "gratu\u00eft"
+  },
+  "d83c_dd94": {
+    "message": "identificador"
+  },
+  "d83c_dd95": {
+    "message": "Nou"
+  },
+  "d83c_dd96": {
+    "message": "gu\u00e0rdia nacional"
+  },
+  "d83c_dd97": {
+    "message": "d'acord"
+  },
+  "d83c_dd98": {
+    "message": "SOS"
+  },
+  "d83c_dd99": {
+    "message": "amunt"
+  },
+  "d83c_dd9a": {
+    "message": "versus"
+  },
+  "d83c_de01": {
+    "message": "paraula japonesa \u00e2\u20ac\u02dcaqu\u00ed\u00e2\u20ac\u2122"
+  },
+  "d83c_de02": {
+    "message": "paraula japonesa \u00e2\u20ac\u02dcservei\u00e2\u20ac\u2122"
+  },
+  "d83c_de1a": {
+    "message": "paraula japonesa \"gratu\u00eft\""
+  },
+  "d83c_de2f": {
+    "message": "paraula japonesa \"reservat\""
+  },
+  "d83c_de32": {
+    "message": "paraula japonesa \u00e2\u20ac\u02dcprohibit\u00e2\u20ac\u2122"
+  },
+  "d83c_de33": {
+    "message": "paraula xinesa \"espai disponible\""
+  },
+  "d83c_de34": {
+    "message": "paraula xinesa \"aprovat\""
+  },
+  "d83c_de35": {
+    "message": "paraula xinesa \"ple\""
+  },
+  "d83c_de36": {
+    "message": "paraula japonesa \"taxes\""
+  },
+  "d83c_de37": {
+    "message": "paraula japonesa \"mensualment\""
+  },
+  "d83c_de38": {
+    "message": "paraula xinesa \"aplicaci\u00f3\""
+  },
+  "d83c_de39": {
+    "message": "paraula japonesa \"descompte\""
+  },
+  "d83c_de3a": {
+    "message": "paraula xinesa \"treballant\""
+  },
+  "d83c_de50": {
+    "message": "paraula japonesa \"avantatge\""
+  },
+  "d83c_de51": {
+    "message": "paraula xinesa \"aprovat\""
+  },
+  "d83c_df00": {
+    "message": "cicl\u00f3"
+  },
+  "d83c_df01": {
+    "message": "boira"
+  },
+  "d83c_df02": {
+    "message": "paraigua"
+  },
+  "d83c_df03": {
+    "message": "nit estrellada"
+  },
+  "d83c_df04": {
+    "message": "sortida del sol a les muntanyes"
+  },
+  "d83c_df05": {
+    "message": "sortida del sol"
+  },
+  "d83c_df06": {
+    "message": "ciutat en fosquejar"
+  },
+  "d83c_df07": {
+    "message": "posta de sol"
+  },
+  "d83c_df08": {
+    "message": "arc de Sant Mart\u00ed"
+  },
+  "d83c_df09": {
+    "message": "pont de nit"
+  },
+  "d83c_df0a": {
+    "message": "onada"
+  },
+  "d83c_df0b": {
+    "message": "volc\u00e0"
+  },
+  "d83c_df0c": {
+    "message": "Via L\u00e0ctia"
+  },
+  "d83c_df0d": {
+    "message": "mapa d'Europa i \u00c0frica"
+  },
+  "d83c_df0e": {
+    "message": "mapa de les Am\u00e8riques"
+  },
+  "d83c_df0f": {
+    "message": "mapa d'\u00c0sia i Austr\u00e0lia"
+  },
+  "d83c_df10": {
+    "message": "mapa amb els meridians"
+  },
+  "d83c_df11": {
+    "message": "lluna nova"
+  },
+  "d83c_df12": {
+    "message": "quart creixent"
+  },
+  "d83c_df13": {
+    "message": "quart creixent"
+  },
+  "d83c_df14": {
+    "message": "quart minvant"
+  },
+  "d83c_df15": {
+    "message": "lluna plena"
+  },
+  "d83c_df16": {
+    "message": "lluna minvant"
+  },
+  "d83c_df17": {
+    "message": "lluna minvant"
+  },
+  "d83c_df18": {
+    "message": "lluna creixent"
+  },
+  "d83c_df19": {
+    "message": "lluna creixent"
+  },
+  "d83c_df1a": {
+    "message": "lluna nova amb cara"
+  },
+  "d83c_df1b": {
+    "message": "quart creixent amb cara"
+  },
+  "d83c_df1c": {
+    "message": "quart minvant amb cara"
+  },
+  "d83c_df1d": {
+    "message": "lluna plena amb cara"
+  },
+  "d83c_df1e": {
+    "message": "sol amb cara"
+  },
+  "d83c_df1f": {
+    "message": "estrella que brilla"
+  },
+  "d83c_df20": {
+    "message": "estel fuga\u00e7"
+  },
+  "d83c_df30": {
+    "message": "castanya"
+  },
+  "d83c_df31": {
+    "message": "planta jove"
+  },
+  "d83c_df32": {
+    "message": "arbre de fulla perenne"
+  },
+  "d83c_df33": {
+    "message": "arbre de fulla caduca"
+  },
+  "d83c_df34": {
+    "message": "palmera"
+  },
+  "d83c_df35": {
+    "message": "cactus"
+  },
+  "d83c_df37": {
+    "message": "tulipa"
+  },
+  "d83c_df38": {
+    "message": "flor de cirerer"
+  },
+  "d83c_df39": {
+    "message": "rosa"
+  },
+  "d83c_df3a": {
+    "message": "hibisc"
+  },
+  "d83c_df3b": {
+    "message": "gira-sol"
+  },
+  "d83c_df3c": {
+    "message": "flor"
+  },
+  "d83c_df3d": {
+    "message": "blat de moro"
+  },
+  "d83c_df3e": {
+    "message": "planta d'arr\u00f2s"
+  },
+  "d83c_df3f": {
+    "message": "herba"
+  },
+  "d83c_df40": {
+    "message": "tr\u00e8vol de quatre fulles"
+  },
+  "d83c_df41": {
+    "message": "fulla d'aur\u00f3"
+  },
+  "d83c_df42": {
+    "message": "fulles que cauen"
+  },
+  "d83c_df43": {
+    "message": "fulla al vent"
+  },
+  "d83c_df44": {
+    "message": "bolet"
+  },
+  "d83c_df45": {
+    "message": "tom\u00e0quet"
+  },
+  "d83c_df46": {
+    "message": "alberg\u00ednia"
+  },
+  "d83c_df47": {
+    "message": "ra\u00efm"
+  },
+  "d83c_df48": {
+    "message": "mel\u00f3"
+  },
+  "d83c_df49": {
+    "message": "s\u00edndria"
+  },
+  "d83c_df4a": {
+    "message": "mandarina"
+  },
+  "d83c_df4b": {
+    "message": "llimona"
+  },
+  "d83c_df4c": {
+    "message": "pl\u00e0tan"
+  },
+  "d83c_df4d": {
+    "message": "pinya"
+  },
+  "d83c_df4e": {
+    "message": "poma vermella"
+  },
+  "d83c_df4f": {
+    "message": "poma verda"
+  },
+  "d83c_df50": {
+    "message": "pera"
+  },
+  "d83c_df51": {
+    "message": "pr\u00e9ssec"
+  },
+  "d83c_df52": {
+    "message": "cirera"
+  },
+  "d83c_df53": {
+    "message": "maduixa"
+  },
+  "d83c_df54": {
+    "message": "hamburguesa"
+  },
+  "d83c_df55": {
+    "message": "tall de pizza"
+  },
+  "d83c_df56": {
+    "message": "carn"
+  },
+  "d83c_df57": {
+    "message": "cuixa de pollastre"
+  },
+  "d83c_df58": {
+    "message": "coqueta d'arr\u00f2s"
+  },
+  "d83c_df59": {
+    "message": "pastisset d'arr\u00f2s"
+  },
+  "d83c_df5a": {
+    "message": "bol d'arr\u00f2s"
+  },
+  "d83c_df5b": {
+    "message": "arr\u00f2s al curri"
+  },
+  "d83c_df5c": {
+    "message": "ramen"
+  },
+  "d83c_df5d": {
+    "message": "espaguetis"
+  },
+  "d83c_df5e": {
+    "message": "pa"
+  },
+  "d83c_df5f": {
+    "message": "patates rosses"
+  },
+  "d83c_df60": {
+    "message": "patata al forn"
+  },
+  "d83c_df61": {
+    "message": "mochi"
+  },
+  "d83c_df62": {
+    "message": "oden"
+  },
+  "d83c_df63": {
+    "message": "sushi"
+  },
+  "d83c_df64": {
+    "message": "gamba fregida"
+  },
+  "d83c_df65": {
+    "message": "past\u00eds de peix"
+  },
+  "d83c_df66": {
+    "message": "gelat crem\u00f3s"
+  },
+  "d83c_df67": {
+    "message": "granissat"
+  },
+  "d83c_df68": {
+    "message": "gelat"
+  },
+  "d83c_df69": {
+    "message": "d\u00f2nut"
+  },
+  "d83c_df6a": {
+    "message": "galeta"
+  },
+  "d83c_df6b": {
+    "message": "xocolata"
+  },
+  "d83c_df6c": {
+    "message": "caramel"
+  },
+  "d83c_df6d": {
+    "message": "piruleta"
+  },
+  "d83c_df6e": {
+    "message": "flam"
+  },
+  "d83c_df6f": {
+    "message": "pot de mel"
+  },
+  "d83c_df70": {
+    "message": "past\u00eds de fruites"
+  },
+  "d83c_df71": {
+    "message": "bento"
+  },
+  "d83c_df72": {
+    "message": "estofat"
+  },
+  "d83c_df73": {
+    "message": "paella"
+  },
+  "d83c_df74": {
+    "message": "forquilla i ganivet"
+  },
+  "d83c_df75": {
+    "message": "tassa de te"
+  },
+  "d83c_df76": {
+    "message": "sake"
+  },
+  "d83c_df77": {
+    "message": "vi"
+  },
+  "d83c_df78": {
+    "message": "c\u00f2ctel"
+  },
+  "d83c_df79": {
+    "message": "beguda tropical"
+  },
+  "d83c_df7a": {
+    "message": "cervesa"
+  },
+  "d83c_df7b": {
+    "message": "gerres de cervesa"
+  },
+  "d83c_df7c": {
+    "message": "biber\u00f3"
+  },
+  "d83c_df80": {
+    "message": "cinta"
+  },
+  "d83c_df81": {
+    "message": "regal"
+  },
+  "d83c_df82": {
+    "message": "past\u00eds d'aniversari"
+  },
+  "d83c_df83": {
+    "message": "carabassa amb llum"
+  },
+  "d83c_df84": {
+    "message": "arbre de Nadal"
+  },
+  "d83c_df85": {
+    "message": "Pare Noel"
+  },
+  "d83c_df86": {
+    "message": "focs artificials"
+  },
+  "d83c_df87": {
+    "message": "bengala"
+  },
+  "d83c_df88": {
+    "message": "globus"
+  },
+  "d83c_df89": {
+    "message": "llan\u00e7ador de serpentines i paperets"
+  },
+  "d83c_df8a": {
+    "message": "paperets"
+  },
+  "d83c_df8b": {
+    "message": "arbre i tires de paper"
+  },
+  "d83c_df8c": {
+    "message": "banderes creuades"
+  },
+  "d83c_df8d": {
+    "message": "decoraci\u00f3 de pi"
+  },
+  "d83c_df8e": {
+    "message": "nines"
+  },
+  "d83c_df8f": {
+    "message": "banderins de carpes"
+  },
+  "d83c_df90": {
+    "message": "sonalles e\u00f2liques"
+  },
+  "d83c_df91": {
+    "message": "mirar la lluna"
+  },
+  "d83c_df92": {
+    "message": "motxilla"
+  },
+  "d83c_df93": {
+    "message": "birret"
+  },
+  "d83c_dfa0": {
+    "message": "cavallets"
+  },
+  "d83c_dfa1": {
+    "message": "roda de fira"
+  },
+  "d83c_dfa2": {
+    "message": "muntanyes russes"
+  },
+  "d83c_dfa3": {
+    "message": "pesca"
+  },
+  "d83c_dfa4": {
+    "message": "micr\u00f2fon"
+  },
+  "d83c_dfa5": {
+    "message": "c\u00e0mera de cine"
+  },
+  "d83c_dfa6": {
+    "message": "pel\u00b7l\u00edcula"
+  },
+  "d83c_dfa7": {
+    "message": "auricular"
+  },
+  "d83c_dfa8": {
+    "message": "paleta de pintor"
+  },
+  "d83c_dfa9": {
+    "message": "barret de copa"
+  },
+  "d83c_dfaa": {
+    "message": "circ"
+  },
+  "d83c_dfab": {
+    "message": "entrada"
+  },
+  "d83c_dfac": {
+    "message": "claqueta"
+  },
+  "d83c_dfad": {
+    "message": "m\u00e0scara"
+  },
+  "d83c_dfae": {
+    "message": "videojoc"
+  },
+  "d83c_dfaf": {
+    "message": "diana"
+  },
+  "d83c_dfb0": {
+    "message": "escurabutxaques"
+  },
+  "d83c_dfb1": {
+    "message": "billar"
+  },
+  "d83c_dfb2": {
+    "message": "dau"
+  },
+  "d83c_dfb3": {
+    "message": "bitlles"
+  },
+  "d83c_dfb4": {
+    "message": "carta de joc"
+  },
+  "d83c_dfb5": {
+    "message": "nota musical"
+  },
+  "d83c_dfb6": {
+    "message": "notes musicals"
+  },
+  "d83c_dfb7": {
+    "message": "saxofon"
+  },
+  "d83c_dfb8": {
+    "message": "guitarra"
+  },
+  "d83c_dfb9": {
+    "message": "piano"
+  },
+  "d83c_dfba": {
+    "message": "trompeta"
+  },
+  "d83c_dfbb": {
+    "message": "viol\u00ed"
+  },
+  "d83c_dfbc": {
+    "message": "partitura"
+  },
+  "d83c_dfbd": {
+    "message": "samarreta de c\u00f3rrer"
+  },
+  "d83c_dfbe": {
+    "message": "tennis"
+  },
+  "d83c_dfbf": {
+    "message": "esqu\u00ed"
+  },
+  "d83c_dfc0": {
+    "message": "b\u00e0squet"
+  },
+  "d83c_dfc1": {
+    "message": "bandera de quadres"
+  },
+  "d83c_dfc2": {
+    "message": "surfista de neu"
+  },
+  "d83c_dfc3": {
+    "message": "corredor"
+  },
+  "d83c_dfc4": {
+    "message": "surf"
+  },
+  "d83c_dfc6": {
+    "message": "trofeu"
+  },
+  "d83c_dfc7": {
+    "message": "cursa de cavalls"
+  },
+  "d83c_dfc8": {
+    "message": "futbol americ\u00e0"
+  },
+  "d83c_dfc9": {
+    "message": "futbol"
+  },
+  "d83c_dfca": {
+    "message": "nedador"
+  },
+  "d83c_dfe0": {
+    "message": "casa"
+  },
+  "d83c_dfe1": {
+    "message": "llar"
+  },
+  "d83c_dfe2": {
+    "message": "edifici d'oficines"
+  },
+  "d83c_dfe3": {
+    "message": "oficina de correus japonesa"
+  },
+  "d83c_dfe4": {
+    "message": "oficina de correus europea"
+  },
+  "d83c_dfe5": {
+    "message": "hospital"
+  },
+  "d83c_dfe6": {
+    "message": "banc"
+  },
+  "d83c_dfe7": {
+    "message": "caixer autom\u00e0tic"
+  },
+  "d83c_dfe8": {
+    "message": "hotel"
+  },
+  "d83c_dfe9": {
+    "message": "hotel de cites"
+  },
+  "d83c_dfea": {
+    "message": "botiga de queviures"
+  },
+  "d83c_dfeb": {
+    "message": "escola"
+  },
+  "d83c_dfec": {
+    "message": "grans magatzems"
+  },
+  "d83c_dfed": {
+    "message": "f\u00e0brica"
+  },
+  "d83c_dfee": {
+    "message": "llanterna vermella"
+  },
+  "d83c_dfef": {
+    "message": "castell japon\u00e8s"
+  },
+  "d83c_dff0": {
+    "message": "castell europeu"
+  },
+  "d83d_dc00": {
+    "message": "rata"
+  },
+  "d83d_dc01": {
+    "message": "ratol\u00ed"
+  },
+  "d83d_dc02": {
+    "message": "bou"
+  },
+  "d83d_dc03": {
+    "message": "b\u00fafal d'aigua"
+  },
+  "d83d_dc04": {
+    "message": "vaca"
+  },
+  "d83d_dc06": {
+    "message": "lleopard"
+  },
+  "d83d_dc07": {
+    "message": "conill"
+  },
+  "d83d_dc08": {
+    "message": "gat"
+  },
+  "d83d_dc09": {
+    "message": "drac"
+  },
+  "d83d_dc0a": {
+    "message": "cocodril"
+  },
+  "d83d_dc0b": {
+    "message": "balena"
+  },
+  "d83d_dc0c": {
+    "message": "serp"
+  },
+  "d83d_dc0d": {
+    "message": "serp"
+  },
+  "d83d_dc0e": {
+    "message": "cavall"
+  },
+  "d83d_dc0f": {
+    "message": "xai"
+  },
+  "d83d_dc10": {
+    "message": "cabra"
+  },
+  "d83d_dc11": {
+    "message": "ovella"
+  },
+  "d83d_dc12": {
+    "message": "mico"
+  },
+  "d83d_dc13": {
+    "message": "gall"
+  },
+  "d83d_dc14": {
+    "message": "gallina"
+  },
+  "d83d_dc15": {
+    "message": "gos"
+  },
+  "d83d_dc16": {
+    "message": "porc"
+  },
+  "d83d_dc17": {
+    "message": "senglar"
+  },
+  "d83d_dc18": {
+    "message": "elefant"
+  },
+  "d83d_dc19": {
+    "message": "pop"
+  },
+  "d83d_dc1a": {
+    "message": "cargol de mar"
+  },
+  "d83d_dc1b": {
+    "message": "cuc"
+  },
+  "d83d_dc1c": {
+    "message": "formiga"
+  },
+  "d83d_dc1d": {
+    "message": "abella"
+  },
+  "d83d_dc1e": {
+    "message": "marieta"
+  },
+  "d83d_dc1f": {
+    "message": "peix"
+  },
+  "d83d_dc20": {
+    "message": "peix tropical"
+  },
+  "d83d_dc21": {
+    "message": "peix globus"
+  },
+  "d83d_dc22": {
+    "message": "tortuga"
+  },
+  "d83d_dc23": {
+    "message": "pollet que surt de l'ou"
+  },
+  "d83d_dc24": {
+    "message": "cara de pollet"
+  },
+  "d83d_dc25": {
+    "message": "pollet"
+  },
+  "d83d_dc26": {
+    "message": "ocell"
+  },
+  "d83d_dc27": {
+    "message": "ping\u00fc\u00ed"
+  },
+  "d83d_dc28": {
+    "message": "coala"
+  },
+  "d83d_dc29": {
+    "message": "caniche"
+  },
+  "d83d_dc2a": {
+    "message": "dromedari"
+  },
+  "d83d_dc2b": {
+    "message": "camell"
+  },
+  "d83d_dc2c": {
+    "message": "dof\u00ed"
+  },
+  "d83d_dc2d": {
+    "message": "cara de ratol\u00ed"
+  },
+  "d83d_dc2e": {
+    "message": "cara de vaca"
+  },
+  "d83d_dc2f": {
+    "message": "cara de tigre"
+  },
+  "d83d_dc30": {
+    "message": "cara de conill"
+  },
+  "d83d_dc31": {
+    "message": "cara de gat"
+  },
+  "d83d_dc32": {
+    "message": "cara de drac"
+  },
+  "d83d_dc33": {
+    "message": "balena que tira aigua"
+  },
+  "d83d_dc34": {
+    "message": "cara de cavall"
+  },
+  "d83d_dc35": {
+    "message": "cara de mico"
+  },
+  "d83d_dc36": {
+    "message": "cara de gos"
+  },
+  "d83d_dc37": {
+    "message": "cara de porc"
+  },
+  "d83d_dc38": {
+    "message": "cara de granota"
+  },
+  "d83d_dc39": {
+    "message": "cara de h\u00e0mster"
+  },
+  "d83d_dc3a": {
+    "message": "cara de llop"
+  },
+  "d83d_dc3b": {
+    "message": "cara d'\u00f3s"
+  },
+  "d83d_dc3c": {
+    "message": "cara de panda"
+  },
+  "d83d_dc3d": {
+    "message": "morro de porc"
+  },
+  "d83d_dc3e": {
+    "message": "petjades d'animal"
+  },
+  "d83d_dc40": {
+    "message": "ulls"
+  },
+  "d83d_dc42": {
+    "message": "orella"
+  },
+  "d83d_dc43": {
+    "message": "nas"
+  },
+  "d83d_dc44": {
+    "message": "boca"
+  },
+  "d83d_dc45": {
+    "message": "llengua"
+  },
+  "d83d_dc46": {
+    "message": "dit amunt"
+  },
+  "d83d_dc47": {
+    "message": "dit avall"
+  },
+  "d83d_dc48": {
+    "message": "assenyalar cap a l'esquerra"
+  },
+  "d83d_dc49": {
+    "message": "assenyalar cap a la dreta"
+  },
+  "d83d_dc4a": {
+    "message": "cop de puny"
+  },
+  "d83d_dc4b": {
+    "message": "salutaci\u00f3 amb la m\u00e0"
+  },
+  "d83d_dc4c": {
+    "message": "signe d'OK amb la m\u00e0"
+  },
+  "d83d_dc4d": {
+    "message": "m'agrada"
+  },
+  "d83d_dc4e": {
+    "message": "dit polze avall"
+  },
+  "d83d_dc4f": {
+    "message": "aplaudiment"
+  },
+  "d83d_dc50": {
+    "message": "mans obertes"
+  },
+  "d83d_dc51": {
+    "message": "corona"
+  },
+  "d83d_dc52": {
+    "message": "barret de dona"
+  },
+  "d83d_dc53": {
+    "message": "ulleres de sol"
+  },
+  "d83d_dc54": {
+    "message": "corbata"
+  },
+  "d83d_dc55": {
+    "message": "samarreta"
+  },
+  "d83d_dc56": {
+    "message": "pantalons"
+  },
+  "d83d_dc57": {
+    "message": "vestit"
+  },
+  "d83d_dc58": {
+    "message": "quimono"
+  },
+  "d83d_dc59": {
+    "message": "biquini"
+  },
+  "d83d_dc5a": {
+    "message": "roba de dona"
+  },
+  "d83d_dc5b": {
+    "message": "moneder"
+  },
+  "d83d_dc5c": {
+    "message": "bossa"
+  },
+  "d83d_dc5d": {
+    "message": "bossa de m\u00e0"
+  },
+  "d83d_dc5e": {
+    "message": "sabata d'home"
+  },
+  "d83d_dc5f": {
+    "message": "sabata esportiva"
+  },
+  "d83d_dc60": {
+    "message": "talons alts"
+  },
+  "d83d_dc61": {
+    "message": "sand\u00e0lia de dona"
+  },
+  "d83d_dc62": {
+    "message": "bota de dona"
+  },
+  "d83d_dc63": {
+    "message": "petjada"
+  },
+  "d83d_dc64": {
+    "message": "silueta d'un bust"
+  },
+  "d83d_dc65": {
+    "message": "silueta de dos bustos"
+  },
+  "d83d_dc66": {
+    "message": "nen"
+  },
+  "d83d_dc67": {
+    "message": "nena"
+  },
+  "d83d_dc68": {
+    "message": "home"
+  },
+  "d83d_dc69": {
+    "message": "dona"
+  },
+  "d83d_dc6a": {
+    "message": "fam\u00edlia"
+  },
+  "d83d_dc6b": {
+    "message": "home i dona"
+  },
+  "d83d_dc6c": {
+    "message": "dos homes"
+  },
+  "d83d_dc6d": {
+    "message": "dues dones"
+  },
+  "d83d_dc6e": {
+    "message": "policia"
+  },
+  "d83d_dc6f": {
+    "message": "conilleta"
+  },
+  "d83d_dc70": {
+    "message": "n\u00favia"
+  },
+  "d83d_dc71": {
+    "message": "persona rossa"
+  },
+  "d83d_dc72": {
+    "message": "home amb solideu"
+  },
+  "d83d_dc73": {
+    "message": "home amb turbant"
+  },
+  "d83d_dc74": {
+    "message": "senyor gran"
+  },
+  "d83d_dc75": {
+    "message": "senyora gran"
+  },
+  "d83d_dc76": {
+    "message": "beb\u00e8"
+  },
+  "d83d_dc77": {
+    "message": "obrer de la construcci\u00f3"
+  },
+  "d83d_dc78": {
+    "message": "princesa"
+  },
+  "d83d_dc79": {
+    "message": "ogre"
+  },
+  "d83d_dc7a": {
+    "message": "follet"
+  },
+  "d83d_dc7b": {
+    "message": "fantasma"
+  },
+  "d83d_dc7c": {
+    "message": "angelet"
+  },
+  "d83d_dc7d": {
+    "message": "extraterrestre"
+  },
+  "d83d_dc7e": {
+    "message": "marci\u00e0"
+  },
+  "d83d_dc7f": {
+    "message": "dimoniet"
+  },
+  "d83d_dc80": {
+    "message": "calavera"
+  },
+  "d83d_dc81": {
+    "message": "taulell d'informaci\u00f3"
+  },
+  "d83d_dc82": {
+    "message": "gu\u00e0rdia brit\u00e0nic"
+  },
+  "d83d_dc83": {
+    "message": "ballarina"
+  },
+  "d83d_dc84": {
+    "message": "pintallavis"
+  },
+  "d83d_dc85": {
+    "message": "manicura"
+  },
+  "d83d_dc86": {
+    "message": "massatge"
+  },
+  "d83d_dc87": {
+    "message": "tallat de cabells"
+  },
+  "d83d_dc88": {
+    "message": "barberia"
+  },
+  "d83d_dc89": {
+    "message": "xeringa"
+  },
+  "d83d_dc8a": {
+    "message": "c\u00e0psula"
+  },
+  "d83d_dc8b": {
+    "message": "marca de pet\u00f3"
+  },
+  "d83d_dc8c": {
+    "message": "carta d'amor"
+  },
+  "d83d_dc8d": {
+    "message": "anell"
+  },
+  "d83d_dc8e": {
+    "message": "gemma"
+  },
+  "d83d_dc8f": {
+    "message": "pet\u00f3"
+  },
+  "d83d_dc90": {
+    "message": "ram"
+  },
+  "d83d_dc91": {
+    "message": "parella"
+  },
+  "d83d_dc92": {
+    "message": "capella per a casaments"
+  },
+  "d83d_dc93": {
+    "message": "cor que batega"
+  },
+  "d83d_dc94": {
+    "message": "cor trencat"
+  },
+  "d83d_dc95": {
+    "message": "dos cors"
+  },
+  "d83d_dc96": {
+    "message": "cor que centelleja"
+  },
+  "d83d_dc97": {
+    "message": "cor que creix"
+  },
+  "d83d_dc98": {
+    "message": "cor amb fletxa"
+  },
+  "d83d_dc99": {
+    "message": "cor blau"
+  },
+  "d83d_dc9a": {
+    "message": "cor verd"
+  },
+  "d83d_dc9b": {
+    "message": "cor groc"
+  },
+  "d83d_dc9c": {
+    "message": "cor lila"
+  },
+  "d83d_dc9d": {
+    "message": "cor amb lla\u00e7"
+  },
+  "d83d_dc9e": {
+    "message": "cors que giren"
+  },
+  "d83d_dc9f": {
+    "message": "cor decoratiu"
+  },
+  "d83d_dca0": {
+    "message": "p\u00e8tal de flor"
+  },
+  "d83d_dca1": {
+    "message": "bombeta"
+  },
+  "d83d_dca2": {
+    "message": "ira"
+  },
+  "d83d_dca3": {
+    "message": "bomba"
+  },
+  "d83d_dca4": {
+    "message": "s\u00edmbol de dormir"
+  },
+  "d83d_dca5": {
+    "message": "col\u00b7lisi\u00f3"
+  },
+  "d83d_dca6": {
+    "message": "esquitxar amb suor"
+  },
+  "d83d_dca7": {
+    "message": "gota"
+  },
+  "d83d_dca8": {
+    "message": "rastre de c\u00f3rrer"
+  },
+  "d83d_dca9": {
+    "message": "caca"
+  },
+  "d83d_dcaa": {
+    "message": "b\u00edceps"
+  },
+  "d83d_dcab": {
+    "message": "euf\u00f2ria"
+  },
+  "d83d_dcac": {
+    "message": "globus de parla"
+  },
+  "d83d_dcad": {
+    "message": "globus de pensament"
+  },
+  "d83d_dcae": {
+    "message": "segell de flor"
+  },
+  "d83d_dcaf": {
+    "message": "m\u00e0xima puntuaci\u00f3"
+  },
+  "d83d_dcb0": {
+    "message": "bossa de diners"
+  },
+  "d83d_dcb1": {
+    "message": "canvi de moneda"
+  },
+  "d83d_dcb2": {
+    "message": "signe de d\u00f2lar"
+  },
+  "d83d_dcb3": {
+    "message": "targeta de cr\u00e8dit"
+  },
+  "d83d_dcb4": {
+    "message": "bitllet de ien"
+  },
+  "d83d_dcb5": {
+    "message": "bitllet de d\u00f2lar"
+  },
+  "d83d_dcb6": {
+    "message": "bitllet d'euro"
+  },
+  "d83d_dcb7": {
+    "message": "bitllet de lliura"
+  },
+  "d83d_dcb8": {
+    "message": "bitllets amb ales"
+  },
+  "d83d_dcb9": {
+    "message": "mercat emergent"
+  },
+  "d83d_dcba": {
+    "message": "seient"
+  },
+  "d83d_dcbb": {
+    "message": "ordinador"
+  },
+  "d83d_dcbc": {
+    "message": "maleta"
+  },
+  "d83d_dcbd": {
+    "message": "minidisc"
+  },
+  "d83d_dcbe": {
+    "message": "disquet"
+  },
+  "d83d_dcbf": {
+    "message": "blu-ray"
+  },
+  "d83d_dcc0": {
+    "message": "DVD"
+  },
+  "d83d_dcc1": {
+    "message": "portacarpetes"
+  },
+  "d83d_dcc2": {
+    "message": "carpeta oberta"
+  },
+  "d83d_dcc3": {
+    "message": "document"
+  },
+  "d83d_dcc4": {
+    "message": "document"
+  },
+  "d83d_dcc5": {
+    "message": "calendari"
+  },
+  "d83d_dcc6": {
+    "message": "calendari per arrencar p\u00e0gines"
+  },
+  "d83d_dcc7": {
+    "message": "fitxer"
+  },
+  "d83d_dcc8": {
+    "message": "tend\u00e8ncia a l'al\u00e7a"
+  },
+  "d83d_dcc9": {
+    "message": "tend\u00e8ncia a la baixa"
+  },
+  "d83d_dcca": {
+    "message": "gr\u00e0fic de barres"
+  },
+  "d83d_dccb": {
+    "message": "portapapers"
+  },
+  "d83d_dccc": {
+    "message": "xinxeta"
+  },
+  "d83d_dccd": {
+    "message": "xinxeta rodona"
+  },
+  "d83d_dcce": {
+    "message": "clip"
+  },
+  "d83d_dccf": {
+    "message": "regla"
+  },
+  "d83d_dcd0": {
+    "message": "escaire"
+  },
+  "d83d_dcd1": {
+    "message": "marcadors de p\u00e0gina"
+  },
+  "d83d_dcd2": {
+    "message": "llibre de comptabilitat"
+  },
+  "d83d_dcd3": {
+    "message": "llibreta"
+  },
+  "d83d_dcd4": {
+    "message": "llibreta decorada"
+  },
+  "d83d_dcd5": {
+    "message": "llibre tancat"
+  },
+  "d83d_dcd6": {
+    "message": "llibre obert"
+  },
+  "d83d_dcd7": {
+    "message": "llibre verd"
+  },
+  "d83d_dcd8": {
+    "message": "llibre"
+  },
+  "d83d_dcd9": {
+    "message": "llibre taronja"
+  },
+  "d83d_dcda": {
+    "message": "llibres"
+  },
+  "d83d_dcdb": {
+    "message": "placa de nom"
+  },
+  "d83d_dcdc": {
+    "message": "pergam\u00ed"
+  },
+  "d83d_dcdd": {
+    "message": "nota"
+  },
+  "d83d_dcde": {
+    "message": "tel\u00e8fon"
+  },
+  "d83d_dcdf": {
+    "message": "cercapersones"
+  },
+  "d83d_dce0": {
+    "message": "fax"
+  },
+  "d83d_dce1": {
+    "message": "antena de sat\u00e8l\u00b7lit"
+  },
+  "d83d_dce2": {
+    "message": "altaveu"
+  },
+  "d83d_dce3": {
+    "message": "meg\u00e0fon"
+  },
+  "d83d_dce4": {
+    "message": "correu enviat"
+  },
+  "d83d_dce5": {
+    "message": "safata d'entrada"
+  },
+  "d83d_dce6": {
+    "message": "paquet"
+  },
+  "d83d_dce7": {
+    "message": "correu electr\u00f2nic"
+  },
+  "d83d_dce8": {
+    "message": "correu entrant"
+  },
+  "d83d_dce9": {
+    "message": "correu sortint"
+  },
+  "d83d_dcea": {
+    "message": "b\u00fastia tancada amb la bandera abaixada"
+  },
+  "d83d_dceb": {
+    "message": "b\u00fastia tancada amb la bandera aixecada"
+  },
+  "d83d_dcec": {
+    "message": "b\u00fastia oberta amb la bandera aixecada"
+  },
+  "d83d_dced": {
+    "message": "b\u00fastia oberta amb la bandera abaixada"
+  },
+  "d83d_dcee": {
+    "message": "b\u00fastia"
+  },
+  "d83d_dcef": {
+    "message": "banya de correus"
+  },
+  "d83d_dcf0": {
+    "message": "diari"
+  },
+  "d83d_dcf1": {
+    "message": "tel\u00e8fon m\u00f2bil"
+  },
+  "d83d_dcf2": {
+    "message": "tel\u00e8fon m\u00f2bil amb fletxa"
+  },
+  "d83d_dcf3": {
+    "message": "mode de vibraci\u00f3"
+  },
+  "d83d_dcf4": {
+    "message": "tel\u00e8fon desconnectat"
+  },
+  "d83d_dcf5": {
+    "message": "tel\u00e8fons m\u00f2bils prohibits"
+  },
+  "d83d_dcf6": {
+    "message": "senyals de connexi\u00f3 m\u00f2bil"
+  },
+  "d83d_dcf7": {
+    "message": "c\u00e0mera"
+  },
+  "d83d_dcf9": {
+    "message": "c\u00e0mera de v\u00eddeo"
+  },
+  "d83d_dcfa": {
+    "message": "televisor"
+  },
+  "d83d_dcfb": {
+    "message": "r\u00e0dio"
+  },
+  "d83d_dcfc": {
+    "message": "videocasset"
+  },
+  "d83d_dd00": {
+    "message": "fletxes creuades"
+  },
+  "d83d_dd01": {
+    "message": "fletxes en sentit horari"
+  },
+  "d83d_dd02": {
+    "message": "fletxes en sentit horari"
+  },
+  "d83d_dd03": {
+    "message": "torna a carregar"
+  },
+  "d83d_dd04": {
+    "message": "fletxes en sentit antihorari"
+  },
+  "d83d_dd05": {
+    "message": "brillantor baixa"
+  },
+  "d83d_dd06": {
+    "message": "brillantor alta"
+  },
+  "d83d_dd07": {
+    "message": "sense veu"
+  },
+  "d83d_dd08": {
+    "message": "altaveu"
+  },
+  "d83d_dd09": {
+    "message": "altaveu amb volum baix"
+  },
+  "d83d_dd0a": {
+    "message": "altaveu amb volum alt"
+  },
+  "d83d_dd0b": {
+    "message": "pila"
+  },
+  "d83d_dd0c": {
+    "message": "endoll"
+  },
+  "d83d_dd0d": {
+    "message": "lupa cap a l'esquerra"
+  },
+  "d83d_dd0e": {
+    "message": "lupa cap a la dreta"
+  },
+  "d83d_dd0f": {
+    "message": "cadenat i ploma"
+  },
+  "d83d_dd10": {
+    "message": "cadenat tancat amb clau"
+  },
+  "d83d_dd11": {
+    "message": "clau"
+  },
+  "d83d_dd12": {
+    "message": "cadenat tancat"
+  },
+  "d83d_dd13": {
+    "message": "cadenat obert"
+  },
+  "d83d_dd14": {
+    "message": "campana"
+  },
+  "d83d_dd15": {
+    "message": "campana barrada"
+  },
+  "d83d_dd16": {
+    "message": "punt de llibre"
+  },
+  "d83d_dd17": {
+    "message": "signe d'uni\u00f3"
+  },
+  "d83d_dd18": {
+    "message": "bot\u00f3 d'opci\u00f3"
+  },
+  "d83d_dd19": {
+    "message": "enrere"
+  },
+  "d83d_dd1a": {
+    "message": "fi"
+  },
+  "d83d_dd1b": {
+    "message": "fletxa ON"
+  },
+  "d83d_dd1c": {
+    "message": "signe de pr\u00f2ximament"
+  },
+  "d83d_dd1d": {
+    "message": "signe TOP"
+  },
+  "d83d_dd1e": {
+    "message": "prohibit a menors de 18 anys"
+  },
+  "d83d_dd20": {
+    "message": "lletres en maj\u00fascula"
+  },
+  "d83d_dd21": {
+    "message": "lletres en min\u00fascula"
+  },
+  "d83d_dd22": {
+    "message": "n\u00fameros"
+  },
+  "d83d_dd23": {
+    "message": "s\u00edmbols"
+  },
+  "d83d_dd24": {
+    "message": "alfabet llat\u00ed"
+  },
+  "d83d_dd25": {
+    "message": "foc"
+  },
+  "d83d_dd26": {
+    "message": "llanterna"
+  },
+  "d83d_dd27": {
+    "message": "clau anglesa"
+  },
+  "d83d_dd28": {
+    "message": "martell"
+  },
+  "d83d_dd29": {
+    "message": "cargol i rosca"
+  },
+  "d83d_dd2a": {
+    "message": "ganivet de cuina"
+  },
+  "d83d_dd2b": {
+    "message": "pistola"
+  },
+  "d83d_dd2c": {
+    "message": "microscopi"
+  },
+  "d83d_dd2d": {
+    "message": "telescopi"
+  },
+  "d83d_dd2e": {
+    "message": "bola de vidre"
+  },
+  "d83d_dd2f": {
+    "message": "estrella de sis puntes"
+  },
+  "d83d_dd30": {
+    "message": "fulla groga i verda"
+  },
+  "d83d_dd31": {
+    "message": "signe de trident"
+  },
+  "d83d_dd32": {
+    "message": "bot\u00f3 de quadrat amb les vores s\u00f2lides"
+  },
+  "d83d_dd33": {
+    "message": "bot\u00f3 de quadrat amb les vores remarcades"
+  },
+  "d83d_dd34": {
+    "message": "cercle vermell gran"
+  },
+  "d83d_dd35": {
+    "message": "cercle blau gran"
+  },
+  "d83d_dd36": {
+    "message": "diamant taronja gran"
+  },
+  "d83d_dd37": {
+    "message": "diamant blau gran"
+  },
+  "d83d_dd38": {
+    "message": "diamant taronja petit"
+  },
+  "d83d_dd39": {
+    "message": "diamant blau petit"
+  },
+  "d83d_dd3a": {
+    "message": "triangle amunt"
+  },
+  "d83d_dd3b": {
+    "message": "triangle avall"
+  },
+  "d83d_dd3c": {
+    "message": "bot\u00f3 de triangle amunt"
+  },
+  "d83d_dd3d": {
+    "message": "bot\u00f3 de triangle avall"
+  },
+  "d83d_dd50": {
+    "message": "una en punt"
+  },
+  "d83d_dd51": {
+    "message": "dues en punt"
+  },
+  "d83d_dd52": {
+    "message": "tres en punt"
+  },
+  "d83d_dd53": {
+    "message": "quatre en punt"
+  },
+  "d83d_dd54": {
+    "message": "cinc en punt"
+  },
+  "d83d_dd55": {
+    "message": "sis en punt"
+  },
+  "d83d_dd56": {
+    "message": "set en punt"
+  },
+  "d83d_dd57": {
+    "message": "vuit en punt"
+  },
+  "d83d_dd58": {
+    "message": "nou en punt"
+  },
+  "d83d_dd59": {
+    "message": "deu en punt"
+  },
+  "d83d_dd5a": {
+    "message": "onze en punt"
+  },
+  "d83d_dd5b": {
+    "message": "dotze en punt"
+  },
+  "d83d_dd5c": {
+    "message": "dos quarts de dues"
+  },
+  "d83d_dd5d": {
+    "message": "dos quarts de tres"
+  },
+  "d83d_dd5e": {
+    "message": "dos quarts de quatre"
+  },
+  "d83d_dd5f": {
+    "message": "dos quarts de cinc"
+  },
+  "d83d_dd60": {
+    "message": "dos quarts de sis"
+  },
+  "d83d_dd61": {
+    "message": "dos quarts de set"
+  },
+  "d83d_dd62": {
+    "message": "dos quarts de vuit"
+  },
+  "d83d_dd63": {
+    "message": "dos quarts de nou"
+  },
+  "d83d_dd64": {
+    "message": "dos quarts de deu"
+  },
+  "d83d_dd65": {
+    "message": "dos quarts d'onze"
+  },
+  "d83d_dd66": {
+    "message": "dos quarts de dotze"
+  },
+  "d83d_dd67": {
+    "message": "dos quarts d'una"
+  },
+  "d83d_ddfb": {
+    "message": "mont Fuji"
+  },
+  "d83d_ddfc": {
+    "message": "torre de T\u00f2quio"
+  },
+  "d83d_ddfd": {
+    "message": "Est\u00e0tua de la Llibertat"
+  },
+  "d83d_ddfe": {
+    "message": "Mapa del Jap\u00f3"
+  },
+  "d83d_ddff": {
+    "message": "est\u00e0tua moai"
+  },
+  "d83d_de00": {
+    "message": "somriure"
+  },
+  "d83d_de01": {
+    "message": " somriure amb ulls contents"
+  },
+  "d83d_de02": {
+    "message": "ll\u00e0grimes d'alegria"
+  },
+  "d83d_de03": {
+    "message": "riure amb la boca oberta"
+  },
+  "d83d_de04": {
+    "message": "riure amb la boca oberta i amb ulls contents"
+  },
+  "d83d_de05": {
+    "message": "somriure amb suor freda"
+  },
+  "d83d_de06": {
+    "message": " somriure amb la boca oberta i els ulls tancats"
+  },
+  "d83d_de07": {
+    "message": "somriure amb aur\u00e8ola"
+  },
+  "d83d_de08": {
+    "message": "somriure amb banyes"
+  },
+  "d83d_de09": {
+    "message": "picar l'ullet"
+  },
+  "d83d_de0a": {
+    "message": "somriure"
+  },
+  "d83d_de0b": {
+    "message": "delici\u00f3s"
+  },
+  "d83d_de0c": {
+    "message": "cara d'alleujament"
+  },
+  "d83d_de0d": {
+    "message": "cara somrient"
+  },
+  "d83d_de0e": {
+    "message": "interessant"
+  },
+  "d83d_de0f": {
+    "message": "somriure satisfet"
+  },
+  "d83d_de10": {
+    "message": "cara inexpressiva"
+  },
+  "d83d_de11": {
+    "message": "sense expressi\u00f3"
+  },
+  "d83d_de12": {
+    "message": "avorrit"
+  },
+  "d83d_de13": {
+    "message": "suor freda"
+  },
+  "d83d_de14": {
+    "message": "cara pensativa"
+  },
+  "d83d_de15": {
+    "message": "cara de confusi\u00f3"
+  },
+  "d83d_de16": {
+    "message": "cara de confusi\u00f3"
+  },
+  "d83d_de17": {
+    "message": "cara que fa un pet\u00f3"
+  },
+  "d83d_de18": {
+    "message": "enviar petons"
+  },
+  "d83d_de19": {
+    "message": "pet\u00f3 i somriure"
+  },
+  "d83d_de1a": {
+    "message": "pet\u00f3"
+  },
+  "d83d_de1b": {
+    "message": "treure la llengua"
+  },
+  "d83d_de1c": {
+    "message": "treure la llengua i picar l'ullet"
+  },
+  "d83d_de1d": {
+    "message": "ecs"
+  },
+  "d83d_de1e": {
+    "message": "decebut"
+  },
+  "d83d_de1f": {
+    "message": "preocupat"
+  },
+  "d83d_de20": {
+    "message": "enfadat"
+  },
+  "d83d_de21": {
+    "message": "enfadat"
+  },
+  "d83d_de22": {
+    "message": "plorar"
+  },
+  "d83d_de23": {
+    "message": "quin f\u00e0stic"
+  },
+  "d83d_de24": {
+    "message": "cara de triomf"
+  },
+  "d83d_de25": {
+    "message": "uf!"
+  },
+  "d83d_de26": {
+    "message": "cara sorruda"
+  },
+  "d83d_de27": {
+    "message": "angoixat"
+  },
+  "d83d_de28": {
+    "message": "temor\u00f3s"
+  },
+  "d83d_de29": {
+    "message": "cansat"
+  },
+  "d83d_de2a": {
+    "message": "endormiscat"
+  },
+  "d83d_de2b": {
+    "message": "cansat"
+  },
+  "d83d_de2c": {
+    "message": "ganyota"
+  },
+  "d83d_de2d": {
+    "message": "plorar amargament"
+  },
+  "d83d_de2e": {
+    "message": "cara amb la boca oberta"
+  },
+  "d83d_de2f": {
+    "message": "cara tranquil\u00b7la"
+  },
+  "d83d_de30": {
+    "message": "cara avergonyida"
+  },
+  "d83d_de31": {
+    "message": "cara de por"
+  },
+  "d83d_de32": {
+    "message": "al\u00b7lucinat"
+  },
+  "d83d_de33": {
+    "message": "ruboritzat"
+  },
+  "d83d_de34": {
+    "message": "dormir"
+  },
+  "d83d_de35": {
+    "message": "marejat"
+  },
+  "d83d_de36": {
+    "message": "cara sense boca"
+  },
+  "d83d_de37": {
+    "message": "cara amb m\u00e0scara"
+  },
+  "d83d_de38": {
+    "message": "cara de gat somrient \u00e0mpliament"
+  },
+  "d83d_de39": {
+    "message": "cara de gat amb ll\u00e0grimes d'alegria"
+  },
+  "d83d_de3a": {
+    "message": "cara de gat somrient"
+  },
+  "d83d_de3b": {
+    "message": "cara de gat somrient"
+  },
+  "d83d_de3c": {
+    "message": "cara de gat ir\u00f2nic"
+  },
+  "d83d_de3d": {
+    "message": "cara de gat que fa un pet\u00f3"
+  },
+  "d83d_de3e": {
+    "message": "cara de gat enfadat"
+  },
+  "d83d_de3f": {
+    "message": "cara de gat que plora"
+  },
+  "d83d_de40": {
+    "message": "cara de gat cansat"
+  },
+  "d83d_de45": {
+    "message": "malament"
+  },
+  "d83d_de46": {
+    "message": "gest d'acceptaci\u00f3"
+  },
+  "d83d_de47": {
+    "message": "em sap greu"
+  },
+  "d83d_de48": {
+    "message": "mico que es tapa els ulls"
+  },
+  "d83d_de49": {
+    "message": "mico que es tapa les orelles"
+  },
+  "d83d_de4a": {
+    "message": "mico que es tapa la boca"
+  },
+  "d83d_de4b": {
+    "message": "persona feli\u00e7"
+  },
+  "d83d_de4c": {
+    "message": "visca"
+  },
+  "d83d_de4d": {
+    "message": "persona sorruda"
+  },
+  "d83d_de4e": {
+    "message": "enfadat"
+  },
+  "d83d_de4f": {
+    "message": "mans juntes"
+  },
+  "d83d_de80": {
+    "message": "coet"
+  },
+  "d83d_de81": {
+    "message": "helic\u00f2pter"
+  },
+  "d83d_de82": {
+    "message": "tren de vapor"
+  },
+  "d83d_de83": {
+    "message": "tren"
+  },
+  "d83d_de84": {
+    "message": "tren d'alta velocitat"
+  },
+  "d83d_de85": {
+    "message": "tren d'alta velocitat amb llums vermells"
+  },
+  "d83d_de86": {
+    "message": "tren"
+  },
+  "d83d_de87": {
+    "message": "metro"
+  },
+  "d83d_de88": {
+    "message": "tren lleuger"
+  },
+  "d83d_de89": {
+    "message": "estaci\u00f3 de tren"
+  },
+  "d83d_de8a": {
+    "message": "tramvia"
+  },
+  "d83d_de8b": {
+    "message": "vag\u00f3 de tramvia"
+  },
+  "d83d_de8c": {
+    "message": "autob\u00fas"
+  },
+  "d83d_de8d": {
+    "message": "autob\u00fas que arriba"
+  },
+  "d83d_de8e": {
+    "message": "troleib\u00fas"
+  },
+  "d83d_de8f": {
+    "message": "parada d'autob\u00fas"
+  },
+  "d83d_de90": {
+    "message": "minib\u00fas"
+  },
+  "d83d_de91": {
+    "message": "ambul\u00e0ncia"
+  },
+  "d83d_de92": {
+    "message": "cami\u00f3 de bombers"
+  },
+  "d83d_de93": {
+    "message": "cotxe de policia"
+  },
+  "d83d_de94": {
+    "message": "cotxe de policia que arriba"
+  },
+  "d83d_de95": {
+    "message": "taxi"
+  },
+  "d83d_de96": {
+    "message": "taxi que arriba"
+  },
+  "d83d_de97": {
+    "message": "cotxe"
+  },
+  "d83d_de98": {
+    "message": "cotxe que arriba"
+  },
+  "d83d_de99": {
+    "message": "caravana"
+  },
+  "d83d_de9a": {
+    "message": "cami\u00f3 de repartiment"
+  },
+  "d83d_de9b": {
+    "message": "cami\u00f3"
+  },
+  "d83d_de9c": {
+    "message": "tractor"
+  },
+  "d83d_de9d": {
+    "message": "monorail"
+  },
+  "d83d_de9e": {
+    "message": "cremallera"
+  },
+  "d83d_de9f": {
+    "message": "funicular"
+  },
+  "d83d_dea0": {
+    "message": "telef\u00e8ric de muntanya"
+  },
+  "d83d_dea1": {
+    "message": "telef\u00e8ric"
+  },
+  "d83d_dea2": {
+    "message": "vaixell"
+  },
+  "d83d_dea3": {
+    "message": "bot de rems"
+  },
+  "d83d_dea4": {
+    "message": "llanxa motora"
+  },
+  "d83d_dea5": {
+    "message": "sem\u00e0for horitzontal"
+  },
+  "d83d_dea6": {
+    "message": "sem\u00e0for vertical"
+  },
+  "d83d_dea7": {
+    "message": "en construcci\u00f3"
+  },
+  "d83d_dea8": {
+    "message": "llum giratori"
+  },
+  "d83d_dea9": {
+    "message": "bandera d'ubicaci\u00f3"
+  },
+  "d83d_deaa": {
+    "message": "porta"
+  },
+  "d83d_deab": {
+    "message": "signe de prohibit entrar"
+  },
+  "d83d_deac": {
+    "message": "s\u00edmbol de fumar"
+  },
+  "d83d_dead": {
+    "message": "signe de prohibit fumar"
+  },
+  "d83d_deae": {
+    "message": "signe de paperera"
+  },
+  "d83d_deaf": {
+    "message": "signe de no abocar residus"
+  },
+  "d83d_deb0": {
+    "message": "aigua potable"
+  },
+  "d83d_deb1": {
+    "message": "aigua no potable"
+  },
+  "d83d_deb2": {
+    "message": "bicicleta"
+  },
+  "d83d_deb3": {
+    "message": "prohibides les bicicletes"
+  },
+  "d83d_deb4": {
+    "message": "ciclista"
+  },
+  "d83d_deb5": {
+    "message": "ciclista de muntanya"
+  },
+  "d83d_deb6": {
+    "message": "vianant"
+  },
+  "d83d_deb7": {
+    "message": "prohibit el pas als vianants"
+  },
+  "d83d_deb8": {
+    "message": "pas de nens"
+  },
+  "d83d_deb9": {
+    "message": "signe d'home"
+  },
+  "d83d_deba": {
+    "message": "signe de dona"
+  },
+  "d83d_debb": {
+    "message": "signe de lavabos"
+  },
+  "d83d_debc": {
+    "message": "signe de beb\u00e8"
+  },
+  "d83d_debd": {
+    "message": "lavabo"
+  },
+  "d83d_debe": {
+    "message": "serveis"
+  },
+  "d83d_debf": {
+    "message": "dutxa"
+  },
+  "d83d_dec0": {
+    "message": "bany"
+  },
+  "d83d_dec1": {
+    "message": "banyera"
+  },
+  "d83d_dec2": {
+    "message": "control de passaports"
+  },
+  "d83d_dec3": {
+    "message": "duana"
+  },
+  "d83d_dec4": {
+    "message": "recollida d'equipatge"
+  },
+  "d83d_dec5": {
+    "message": "equipatge perdut"
+  },
+  "de_ger_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat alemany"
+  },
+  "de_neo_ger_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat Neo 2 alemany"
+  },
+  "dictionarytoolcategorytitle": {
+    "message": "Categoria"
+  },
+  "dictionarytoolcommentnewinput": {
+    "message": "Comentari"
+  },
+  "dictionarytoolcommenttitle": {
+    "message": "Comentari"
+  },
+  "dictionarytooldeletedictionaryconfirm": {
+    "message": "Voleu suprimir [object Object]?"
+  },
+  "dictionarytooldeletedictionarytitle": {
+    "message": "Suprimeix el diccionari"
+  },
+  "dictionarytooldictionarylisttitle": {
+    "message": "Diccionaris"
+  },
+  "dictionarytooldictionaryname": {
+    "message": "Nom del diccionari"
+  },
+  "dictionarytooldonebutton": {
+    "message": "Fet"
+  },
+  "dictionarytoolexportbutton": {
+    "message": "Exporta"
+  },
+  "dictionarytoolimportbutton": {
+    "message": "Importa..."
+  },
+  "dictionarytoolmenutitle": {
+    "message": "Gesti\u00f3 de diccionaris"
+  },
+  "dictionarytoolnewdictionarynameplaceholder": {
+    "message": "Diccionari nou"
+  },
+  "dictionarytoolpagetitle": {
+    "message": "Diccionaris de l'usuari"
+  },
+  "dictionarytoolreadingnewinput": {
+    "message": "Lectura nova"
+  },
+  "dictionarytoolreadingtitle": {
+    "message": "Lectura"
+  },
+  "dictionarytoolstatuserrordictionarynamecontainsinvalidcharacter": {
+    "message": "El nom cont\u00e9 car\u00e0cters que no s\u00f3n v\u00e0lids."
+  },
+  "dictionarytoolstatuserrordictionarynameduplicated": {
+    "message": "El nom ja existeix."
+  },
+  "dictionarytoolstatuserrordictionarynameempty": {
+    "message": "Escriviu un nom de diccionari."
+  },
+  "dictionarytoolstatuserrordictionarynametoolong": {
+    "message": "El nom \u00e9s massa llarg."
+  },
+  "dictionarytoolstatuserrordictionarysizelimitexceeded": {
+    "message": "No es pot crear cap m\u00e9s diccionari."
+  },
+  "dictionarytoolstatuserroremptyfile": {
+    "message": "El fitxer est\u00e0 buit."
+  },
+  "dictionarytoolstatuserrorentrysizelimitexceeded": {
+    "message": "No es pot crear cap m\u00e9s entrada en aquest diccionari."
+  },
+  "dictionarytoolstatuserrorfilenotfound": {
+    "message": "No s'ha pogut obrir el fitxer."
+  },
+  "dictionarytoolstatuserrorfilesizelimitexceeded": {
+    "message": "La mida de les dades supera el l\u00edmit de la mida del fitxer."
+  },
+  "dictionarytoolstatuserrorgeneral": {
+    "message": "S'ha produ\u00eft un error amb l'operaci\u00f3."
+  },
+  "dictionarytoolstatuserrorimportinvalidentries": {
+    "message": "Hi ha paraules que no s'han pogut importar."
+  },
+  "dictionarytoolstatuserrorimporttoomanywords": {
+    "message": "La font de la importaci\u00f3 cont\u00e9 massa paraules."
+  },
+  "dictionarytoolstatuserrorinvalidfileformat": {
+    "message": "No s'ha pogut llegir el fitxer."
+  },
+  "dictionarytoolstatuserrornoundohistory": {
+    "message": "No hi ha cap m\u00e9s operaci\u00f3 per desfer."
+  },
+  "dictionarytoolstatuserrorreadingcontainsinvalidcharacter": {
+    "message": "La lectura cont\u00e9 car\u00e0cters que no s\u00f3n v\u00e0lids. Hi podeu utilitzar car\u00e0cters ASCII, Hiragana, marques de so sonores (\u309b), marques de so semisonores (\u309c), punts volats (\u30fb), marques de so prolongat (\u30fc), comes japoneses (\u3001), punts japonesos (\u3002), par\u00e8ntesis japonesos (\u300c\u300d\u300e\u300f) i guions ondulats japonesos (\u301c)."
+  },
+  "dictionarytoolstatuserrorreadingempty": {
+    "message": "Escriviu la lectura."
+  },
+  "dictionarytoolstatuserrorreadingtoolong": {
+    "message": "La lectura \u00e9s massa llarga."
+  },
+  "dictionarytoolstatuserrortitleaddentry": {
+    "message": "Error en afegir l'entrada"
+  },
+  "dictionarytoolstatuserrortitlecreatedictionary": {
+    "message": "Error en crear el diccionari"
+  },
+  "dictionarytoolstatuserrortitledeletedictionary": {
+    "message": "Error en suprimir el diccionari"
+  },
+  "dictionarytoolstatuserrortitledeleteentry": {
+    "message": "Error en suprimir l'entrada"
+  },
+  "dictionarytoolstatuserrortitleeditentry": {
+    "message": "Error en editar l'entrada"
+  },
+  "dictionarytoolstatuserrortitleimportdata": {
+    "message": "Error d'importaci\u00f3"
+  },
+  "dictionarytoolstatuserrortitlerenamedictionary": {
+    "message": "Error en canviar el nom del diccionari"
+  },
+  "dictionarytoolstatuserrorwordcontainsinvalidcharacter": {
+    "message": "La paraula cont\u00e9 car\u00e0cters que no s\u00f3n v\u00e0lids."
+  },
+  "dictionarytoolstatuserrorwordempty": {
+    "message": "Escriviu la paraula."
+  },
+  "dictionarytoolstatuserrorwordtoolong": {
+    "message": "La paraula \u00e9s massa llarga."
+  },
+  "dictionarytoolwordnewinput": {
+    "message": "Paraula nova"
+  },
+  "dictionarytoolwordtitle": {
+    "message": "Paraula"
+  },
+  "dismiss_menu": {
+    "message": "omet el men\u00fa del teclat"
+  },
+  "dk_dan_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat dan\u00e8s"
+  },
+  "double_space_period": {
+    "message": "Espai doble per introduir un punt"
+  },
+  "down_arrow": {
+    "message": "fletxa avall"
+  },
+  "ee_est_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat estoni\u00e0"
+  },
+  "emoji_tab_emoticon": {
+    "message": "Categoria d'emoji d'emoticones"
+  },
+  "emoji_tab_face": {
+    "message": "Categoria d'emoji de cares"
+  },
+  "emoji_tab_hot": {
+    "message": "Categoria d'emoji populars"
+  },
+  "emoji_tab_nature": {
+    "message": "Categoria d'emoji de naturalesa"
+  },
+  "emoji_tab_object": {
+    "message": "Categoria d'emoji d'objectes"
+  },
+  "emoji_tab_place": {
+    "message": "Categoria d'emoji de llocs"
+  },
+  "emoji_tab_recent": {
+    "message": "Categoria d'emoji recents"
+  },
+  "emoji_tab_symbol": {
+    "message": "Categoria d'emoji de s\u00edmbols"
+  },
+  "enable_capitalization": {
+    "message": "Maj\u00fascules autom\u00e0tiques"
+  },
+  "enable_completion": {
+    "message": "Activa la compleci\u00f3"
+  },
+  "enable_prediction": {
+    "message": "Activa la predicci\u00f3 de paraula seg\u00fcent"
+  },
+  "enter": {
+    "message": "retorn"
+  },
+  "es_cat_cat_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat catal\u00e0"
+  },
+  "es_spa_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat espanyol"
+  },
+  "expand": {
+    "message": "Amplia"
+  },
+  "expand_candidates": {
+    "message": "amplia la llista de candidats"
+  },
+  "fi_fin_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat fin\u00e8s"
+  },
+  "footer_emoji_button": {
+    "message": "canvia a emoji"
+  },
+  "footer_handwriting_button": {
+    "message": "canvia a escriptura t\u00e0ctil"
+  },
+  "footer_settings_button": {
+    "message": "obre la configuraci\u00f3 del m\u00e8tode d'introducci\u00f3"
+  },
+  "fr_fra_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat franc\u00e8s"
+  },
+  "fuzzy_pinyin": {
+    "message": "Activa el mode pinyin per aproximaci\u00f3"
+  },
+  "gb_dvorak_eng_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat Dvorak del Regne Unit (angl\u00e8s)"
+  },
+  "gb_extd_eng_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat del Regne Unit (angl\u00e8s)"
+  },
+  "ge_geo_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat georgi\u00e0"
+  },
+  "globe": {
+    "message": "canvia al teclat anterior"
+  },
+  "got_it": {
+    "message": "D'acord"
+  },
+  "gr_gre_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat grec"
+  },
+  "handwriting_back": {
+    "message": "Enrere"
+  },
+  "handwriting_netowrk_error": {
+    "message": "No podeu fer servir l'escriptura a m\u00e0 perqu\u00e8 la xarxa no est\u00e0 disponible."
+  },
+  "handwriting_privacy_info": {
+    "message": "El text que escriviu s'enviar\u00e0 als servidors de Google per poder recon\u00e8ixer-lo."
+  },
+  "hide_keyboard": {
+    "message": "amaga el teclat"
+  },
+  "hr_scr_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat croat"
+  },
+  "hu_hun_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat hongar\u00e8s"
+  },
+  "ie_ga_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat irland\u00e8s"
+  },
+  "ignore_correction": {
+    "message": "Ignora la correcci\u00f3 de"
+  },
+  "ignore_correction_short": {
+    "message": "Ignora la correcci\u00f3"
+  },
+  "il_heb_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat hebreu"
+  },
+  "init_lang": {
+    "message": "L'idioma inicial d'introducci\u00f3 \u00e9s el xin\u00e8s"
+  },
+  "init_punc": {
+    "message": "L'amplada inicial de la puntuaci\u00f3 \u00e9s completa"
+  },
+  "init_sbc": {
+    "message": "L'amplada inicial dels car\u00e0cters \u00e9s completa"
+  },
+  "input_hangul": {
+    "message": "Mode hangul"
+  },
+  "input_hanja": {
+    "message": "Mode hanja"
+  },
+  "inputmethod_array": {
+    "message": "M\u00e8tode d'introducci\u00f3 de la matriu"
+  },
+  "inputmethod_cangjie": {
+    "message": "M\u00e8tode d'introducci\u00f3 de cangjie"
+  },
+  "inputmethod_dayi": {
+    "message": "M\u00e8tode d'introducci\u00f3 de dayi"
+  },
+  "inputmethod_hangul": {
+    "message": "M\u00e8tode d'introducci\u00f3 de core\u00e0"
+  },
+  "inputmethod_pinyin": {
+    "message": "M\u00e8tode d'introducci\u00f3 de pinyin"
+  },
+  "inputmethod_quick": {
+    "message": "M\u00e8tode d'introducci\u00f3 r\u00e0pida"
+  },
+  "inputmethod_traditional_pinyin": {
+    "message": "M\u00e8tode d'introducci\u00f3 de pinyin per a xin\u00e8s tradicional"
+  },
+  "inputmethod_wubi": {
+    "message": "M\u00e8tode d'introducci\u00f3 de wubi"
+  },
+  "inputmethod_zhuyin": {
+    "message": "M\u00e8tode d'introducci\u00f3 de zhuyin"
+  },
+  "is_ice_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat island\u00e8s"
+  },
+  "it_ita_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat itali\u00e0"
+  },
+  "jp_jpn_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat japon\u00e8s"
+  },
+  "keyboard_arabic": {
+    "message": "Teclat \u00e0rab"
+  },
+  "keyboard_armenian_phonetic": {
+    "message": "Teclat fon\u00e8tic armeni"
+  },
+  "keyboard_belarusian": {
+    "message": "Teclat bielor\u00fas"
+  },
+  "keyboard_belgian": {
+    "message": "Teclat belga"
+  },
+  "keyboard_bengali_phonetic": {
+    "message": "Teclat bengal\u00ed (fon\u00e8tic)"
+  },
+  "keyboard_brazilian": {
+    "message": "Teclat brasiler"
+  },
+  "keyboard_bulgarian": {
+    "message": "Teclat b\u00falgar"
+  },
+  "keyboard_bulgarian_phonetic": {
+    "message": "Teclat fon\u00e8tic b\u00falgar"
+  },
+  "keyboard_canadian_english": {
+    "message": "Teclat angl\u00e8s del Canad\u00e0"
+  },
+  "keyboard_canadian_french": {
+    "message": "Teclat franc\u00e8s del Canad\u00e0"
+  },
+  "keyboard_canadian_multilingual": {
+    "message": "Teclat multiling\u00fce canadenc"
+  },
+  "keyboard_catalan": {
+    "message": "Teclat catal\u00e0"
+  },
+  "keyboard_croatian": {
+    "message": "Teclat croat"
+  },
+  "keyboard_czech": {
+    "message": "Teclat txec"
+  },
+  "keyboard_czech_qwerty": {
+    "message": "Teclat QWERTY txec"
+  },
+  "keyboard_danish": {
+    "message": "Teclat dan\u00e8s"
+  },
+  "keyboard_devanagari_phonetic": {
+    "message": "Teclat devanagari (fon\u00e8tic)"
+  },
+  "keyboard_estonian": {
+    "message": "Teclat estoni\u00e0"
+  },
+  "keyboard_ethiopic": {
+    "message": "Teclat et\u00edop"
+  },
+  "keyboard_finnish": {
+    "message": "Teclat fin\u00e8s"
+  },
+  "keyboard_french": {
+    "message": "Teclat franc\u00e8s"
+  },
+  "keyboard_georgian": {
+    "message": "Teclat georgi\u00e0"
+  },
+  "keyboard_german": {
+    "message": "Teclat alemany"
+  },
+  "keyboard_german_neo_2": {
+    "message": "Teclat Neo 2 alemany"
+  },
+  "keyboard_greek": {
+    "message": "Teclat grec"
+  },
+  "keyboard_gujarati_phonetic": {
+    "message": "Teclat gujarati (fon\u00e8tic)"
+  },
+  "keyboard_hebrew": {
+    "message": "Teclat hebreu"
+  },
+  "keyboard_hungarian": {
+    "message": "Teclat hongar\u00e8s"
+  },
+  "keyboard_icelandic": {
+    "message": "Teclat island\u00e8s"
+  },
+  "keyboard_inscript": {
+    "message": "Teclat (InScript)"
+  },
+  "keyboard_irish": {
+    "message": "Teclat irland\u00e8s"
+  },
+  "keyboard_italian": {
+    "message": "Teclat itali\u00e0"
+  },
+  "keyboard_itrans": {
+    "message": "Teclat (itrans)"
+  },
+  "keyboard_japanese": {
+    "message": "Teclat japon\u00e8s"
+  },
+  "keyboard_kannada_phonetic": {
+    "message": "Teclat kannada (fon\u00e8tic)"
+  },
+  "keyboard_kedmanee": {
+    "message": "Teclat (kedmanee)"
+  },
+  "keyboard_khmer": {
+    "message": "Teclat de khmer"
+  },
+  "keyboard_lao": {
+    "message": "Teclat de lao"
+  },
+  "keyboard_latin_american": {
+    "message": "Teclat llatinoameric\u00e0"
+  },
+  "keyboard_latvian": {
+    "message": "Teclat let\u00f3"
+  },
+  "keyboard_lithuanian": {
+    "message": "Teclat litu\u00e0"
+  },
+  "keyboard_malayalam_phonetic": {
+    "message": "Teclat malai\u00e0lam (fon\u00e8tic)"
+  },
+  "keyboard_maltese": {
+    "message": "Teclat malt\u00e8s"
+  },
+  "keyboard_mongolian": {
+    "message": "Teclat mongol"
+  },
+  "keyboard_myanmar": {
+    "message": "Teclat MM3 de Myanmar"
+  },
+  "keyboard_myanmar_myansan": {
+    "message": "Teclat myansan de Myanmar"
+  },
+  "keyboard_nepali_inscript": {
+    "message": "Teclat de nepal\u00e8s (InScript)"
+  },
+  "keyboard_nepali_phonetic": {
+    "message": "Teclat de nepal\u00e8s (fon\u00e8tic)"
+  },
+  "keyboard_netherlands": {
+    "message": "Teclat per als Pa\u00efsos Baixos"
+  },
+  "keyboard_none": {
+    "message": "Teclat"
+  },
+  "keyboard_norwegian": {
+    "message": "Teclat noruec"
+  },
+  "keyboard_pattachote": {
+    "message": "Teclat (pattachote)"
+  },
+  "keyboard_persian": {
+    "message": "Teclat persa"
+  },
+  "keyboard_phonetic": {
+    "message": "Teclat (fon\u00e8tic)"
+  },
+  "keyboard_polish": {
+    "message": "Teclat polon\u00e8s"
+  },
+  "keyboard_portuguese": {
+    "message": "Teclat portugu\u00e8s"
+  },
+  "keyboard_romanian": {
+    "message": "Teclat roman\u00e8s"
+  },
+  "keyboard_romanian_standard": {
+    "message": "Teclat est\u00e0ndard roman\u00e8s"
+  },
+  "keyboard_russian": {
+    "message": "Teclat rus"
+  },
+  "keyboard_russian_phonetic": {
+    "message": "Teclat fon\u00e8tic rus"
+  },
+  "keyboard_russian_phonetic_aatseel": {
+    "message": "Teclat fon\u00e8tic rus (AATSEEL)"
+  },
+  "keyboard_russian_phonetic_yazhert": {
+    "message": "Teclat fon\u00e8tic rus (YaZHert)"
+  },
+  "keyboard_serbian": {
+    "message": "Teclat serbi"
+  },
+  "keyboard_sinhala": {
+    "message": "Teclat de singal\u00e8s"
+  },
+  "keyboard_slovakian": {
+    "message": "Teclat eslovac"
+  },
+  "keyboard_slovenian": {
+    "message": "Teclat eslov\u00e8"
+  },
+  "keyboard_soranikurdish_ar": {
+    "message": "Teclat de kurd sorani basat en l'\u00e0rab"
+  },
+  "keyboard_soranikurdish_en": {
+    "message": "Teclat de kurd sorani basat en l'angl\u00e8s"
+  },
+  "keyboard_spanish": {
+    "message": "Teclat espanyol"
+  },
+  "keyboard_swedish": {
+    "message": "Teclat suec"
+  },
+  "keyboard_swiss": {
+    "message": "Teclat su\u00eds"
+  },
+  "keyboard_swiss_french": {
+    "message": "Teclat franc\u00e8s de Su\u00efssa"
+  },
+  "keyboard_tamil99": {
+    "message": "Teclat (Tamil99)"
+  },
+  "keyboard_tamil_inscript": {
+    "message": "Teclat t\u00e0mil (InScript)"
+  },
+  "keyboard_tamil_itrans": {
+    "message": "Teclat t\u00e0mil (itrans)"
+  },
+  "keyboard_tamil_phonetic": {
+    "message": "Teclat t\u00e0mil (fon\u00e8tic)"
+  },
+  "keyboard_tamil_tamil99": {
+    "message": "Teclat t\u00e0mil (Tamil99)"
+  },
+  "keyboard_tamil_typewriter": {
+    "message": "Teclat t\u00e0mil (m\u00e0quina d'escriure)"
+  },
+  "keyboard_tcvn": {
+    "message": "Teclat (TCVN)"
+  },
+  "keyboard_telex": {
+    "message": "Teclat (Telex)"
+  },
+  "keyboard_telugu_phonetic": {
+    "message": "Teclat telugu (fon\u00e8tic)"
+  },
+  "keyboard_thai_kedmanee": {
+    "message": "Teclat tailand\u00e8s (Kedmanee)"
+  },
+  "keyboard_thai_pattachote": {
+    "message": "Teclat tailand\u00e8s (pattachote)"
+  },
+  "keyboard_thai_tis": {
+    "message": "Teclat tailand\u00e8s (TIS 820-2531)"
+  },
+  "keyboard_tis": {
+    "message": "Teclat (TIS 820-2531)"
+  },
+  "keyboard_turkish": {
+    "message": "Teclat turc"
+  },
+  "keyboard_typewriter": {
+    "message": "Teclat (m\u00e0quina d'escriure)"
+  },
+  "keyboard_uk": {
+    "message": "Teclat angl\u00e8s"
+  },
+  "keyboard_uk_dvorak": {
+    "message": "Teclat Dvorak angl\u00e8s"
+  },
+  "keyboard_ukrainian": {
+    "message": "Teclat ucra\u00efn\u00e8s"
+  },
+  "keyboard_us": {
+    "message": "Teclat nord-americ\u00e0"
+  },
+  "keyboard_us_colemak": {
+    "message": "Teclat Colemak nord-americ\u00e0"
+  },
+  "keyboard_us_dvorak": {
+    "message": "Teclat Dvorak nord-americ\u00e0"
+  },
+  "keyboard_us_extended": {
+    "message": "Teclat nord-americ\u00e0 ampliat"
+  },
+  "keyboard_us_international": {
+    "message": "Teclat nord-americ\u00e0 internacional"
+  },
+  "keyboard_vietnamese_tcvn": {
+    "message": "Teclat vietnamita (TCVN)"
+  },
+  "keyboard_vietnamese_telex": {
+    "message": "Teclat vietnamita (Telex)"
+  },
+  "keyboard_vietnamese_viqr": {
+    "message": "Teclat vietnamita (VIQR)"
+  },
+  "keyboard_vietnamese_vni": {
+    "message": "Teclat vietnamita (VNI)"
+  },
+  "keyboard_viqr": {
+    "message": "Teclat (VIQR)"
+  },
+  "keyboard_vni": {
+    "message": "Teclat (VNI)"
+  },
+  "korean_hanja_display": {
+    "message": "Mode de candidat hanja"
+  },
+  "korean_keyboard_layout": {
+    "message": "Distribuci\u00f3 del teclat core\u00e0"
+  },
+  "korean_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del m\u00e8tode d'introducci\u00f3 de core\u00e0"
+  },
+  "korean_syllable_input": {
+    "message": "Introdueix una s\u00edl\u00b7laba cada vegada"
+  },
+  "latam_spa_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat llatinoameric\u00e0 (espanyol)"
+  },
+  "latin_settings_page": {
+    "message": "Configuraci\u00f3"
+  },
+  "left_arrow": {
+    "message": "fletxa esquerra"
+  },
+  "lt_lit_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat litu\u00e0"
+  },
+  "lv_apostrophe_lav_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat let\u00f3 (de Let\u00f2nia)"
+  },
+  "menu_key": {
+    "message": "obre el men\u00fa del teclat"
+  },
+  "mn_mon_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat mongol"
+  },
+  "move_page_key_above": {
+    "message": "Utilitza les tecles - i = per mostrar una llista de candidats"
+  },
+  "move_page_key_below": {
+    "message": "Utilitza les tecles , i . per mostrar una llista de candidats"
+  },
+  "never_auto_correct": {
+    "message": "Desactivat"
+  },
+  "no_nob_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat noruec"
+  },
+  "pause": {
+    "message": "Atura"
+  },
+  "physical_auto_correction_level": {
+    "message": "Correcci\u00f3 autom\u00e0tica"
+  },
+  "physical_enable_capitalization": {
+    "message": "Maj\u00fascules autom\u00e0tiques"
+  },
+  "physical_keyboard": {
+    "message": "Teclat f\u00edsic"
+  },
+  "pinyin_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 de pinyin"
+  },
+  "pl_pol_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat polon\u00e8s"
+  },
+  "pt_por_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat portugu\u00e8s"
+  },
+  "right_arrow": {
+    "message": "fletxa dreta"
+  },
+  "ro_rum_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat roman\u00e8s"
+  },
+  "rs_srp_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat serbi"
+  },
+  "ru_phonetic_rus_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat fon\u00e8tic rus"
+  },
+  "ru_rus_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat rus"
+  },
+  "se_swe_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat suec"
+  },
+  "settings": {
+    "message": "Configuraci\u00f3"
+  },
+  "shift": {
+    "message": "maj"
+  },
+  "shift_lock": {
+    "message": "Tecla maj activada"
+  },
+  "show_candidate_mode": {
+    "message": "Endarreriment en el men\u00fa desplegable de suggeriments"
+  },
+  "show_candidates_1000": {
+    "message": "Mostra el men\u00fa desplegable de suggeriments despr\u00e9s d'un segon"
+  },
+  "show_candidates_2000": {
+    "message": "Mostra el men\u00fa desplegable de suggeriments despr\u00e9s de dos segons"
+  },
+  "show_candidates_500": {
+    "message": "Mostra el men\u00fa desplegable de suggeriments despr\u00e9s de 500 mil\u00b7lisegons"
+  },
+  "show_candidates_5000": {
+    "message": "Mostra el men\u00fa desplegable de suggeriments despr\u00e9s de cinc segons"
+  },
+  "show_candidates_backspace": {
+    "message": "Mostra el men\u00fa desplegable de suggeriments amb la tecla de retroc\u00e9s"
+  },
+  "show_hangul_candidate": {
+    "message": "Mostrar els candidats en mode hangul"
+  },
+  "shrink_candidates": {
+    "message": "redueix la llista de candidats"
+  },
+  "si_slv_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat eslov\u00e8"
+  },
+  "sk_slo_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat eslovac"
+  },
+  "smiley": {
+    "message": "emoticona"
+  },
+  "sometimes_auto_correct": {
+    "message": "Modest"
+  },
+  "sound_on_keypress": {
+    "message": "So en pr\u00e9mer una tecla"
+  },
+  "space": {
+    "message": "espai"
+  },
+  "switch_to": {
+    "message": "canvia per "
+  },
+  "switch_to_compact_layout": {
+    "message": "Canvia a la distribuci\u00f3 compacta"
+  },
+  "switch_to_full_layout": {
+    "message": "Canvia a la distribuci\u00f3 completa"
+  },
+  "switch_to_keyboard_prefix": {
+    "message": "canvia per "
+  },
+  "switched_to": {
+    "message": "canviat per "
+  },
+  "tab": {
+    "message": "tabulador"
+  },
+  "touch_keyboard": {
+    "message": "Teclat en pantalla"
+  },
+  "tr_tur_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat turc"
+  },
+  "transliteration_am": {
+    "message": "Transliteraci\u00f3 (salam \u2192 \u1230\u120b\u121d)"
+  },
+  "transliteration_ar": {
+    "message": "Transliteraci\u00f3 (marhaban \u2190 \u0645\u0631\u062d\u0628\u0627)"
+  },
+  "transliteration_be": {
+    "message": "Transliteraci\u00f3 (pryvitannie \u2192 \u043f\u0440\u044b\u0432\u0456\u0442\u0430\u043d\u043d\u0435)"
+  },
+  "transliteration_bg": {
+    "message": "Transliteraci\u00f3 (zdrasti \u2192 \u0437\u0434\u0440\u0430\u0441\u0442\u0438)"
+  },
+  "transliteration_bn": {
+    "message": "Transliteraci\u00f3 (namaskar \u2192 \u09a8\u09ae\u09b8\u09cd\u0995\u09be\u09b0)"
+  },
+  "transliteration_el": {
+    "message": "Transliteraci\u00f3 (geia \u2192 \u03b3\u03b5\u03b9\u03b1)"
+  },
+  "transliteration_fa": {
+    "message": "Transliteraci\u00f3 (salam \u2190 \u0633\u0644\u0627\u0645)"
+  },
+  "transliteration_gu": {
+    "message": "Transliteraci\u00f3 (namaste \u2192 \u0aa8\u0aae\u0ab8\u0acd\u0aa4\u0ac7)"
+  },
+  "transliteration_he": {
+    "message": "Transliteraci\u00f3 (shalom \u2190 \u05e9\u05dc\u05d5\u05dd)"
+  },
+  "transliteration_hi": {
+    "message": "Transliteraci\u00f3 (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_kn": {
+    "message": "Transliteraci\u00f3 (namaskaram \u2192 \u0ca8\u0cae\u0cb8\u0ccd\u0c95\u0cbe\u0cb0)"
+  },
+  "transliteration_ml": {
+    "message": "Transliteraci\u00f3 (namaskar \u2192 \u0d28\u0d2e\u0d38\u0d4d\u0d15\u0d3e\u0d30\u0d02)"
+  },
+  "transliteration_mr": {
+    "message": "Transliteraci\u00f3 (namaste \u2192 \u0928\u092e\u0938\u094d\u0915\u093e\u0930)"
+  },
+  "transliteration_ne": {
+    "message": "Transliteraci\u00f3 (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_or": {
+    "message": "Transliteraci\u00f3 (mausam \u2192 \u0b28\u0b2e\u0b38\u0b4d\u0b24\u0b47)"
+  },
+  "transliteration_pa": {
+    "message": "Transliteraci\u00f3 (mausam \u2192 \u0a2e\u0a4c\u0a38\u0a2e)"
+  },
+  "transliteration_ru": {
+    "message": "Transliteraci\u00f3 (privet \u2192 \u043f\u0440\u0438\u0432\u0435\u0442)"
+  },
+  "transliteration_sa": {
+    "message": "Transliteraci\u00f3 (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_si": {
+    "message": "Transliteraci\u00f3 (halo \u2192 \u0dc4\u0dbd\u0ddd)"
+  },
+  "transliteration_sr": {
+    "message": "Transliteraci\u00f3 (zdravo \u2192 \u0437\u0434\u0440\u0430\u0432\u043e)"
+  },
+  "transliteration_ta": {
+    "message": "Transliteraci\u00f3 (vanakkam \u2192 \u0bb5\u0ba3\u0b95\u0bcd\u0b95\u0bae\u0bcd)"
+  },
+  "transliteration_te": {
+    "message": "Transliteraci\u00f3 (emandi \u2192 \u0c0f\u0c2e\u0c02\u0c21\u0c40)"
+  },
+  "transliteration_ti": {
+    "message": "Transliteraci\u00f3 (selam \u2192 \u1230\u120b\u121d)"
+  },
+  "transliteration_uk": {
+    "message": "Transliteraci\u00f3 (pryvit \u2192 \u043f\u0440\u0438\u0432\u0456\u0442)"
+  },
+  "transliteration_ur": {
+    "message": "Transliteraci\u00f3 (salam \u2190 \u0633\u0644\u0627\u0645)"
+  },
+  "transliteration_vi": {
+    "message": "Transliteraci\u00f3 (chao \u2192 ch\u00e0o)"
+  },
+  "ua_ukr_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat ucra\u00efn\u00e8s"
+  },
+  "up_arrow": {
+    "message": "fletxa amunt"
+  },
+  "us_altgr_intl_eng_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat ampliat dels EUA (angl\u00e8s)"
+  },
+  "us_colemak_eng_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat Colemak dels EUA (angl\u00e8s)"
+  },
+  "us_dvorak_eng_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat Dvorak dels EUA (angl\u00e8s)"
+  },
+  "us_eng_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat dels EUA (angl\u00e8s)"
+  },
+  "us_fil_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat dels EUA (filip\u00ed)"
+  },
+  "us_ind_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat dels EUA (indonesi)"
+  },
+  "us_intl_eng_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat internacional dels EUA (angl\u00e8s)"
+  },
+  "us_intl_nld_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat internacional dels EUA (holand\u00e8s)"
+  },
+  "us_intl_por_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat internacional dels EUA (portugu\u00e8s de Brasil)"
+  },
+  "us_msa_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 del teclat dels EUA (malai)"
+  },
+  "user_dict": {
+    "message": "Activa el diccionari personal"
+  },
+  "user_dict_add": {
+    "message": "Afegeix"
+  },
+  "user_dict_clear": {
+    "message": "Esborra-ho tot"
+  },
+  "user_dict_manage": {
+    "message": "Gestiona el diccionari personal..."
+  },
+  "user_dict_new_word": {
+    "message": "Paraula nova"
+  },
+  "user_dict_remove": {
+    "message": "Suprimeix les seleccionades"
+  },
+  "user_dict_reset": {
+    "message": "Restableix totes les entrades de diccionari"
+  },
+  "user_dict_save": {
+    "message": "Desa"
+  },
+  "user_dict_sync": {
+    "message": "Sincronitza el diccionari personal."
+  },
+  "user_dict_title": {
+    "message": "Diccionari personal"
+  },
+  "voice": {
+    "message": "Veu"
+  },
+  "voice_privacy_info": {
+    "message": "El text que digueu s'enviar\u00e0 als servidors de Google per poder recon\u00e8ixer-lo."
+  },
+  "voice_turn_off": {
+    "message": "desactiva l'eina d'entrada de veu"
+  },
+  "voice_turn_on": {
+    "message": "activa l'eina d'entrada de veu"
+  },
+  "wait": {
+    "message": "Espera"
+  },
+  "zhuyin_keyboard_layout": {
+    "message": "Tipus de teclat"
+  },
+  "zhuyin_page_size": {
+    "message": "Nombre de candidats que es mostren per p\u00e0gina"
+  },
+  "zhuyin_select_keys": {
+    "message": "Tecles de selecci\u00f3"
+  },
+  "zhuyin_settings_page": {
+    "message": "P\u00e0gina de configuraci\u00f3 de zhuyin"
+  }
+}

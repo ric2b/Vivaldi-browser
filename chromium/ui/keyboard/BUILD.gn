@@ -1,0 +1,129 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//testing/test.gni")
+import("//third_party/google_input_tools/closure.gni")
+import("//third_party/google_input_tools/inputview.gni")
+import("//tools/grit/grit_rule.gni")
+
+component("keyboard") {
+  sources = [
+    "keyboard.cc",
+    "keyboard.h",
+    "keyboard_constants.cc",
+    "keyboard_constants.h",
+    "keyboard_controller.cc",
+    "keyboard_controller.h",
+    "keyboard_controller_observer.h",
+    "keyboard_controller_proxy.cc",
+    "keyboard_controller_proxy.h",
+    "keyboard_export.h",
+    "keyboard_layout_manager.cc",
+    "keyboard_layout_manager.h",
+    "keyboard_switches.cc",
+    "keyboard_switches.h",
+    "keyboard_util.cc",
+    "keyboard_util.h",
+  ]
+
+  defines = [ "KEYBOARD_IMPLEMENTATION" ]
+
+  deps = [
+    ":resources",
+    "//base",
+    "//base/third_party/dynamic_annotations",
+    "//content/public/browser",
+    "//content/public/common",
+    "//ipc",
+    "//skia",
+    "//ui/aura",
+    "//ui/base",
+    "//ui/base/ime",
+    "//ui/compositor",
+    "//ui/events",
+    "//ui/events:dom_keycode_converter",
+    "//ui/events:events_base",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/wm",
+    "//url",
+  ]
+
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
+  }
+}
+
+grit("resources_grit") {
+  source = "keyboard_resources.grd"
+  outputs = [
+    "grit/keyboard_resources.h",
+    "grit/keyboard_resources_map.h",
+    "keyboard_resources.pak",
+    "keyboard_resources.rc",
+  ]
+
+  input_tools_root_dir = "//third_party/google_input_tools/src/chrome/os"
+  inputview_gen_js = "$root_gen_dir/ui/keyboard/resources/inputview.js"
+  grit_flags = [
+    "-E",
+    "input_tools_root_dir=" + rebase_path(input_tools_root_dir, "."),
+    "-E",
+    "inputview_gen_js=" + rebase_path(inputview_gen_js, root_build_dir),
+  ]
+
+  deps = [
+    ":inputview",
+  ]
+}
+
+copy("resources") {
+  sources = [
+    "$target_gen_dir/keyboard_resources.pak",
+  ]
+  outputs = [
+    "$root_out_dir/keyboard_resources.pak",
+  ]
+  public_deps = [
+    ":resources_grit",
+  ]
+}
+
+build_closure("inputview") {
+  sources = inputview_sources
+  target = "$target_gen_dir/resources/inputview.js"
+  json_file = "//third_party/google_input_tools/inputview.gypi"
+  sources += [ json_file ]
+  json_sources = "variables.inputview_sources"
+  path = rebase_path("//third_party/google_input_tools")
+}
+
+test("keyboard_unittests") {
+  sources = [
+    "keyboard_controller_unittest.cc",
+    "test/run_all_unittests.cc",
+  ]
+
+  deps = [
+    ":keyboard",
+    "//base",
+    "//base/allocator",
+    "//base/test:test_support",
+    "//content",
+    "//skia",
+    "//testing/gtest",
+    "//ui/aura:test_support",
+    "//ui/base",
+    "//ui/base/ime",
+    "//ui/base:test_support",
+    "//ui/compositor:test_support",
+    "//ui/events:test_support",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/gl",
+    "//ui/resources:ui_test_pak",
+    "//ui/wm",
+    "//url",
+  ]
+}

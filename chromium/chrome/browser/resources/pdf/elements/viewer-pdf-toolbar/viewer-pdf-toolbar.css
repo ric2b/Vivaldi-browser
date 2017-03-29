@@ -1,0 +1,69 @@
+/* Copyright 2015 The Chromium Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file. */
+
+/* We introduce a wrapper aligner element as setting the relevant attributes
+ * (horizontal justified layout center) have no effect on the core-toolbar. */
+#aligner {
+  width: 100%;
+}
+
+#title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#pageselector-container {
+  text-align: center;
+  /* The container resizes according to the width of the toolbar. On small
+   * screens with large numbers of pages, overflow page numbers without
+   * wrapping. */
+  white-space: nowrap;
+}
+
+#buttons {
+  text-align: right;
+}
+
+#buttons > paper-icon-button {
+  margin-right: 8px;
+}
+
+viewer-toolbar-dropdown {
+  margin-right: 4px;
+}
+
+paper-progress {
+  height: 56px;
+  position: absolute;
+  width: 100%;
+  z-index: 3;
+}
+
+paper-progress {
+  --paper-progress-active-color: rgb(50, 54, 57);
+  --paper-progress-container-color: rgb(34, 36, 38);
+}
+
+paper-toolbar {
+  background-color: transparent;
+  color: rgb(241, 241, 241);
+  font-size: 1.5em;
+  height: 56px;
+  padding-left: 1em;
+  padding-right: 1em;
+  z-index: 3;
+}
+
+paper-toolbar /deep/ ::selection {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+paper-toolbar /deep/ .toolbar-tools {
+  height: 56px;
+}
+
+.invisible {
+  visibility: hidden;
+}

@@ -1,0 +1,54 @@
+/* Copyright 2015 The Chromium Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file. */
+
+body {
+  background-color: rgb(82, 86, 89);
+  font-family: Roboto, 'Helvetica Neue', Helvetica, Arial;
+  margin: 0;
+}
+
+viewer-pdf-toolbar {
+  position: fixed;
+  width: 100%;
+  /* TODO(alexandrec): the viewer-pane's paper-dialog is set to z-index: 12
+   * internally by the polymer element. Figure out why that is happening. */
+  z-index: 1000;
+}
+
+#plugin {
+  height: 100%;
+  position: fixed;
+  width: 100%;
+  z-index: 1;
+}
+
+#sizer {
+  position: absolute;
+  z-index: 0;
+}
+
+bookmarks-pane {
+  z-index: 2;
+}
+
+viewer-toolbar {
+  visibility: hidden;
+  white-space: nowrap;
+  z-index: 3;
+}
+
+viewer-page-indicator {
+  visibility: hidden;
+  z-index: 3;
+}
+
+viewer-error-screen {
+  visibility: hidden;
+  z-index: 2;
+}
+
+viewer-password-screen {
+  visibility: hidden;
+  z-index: 2;
+}

@@ -1,0 +1,10 @@
+include_rules = [
+  "+device/bluetooth",
+  "+net",
+]
+
+specific_include_rules = {
+  "screenlock_bridge\.*": [
+    "+chromeos",
+  ],
+}

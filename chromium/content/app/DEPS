@@ -1,0 +1,13 @@
+include_rules = [
+  "+components/tracing/startup_tracing.h",
+  "+content",
+  "+device/battery",
+  "+device/bluetooth",
+  "+device/vibration",
+  # For loading V8's initial snapshot from external files.
+  "+gin/public/isolate_holder.h",
+  "+gin/public/snapshot_fd_data.h",
+  "+gin/v8_initializer.h",
+  "+media/base",  # For initializing media library.
+  "+media/midi",  # For initializing midi library.
+]

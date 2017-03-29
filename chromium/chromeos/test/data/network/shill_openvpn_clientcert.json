@@ -1,0 +1,13 @@
+{
+   "GUID": "{84391467-dd8b-4c66-9b52-860583038351}",
+   "Name": "TestOpenVPN",
+   "OpenVPN.Password": "some password",
+   "OpenVPN.Port": "1234",
+   "OpenVPN.Proto": "udp",
+   "OpenVPN.User": "hans",
+   "Provider.Host": "terminus.muc",
+   "Provider.Type": "openvpn",
+   "ProxyConfig": "{\"mode\":\"direct\"}",
+   "SaveCredentials": true,
+   "Type": "vpn",
+}

@@ -1,0 +1,7 @@
+{
+  "EAP.EAP":"TLS",
+  "GUID":"guid",
+  "Profile": "/profile/user1/shill",
+  "Type":"etherneteap",
+  "UIData": "{\"onc_source\":\"user_policy\"}"
+}

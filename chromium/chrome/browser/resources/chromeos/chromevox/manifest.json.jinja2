@@ -1,0 +1,291 @@
+{
+{%if key is defined %}
+  "key": "{{key}}",
+{% endif %}
+  "manifest_version": 2,
+  "name": "__MSG_CHROMEVOX_NAME__",
+  "version": "{{set_version}}",
+  "description": "__MSG_CHROMEVOX_DESCRIPTION__",
+{% if is_guest_manifest == '1' %}
+  "incognito": "split",
+{% endif %}
+  "background": {
+    "page": "cvox2/background/background.html"
+  },
+  "permissions": [
+    "accessibilityPrivate",
+    "bookmarks",
+    "brailleDisplayPrivate",
+    "commands.accessibility",
+    "commandLinePrivate",
+    "experimental",
+    "history",
+    "storage",
+    "tabs",
+    "tts",
+    "virtualKeyboardPrivate",
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": [ "<all_urls>" ],
+      "exclude_globs": [
+          "chrome-extension://mndnfokpggljbaajbnioimlmbfngpief/chromevox/background/background.html"
+      ],
+      "all_frames": true,
+      "js": [
+{% if is_js_compressed == '1' %}
+        "chromeVoxChromePageScript.js"
+{% else %}
+        "closure/closure_preinit.js",
+        "closure/base.js",
+        "deps.js",
+        "chromevox/injected/loader.js"
+{% endif %}
+      ]
+    }
+  ],
+  "web_accessible_resources": [
+    "chromevox/injected/api.js",
+    "chromevox/injected/api_util.js",
+    "chromevox/injected/mathjax.js",
+    "chromevox/injected/mathjax_external_util.js"
+  ],
+  "automation": {
+    "desktop": true
+  },
+  "commands": {
+{% if is_chromevox_classic == '0' %}
+    "nextElement": {
+      "description": "__MSG_CHROMEVOX_NEXT_OBJECT__",
+      "suggested_key": {
+        "chromeos": "Search+Right"
+      }
+    },
+    "previousElement": {
+      "description": "__MSG_CHROMEVOX_PREVIOUS_OBJECT__",
+      "suggested_key": {
+        "chromeos": "Search+Left"
+      }
+    },
+    "nextCharacter": {
+      "description": "__MSG_CHROMEVOX_NEXT_CHARACTER__",
+      "suggested_key": {
+        "chromeos": "Search+Shift+Right"
+      }
+    },
+    "previousCharacter": {
+      "description": "__MSG_CHROMEVOX_PREVIOUS_CHARACTER__",
+      "suggested_key": {
+        "chromeos": "Search+Shift+Left"
+      }
+    },
+    "nextWord": {
+      "description": "__MSG_CHROMEVOX_NEXT_WORD__",
+      "suggested_key": {
+        "chromeos": "Search+Ctrl+Shift+Right"
+      }
+    },
+    "previousWord": {
+      "description": "__MSG_CHROMEVOX_PREVIOUS_WORD__",
+      "suggested_key": {
+        "chromeos": "Search+Ctrl+Shift+Left"
+      }
+    },
+    "nextLine": {
+      "description": "__MSG_CHROMEVOX_NEXT_LINE__",
+      "suggested_key": {
+        "chromeos": "Search+Down"
+      }
+    },
+    "previousLine": {
+      "description": "__MSG_CHROMEVOX_PREVIOUS_LINE__",
+      "suggested_key": {
+        "chromeos": "Search+Up"
+      }
+    },
+    "nextButton": {
+      "description": "__MSG_CHROMEVOX_NEXT_BUTTON__",
+      "suggested_key": {
+        "chromeos": "Search+B"
+      }
+    },
+    "previousButton": {
+      "description": "__MSG_CHROMEVOX_PREVIOUS_BUTTON__",
+      "suggested_key": {
+        "chromeos": "Search+Shift+B"
+      }
+    },
+    "nextCheckBox": {
+      "description": "__MSG_CHROMEVOX_NEXT_CHECKBOX__",
+      "suggested_key": {
+        "chromeos": "Search+X"
+      }
+    },
+    "previousCheckBox": {
+      "description": "__MSG_CHROMEVOX_PREVIOUS_CHECKBOX__",
+      "suggested_key": {
+        "chromeos": "Search+Shift+X"
+      }
+    },
+    "nextComboBox": {
+      "description": "__MSG_CHROMEVOX_NEXT_COMBO_BOX__",
+      "suggested_key": {
+        "chromeos": "Search+C"
+      }
+    },
+    "previousComboBox": {
+      "description": "__MSG_CHROMEVOX_PREVIOUS_COMBO_BOX__",
+      "suggested_key": {
+        "chromeos": "Search+Shift+C"
+      }
+    },
+    "nextEditText": {
+      "description": "__MSG_CHROMEVOX_NEXT_EDIT_TEXT__",
+      "suggested_key": {
+        "chromeos": "Search+E"
+      }
+    },
+    "previousEditText": {
+      "description": "__MSG_CHROMEVOX_PREVIOUS_EDIT_TEXT__",
+      "suggested_key": {
+        "chromeos": "Search+Shift+E"
+      }
+    },
+    "nextFormField": {
+      "description": "__MSG_CHROMEVOX_NEXT_FORM_FIELD__",
+      "suggested_key": {
+        "chromeos": "Search+F"
+      }
+    },
+    "previousFormField": {
+      "description": "__MSG_CHROMEVOX_PREVIOUS_FORM_FIELD__",
+      "suggested_key": {
+        "chromeos": "Search+Shift+F"
+      }
+    },
+    "nextHeading": {
+      "description": "__MSG_CHROMEVOX_NEXT_HEADING__",
+      "suggested_key": {
+        "chromeos": "Search+H"
+      }
+    },
+    "previousHeading": {
+      "description": "__MSG_CHROMEVOX_PREVIOUS_HEADING__",
+      "suggested_key": {
+        "chromeos": "Search+Shift+H"
+      }
+    },
+    "compatPreviousLine": {
+      "description": "__MSG_CHROMEVOX_PREVIOUS_HEADING__",
+      "suggested_key": {
+        "chromeos": "Search+Shift+Up"
+      }
+    },
+    "compatNextLine": {
+      "description": "__MSG_CHROMEVOX_PREVIOUS_HEADING__",
+      "suggested_key": {
+        "chromeos": "Search+Shift+Down"
+      }
+    },
+    "compatPrevious": {
+      "description": "__MSG_CHROMEVOX_PREVIOUS_HEADING__",
+      "suggested_key": {
+        "chromeos": "Search+Shift+P"
+      }
+    },
+    "compatNext": {
+      "description": "__MSG_CHROMEVOX_PREVIOUS_HEADING__",
+      "suggested_key": {
+        "chromeos": "Search+Shift+N"
+      }
+    },
+    "nextLink": {
+      "description": "__MSG_CHROMEVOX_NEXT_LINK__",
+      "suggested_key": {
+        "chromeos": "Search+L"
+      }
+    },
+    "previousLink": {
+      "description": "__MSG_CHROMEVOX_PREVIOUS_LINK__",
+      "suggested_key": {
+        "chromeos": "Search+Shift+L"
+      }
+    },
+    "nextTable": {
+      "description": "__MSG_CHROMEVOX_NEXT_TABLE__",
+      "suggested_key": {
+        "chromeos": "Search+T"
+      }
+    },
+    "previousTable": {
+      "description": "__MSG_CHROMEVOX_PREVIOUS_TABLE__",
+      "suggested_key": {
+        "chromeos": "Search+Shift+T"
+      }
+    },
+    "nextVisitedLink": {
+      "description": "__MSG_CHROMEVOX_NEXT_VISITED_LINK__",
+      "suggested_key": {
+        "chromeos": "Search+V"
+      }
+    },
+    "previousVisitedLink": {
+      "description": "__MSG_CHROMEVOX_PREVIOUS_VISITED_LINK__",
+      "suggested_key": {
+        "chromeos": "Search+Shift+V"
+      }
+    },
+    "goToBeginning": {
+      "description": "__MSG_CHROMEVOX_JUMP_TO_TOP__",
+      "suggested_key": {
+        "chromeos": "Search+Ctrl+Left"
+      }
+    },
+    "goToEnd": {
+      "description": "__MSG_CHROMEVOX_JUMP_TO_BOTTOM__",
+      "suggested_key": {
+        "chromeos": "Search+Ctrl+Right"
+      }
+    },
+    "doDefault": {
+      "description": "__MSG_CHROMEVOX_PERFORM_DEFAULT_ACTION__",
+      "suggested_key": {
+        "chromeos": "Search+Space"
+      }
+    },
+    "compatDoDefault": {
+      "description": "__MSG_CHROMEVOX_PERFORM_DEFAULT_ACTION__",
+      "suggested_key": {
+        "chromeos": "Search+Shift+Space"
+      }
+    },
+    "toggleChromeVoxVersion": {
+      "description": "__MSG_CHROMEVOX_TOGGLE_CHROMEVOX__",
+      "suggested_key": {
+        "chromeos": "Search+Ctrl+Q"
+      }
+    },
+    "continuousRead": {
+      "description": "__MSG_CHROMEVOX_READ_FROM_HERE__",
+      "suggested_key": {
+        "chromeos": "Search+R"
+      }
+    },
+    "compatContinuousRead": {
+      "description": "__MSG_CHROMEVOX_READ_FROM_HERE__",
+      "suggested_key": {
+        "chromeos": "Search+Shift+R"
+      }
+    },
+    "showContextMenu": {
+      "description": "__MSG_CHROMEVOX_SHOW_CONTEXT_MENU__",
+      "suggested_key": {
+        "chromeos": "Search+Ctrl+Space"
+      }
+    }
+{% endif %}
+  },
+  "options_page": "chromevox/background/options.html",
+  "default_locale": "en"
+}

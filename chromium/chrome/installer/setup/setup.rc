@@ -1,0 +1,173 @@
+// Microsoft Visual C++ generated resource script.
+//
+#include "setup_resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#define APSTUDIO_HIDDEN_SYMBOLS
+#include "windows.h"
+#undef APSTUDIO_HIDDEN_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// English (U.S.) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+#ifdef _WIN32
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+#pragma code_page(1252)
+#endif //_WIN32
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE
+BEGIN
+    "setup_resource.h\0"
+END
+
+2 TEXTINCLUDE
+BEGIN
+    "#define APSTUDIO_HIDDEN_SYMBOLS\r\n"
+    "#include ""windows.h""\r\n"
+    "#undef APSTUDIO_HIDDEN_SYMBOLS\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDI_SETUP               ICON                    "..\\..\\app\\theme\\vivaldi\\vivaldi.ico"
+#endif    // English (U.S.) resources
+/////////////////////////////////////////////////////////////////////////////
+
+#if defined(GOOGLE_CHROME_BUILD)
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// EULA
+//
+IDR_EULA_ICO.PNG      EULA   "..\\..\\app\\theme\\google_chrome\\eula_icon.png"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// HTML
+//
+
+IDR_EULA_CSS.CSS        HTML   "eula\\oem.css"
+IDR_EULA_JSC.JS         HTML   "eula\\oem.js"
+
+IDR_OEMPG_AR.HTML       HTML   "eula\\oem_ar.html"
+IDR_OEMPG_BG.HTML       HTML   "eula\\oem_bg.html"
+IDR_OEMPG_CA.HTML       HTML   "eula\\oem_ca.html"
+IDR_OEMPG_CS.HTML       HTML   "eula\\oem_cs.html"
+IDR_OEMPG_DA.HTML       HTML   "eula\\oem_da.html"
+IDR_OEMPG_DE.HTML       HTML   "eula\\oem_de.html"
+IDR_OEMPG_EL.HTML       HTML   "eula\\oem_el.html"
+IDR_OEMPG_EN.HTML       HTML   "eula\\oem_en.html"
+IDR_OEMPG_EN_GB.HTML    HTML   "eula\\oem_en-GB.html"
+IDR_OEMPG_ES.HTML       HTML   "eula\\oem_es.html"
+IDR_OEMPG_ES_419.HTML   HTML   "eula\\oem_es-419.html"
+IDR_OEMPG_ET.HTML       HTML   "eula\\oem_et.html"
+IDR_OEMPG_FI.HTML       HTML   "eula\\oem_fi.html"
+IDR_OEMPG_FIL.HTML      HTML   "eula\\oem_fil.html"
+IDR_OEMPG_FR.HTML       HTML   "eula\\oem_fr.html"
+IDR_OEMPG_HI.HTML       HTML   "eula\\oem_hi.html"
+IDR_OEMPG_HR.HTML       HTML   "eula\\oem_hr.html"
+IDR_OEMPG_HU.HTML       HTML   "eula\\oem_hu.html"
+IDR_OEMPG_ID.HTML       HTML   "eula\\oem_id.html"
+IDR_OEMPG_IT.HTML       HTML   "eula\\oem_it.html"
+IDR_OEMPG_JA.HTML       HTML   "eula\\oem_ja.html"
+IDR_OEMPG_KO.HTML       HTML   "eula\\oem_ko.html"
+IDR_OEMPG_LT.HTML       HTML   "eula\\oem_lt.html"
+IDR_OEMPG_LV.HTML       HTML   "eula\\oem_lv.html"
+IDR_OEMPG_NL.HTML       HTML   "eula\\oem_nl.html"
+IDR_OEMPG_PL.HTML       HTML   "eula\\oem_pl.html"
+IDR_OEMPG_PT_BR.HTML    HTML   "eula\\oem_pt-BR.html"
+IDR_OEMPG_PT_PT.HTML    HTML   "eula\\oem_pt-PT.html"
+IDR_OEMPG_RO.HTML       HTML   "eula\\oem_ro.html"
+IDR_OEMPG_RU.HTML       HTML   "eula\\oem_ru.html"
+IDR_OEMPG_SK.HTML       HTML   "eula\\oem_sk.html"
+IDR_OEMPG_SL.HTML       HTML   "eula\\oem_sl.html"
+IDR_OEMPG_SR.HTML       HTML   "eula\\oem_sr.html"
+IDR_OEMPG_SV.HTML       HTML   "eula\\oem_sv.html"
+IDR_OEMPG_TH.HTML       HTML   "eula\\oem_th.html"
+IDR_OEMPG_TR.HTML       HTML   "eula\\oem_tr.html"
+IDR_OEMPG_UK.HTML       HTML   "eula\\oem_uk.html"
+IDR_OEMPG_VI.HTML       HTML   "eula\\oem_vi.html"
+IDR_OEMPG_ZH_CN.HTML    HTML   "eula\\oem_zh-CN.html"
+IDR_OEMPG_ZH_TW.HTML    HTML   "eula\\oem_zh-TW.html"
+
+#endif  // defined(GOOGLE_CHROME_BUILD)
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// GOOGLEUPDATEAPPLICATIONCOMMANDS is a "well-known" marker resource defined
+// by Omaha. Executables must both be signed by Google and contain the marker
+// in order to expose application commands.
+//
+#define IDR_GOOGLE_UPDATE_APP_COMMANDS_MARKUP 1
+
+IDR_GOOGLE_UPDATE_APP_COMMANDS_MARKUP GOOGLEUPDATEAPPLICATIONCOMMANDS { 1L }
+
+IDR_OEM_EULA_VIV.HTML   HTML   "..\\..\\chrome\\app\\resources\\terms\\EULA.html"
+IDR_OEMPG_EN.HTML       HTML   "eula\\vivaldi_oem_en.html"
+IDR_EULA_CSS.CSS        HTML   "eula\\oem.css"
+IDR_EULA_JSC.JS         HTML   "eula\\oem.js"
+IDR_EULA_ICO.PNG        EULA   "..\\..\\app\\theme\\vivaldi\\product_logo_48.png"
+
+IDB_BITMAP_BKGND        BITMAP "..\\..\\..\\installer\\installer_bg.bmp"
+IDB_BITMAP_BKGND_125    BITMAP "..\\..\\..\\installer\\installer_bg125.bmp"
+IDB_BITMAP_BKGND_150    BITMAP "..\\..\\..\\installer\\installer_bg150.bmp"
+IDB_BITMAP_BKGND_200    BITMAP "..\\..\\..\\installer\\installer_bg200.bmp"
+IDB_BITMAP_BKGND_250    BITMAP "..\\..\\..\\installer\\installer_bg250.bmp"
+
+IDD_DIALOG1 DIALOGEX 0, 0, 360, 290
+STYLE DS_SETFONT | DS_MODALFRAME | DS_3DLOOK | DS_FIXEDSYS | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Install Vivaldi"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    LTEXT           "Language", IDC_STATIC_LANGUAGE, 25, 70, 255, 12
+    COMBOBOX        IDC_COMBO_LANGUAGE, 25, 80, 312, 80, CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Installation type", IDC_STATIC_INSTALLTYPES, 25, 100, 255, 12
+    COMBOBOX        IDC_COMBO_INSTALLTYPES, 25, 110, 312, 41, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Destination folder", IDC_STATIC_DEST_FOLDER, 25, 130, 255, 12
+    EDITTEXT        IDC_EDIT_DEST_FOLDER, 25, 140, 235, 14, ES_AUTOHSCROLL | WS_TABSTOP
+    PUSHBUTTON      "Browse...", IDC_BTN_BROWSE, 268, 140, 70, 14, WS_TABSTOP
+    CONTROL         "Set Vivaldi as default browser", IDC_CHECK_DEFAULT, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 25, 160, 312, 15
+    LTEXT           "This is a Beta release of Vivaldi, a brand new web browser with powerful feature sets. \
+                     Vivaldi provides flexibility and customisation for your best Web experience.", IDC_STATIC_INFO, 32, 185, 305, 25, SS_LEFT
+    CONTROL         "<>", IDC_SYSLINK_TOS, "SysLink", WS_TABSTOP, 32, 205, 305, 15
+    LTEXT           "Note: If updating a running Vivaldi browser, that instance will be closed and relaunched.", IDC_STATIC_WARN, 25, 220, 305, 25, SS_CENTER
+    PUSHBUTTON      "Cancel", IDCANCEL, 25, 233, 70, 14, WS_TABSTOP
+    PUSHBUTTON      "Simple", IDC_BTN_MODE, 107, 233, 70, 14, WS_TABSTOP
+    DEFPUSHBUTTON   "<>", IDOK, 189, 233, 150, 14, WS_TABSTOP
+    LTEXT           "Copyright 2015 © Vivaldi Technologies AS. All rights reserved.", IDC_STATIC_COPYRIGHT, 25, 263, 312, 12, SS_CENTER
+    CONTROL         "<a>Privacy Policy</a>", IDC_SYSLINK_PRIVACY_POLICY, "SysLink", WS_TABSTOP, 158, 273, 80, 15
+END
+
+IDD_DIALOG2 DIALOGEX 0, 0, 313, 33
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | DS_CENTER | WS_POPUP | WS_CAPTION
+CAPTION "Installing Vivaldi"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+CONTROL         "", IDC_PROGRESS1, "msctls_progress32", PBS_MARQUEE, 6, 10, 301, 15
+END
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED

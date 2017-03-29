@@ -1,0 +1,3337 @@
+{
+  "add_to_dictionary": {
+    "message": "Ajouter au dictionnaire"
+  },
+  "add_to_personal_dictionary": {
+    "message": "Ajouter au dictionnaire personnel"
+  },
+  "add_word_to_dictionary": {
+    "message": "Ajouter \"$1\" au dictionnaire",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "advanced": {
+    "message": "Param\u00e8tres avanc\u00e9s"
+  },
+  "alt": {
+    "message": "alt"
+  },
+  "altgr": {
+    "message": "alt gr"
+  },
+  "always_auto_correct": {
+    "message": "Syst\u00e9matique"
+  },
+  "am_phonetic_arm_settings_page": {
+    "message": "Page des param\u00e8tres du clavier phon\u00e9tique arm\u00e9nien"
+  },
+  "appnamejpkeyboard": {
+    "message": "Mode de saisie Google du japonais (pour clavier japonais)"
+  },
+  "appnameuskeyboard": {
+    "message": "Mode de saisie Google du japonais (pour clavier am\u00e9ricain)"
+  },
+  "auto_correction_level": {
+    "message": "Correction automatique"
+  },
+  "backspace": {
+    "message": "retour arri\u00e8re"
+  },
+  "basic": {
+    "message": "Param\u00e8tres de base"
+  },
+  "be_fra_settings_page": {
+    "message": "Page des param\u00e8tres du clavier belge (fran\u00e7ais)"
+  },
+  "be_ger_settings_page": {
+    "message": "Page des param\u00e8tres du clavier belge (allemand)"
+  },
+  "be_nld_settings_page": {
+    "message": "Page des param\u00e8tres du clavier belge (n\u00e9erlandais)"
+  },
+  "bg_bul_settings_page": {
+    "message": "Page des param\u00e8tres du clavier bulgare"
+  },
+  "bg_phonetic_bul_settings_page": {
+    "message": "Page des param\u00e8tres du clavier phon\u00e9tique bulgare"
+  },
+  "br_por_settings_page": {
+    "message": "Page des param\u00e8tres du clavier br\u00e9silien (portugais du Br\u00e9sil)"
+  },
+  "by_bel_settings_page": {
+    "message": "Page des param\u00e8tres du clavier bi\u00e9lorusse"
+  },
+  "ca_eng_eng_settings_page": {
+    "message": "Page des param\u00e8tres du clavier anglais canadien (anglais)"
+  },
+  "ca_fra_settings_page": {
+    "message": "Page des param\u00e8tres du clavier franco-canadien (fran\u00e7ais)"
+  },
+  "ca_multix_fra_settings_page": {
+    "message": "Page des param\u00e8tres du clavier canadien multilingue (fran\u00e7ais)"
+  },
+  "capital": {
+    "message": "majuscule"
+  },
+  "capslock": {
+    "message": "verrouillage des majuscules"
+  },
+  "ch_fr_fra_settings_page": {
+    "message": "Page des param\u00e8tres du clavier franco-suisse (fran\u00e7ais)"
+  },
+  "ch_ger_settings_page": {
+    "message": "Page des param\u00e8tres du clavier suisse (allemand)"
+  },
+  "chos_inputtool_description": {
+    "message": "L'extension Google\u00a0Outils\u00a0de\u00a0saisie pour Chrome\u00a0OS vous permet de saisir du texte dans Chrome\u00a0OS dans la langue de votre choix."
+  },
+  "chos_inputtool_title": {
+    "message": "Google\u00a0Outils\u00a0de\u00a0saisie"
+  },
+  "compositionmodedirect": {
+    "message": "Entr\u00e9e directe"
+  },
+  "compositionmodefullascii": {
+    "message": "Latin large"
+  },
+  "compositionmodefullkatakana": {
+    "message": "Katakana"
+  },
+  "compositionmodehalfascii": {
+    "message": "Latin"
+  },
+  "compositionmodehalfkatakana": {
+    "message": "Katakana de demi-chasse"
+  },
+  "compositionmodehiragana": {
+    "message": "Hiragana"
+  },
+  "configbasicstitle": {
+    "message": "Param\u00e8tres de base"
+  },
+  "configclearhistory": {
+    "message": "Supprimer les informations de personnalisation\u2026"
+  },
+  "configclearhistorycancelbutton": {
+    "message": "Annuler"
+  },
+  "configclearhistoryconversionhistory": {
+    "message": "Historique des conversions"
+  },
+  "configclearhistorymessage": {
+    "message": "Effacer les \u00e9l\u00e9ments suivants\u00a0:"
+  },
+  "configclearhistoryokbutton": {
+    "message": "Supprimer les informations de personnalisation"
+  },
+  "configclearhistorysuggestionhistory": {
+    "message": "Historique des suggestions"
+  },
+  "configclearhistorytitle": {
+    "message": "Supprimer les informations de personnalisation"
+  },
+  "configcreditsdescription": {
+    "message": "Copyright \u00a9 Google Inc.\u00a02013. Tous droits r\u00e9serv\u00e9s."
+  },
+  "configdialogcancel": {
+    "message": "Annuler"
+  },
+  "configdialogok": {
+    "message": "OK"
+  },
+  "configdictionarytoolbutton": {
+    "message": "G\u00e9rer le dictionnaire personnel\u2026"
+  },
+  "configdictionarytooldescription": {
+    "message": "Ajoutez vos propres mots au dictionnaire personnel afin de personnaliser les candidats \u00e0 la conversion."
+  },
+  "configdictionarytooltitle": {
+    "message": "Dictionnaires personnels"
+  },
+  "configincognitomode": {
+    "message": "D\u00e9sactiver les conversions et les suggestions personnalis\u00e9es ainsi que le dictionnaire personnel"
+  },
+  "configinputassistancetitle": {
+    "message": "Assistance \u00e0 la saisie"
+  },
+  "configosscreditsdescription": {
+    "message": "Ce logiciel est possible gr\u00e2ce aux <a href=\"./credits_en.html\">logiciels Open Source</a>."
+  },
+  "configpreeditmethod": {
+    "message": "Mode de saisie\u00a0:"
+  },
+  "configpreeditmethodkana": {
+    "message": "Kana"
+  },
+  "configpreeditmethodromaji": {
+    "message": "Romaji"
+  },
+  "configprivacytitle": {
+    "message": "Confidentialit\u00e9"
+  },
+  "configpunctuationmethod": {
+    "message": "Style de ponctuation\u00a0:"
+  },
+  "configselectionshortcut": {
+    "message": "Raccourci de s\u00e9lection\u00a0:"
+  },
+  "configselectionshortcutno": {
+    "message": "Aucun raccourci"
+  },
+  "configsessionkeymap": {
+    "message": "Style de mappage du clavier\u00a0:"
+  },
+  "configsessionkeymapatok": {
+    "message": "ATOK"
+  },
+  "configsessionkeymapchromeos": {
+    "message": "Chrome\u00a0OS"
+  },
+  "configsessionkeymapcustom": {
+    "message": "Mappage du clavier personnalis\u00e9"
+  },
+  "configsessionkeymapkotoeri": {
+    "message": "Kotoeri"
+  },
+  "configsessionkeymapmsime": {
+    "message": "MS-IME"
+  },
+  "configsettingstitle": {
+    "message": "Param\u00e8tres de saisie en japonais"
+  },
+  "configshiftkeymodeswitch": {
+    "message": "Changement de mode via la touche Maj\u00a0:"
+  },
+  "configshiftkeymodeswitchalphanumeric": {
+    "message": "Alphanum\u00e9rique"
+  },
+  "configshiftkeymodeswitchkatakana": {
+    "message": "Katakana"
+  },
+  "configshiftkeymodeswitchoff": {
+    "message": "D\u00e9sactiv\u00e9"
+  },
+  "configspacecharacterform": {
+    "message": "Style d'entr\u00e9e avec Espace\u00a0:"
+  },
+  "configspacecharacterformfollow": {
+    "message": "Suivre le mode de saisie"
+  },
+  "configspacecharacterformfull": {
+    "message": "Pleine chasse"
+  },
+  "configspacecharacterformhalf": {
+    "message": "Demi-chasse"
+  },
+  "configsuggestionssize": {
+    "message": "Nombre de suggestions\u00a0:"
+  },
+  "configsuggesttitle": {
+    "message": "Sugg\u00e9rer"
+  },
+  "configsymbolmethod": {
+    "message": "Style de symbole\u00a0:"
+  },
+  "configuploadusagestats": {
+    "message": "Envoyer automatiquement les statistiques d'utilisation et les rapports d'erreur \u00e0 Google"
+  },
+  "configuseautoimeturnoff": {
+    "message": "Passer automatiquement en demi-chasse"
+  },
+  "configusedictionarysuggest": {
+    "message": "Utiliser le dictionnaire syst\u00e8me"
+  },
+  "configusehistorysuggest": {
+    "message": "Utiliser l'historique d'entr\u00e9e"
+  },
+  "ctrl": {
+    "message": "ctrl"
+  },
+  "current_keyboard_prefix": {
+    "message": "clavier s\u00e9lectionn\u00e9 actuellement "
+  },
+  "current_lang": {
+    "message": "Langue de saisie\u00a0: chinois"
+  },
+  "current_punc": {
+    "message": "Largeur de ponctuation\u00a0: pleine"
+  },
+  "current_sbc": {
+    "message": "Largeur de caract\u00e8res\u00a0: pleine"
+  },
+  "cz_cze_settings_page": {
+    "message": "Page des param\u00e8tres du clavier tch\u00e8que"
+  },
+  "cz_qwerty_cze_settings_page": {
+    "message": "Page des param\u00e8tres du clavier Qwerty tch\u00e8que"
+  },
+  "d83c_dc04": {
+    "message": "tuile de Mah-jong"
+  },
+  "d83c_dccf": {
+    "message": "carte joker"
+  },
+  "d83c_dd70": {
+    "message": "groupe sanguin\u00a0A"
+  },
+  "d83c_dd71": {
+    "message": "groupe sanguin\u00a0B"
+  },
+  "d83c_dd7e": {
+    "message": "groupe sanguin\u00a0O"
+  },
+  "d83c_dd7f": {
+    "message": "stationnement"
+  },
+  "d83c_dd8e": {
+    "message": "groupe sanguin\u00a0AB"
+  },
+  "d83c_dd91": {
+    "message": "CL"
+  },
+  "d83c_dd92": {
+    "message": "cool"
+  },
+  "d83c_dd93": {
+    "message": "gratuit"
+  },
+  "d83c_dd94": {
+    "message": "Identifiant"
+  },
+  "d83c_dd95": {
+    "message": "Nouveaut\u00e9s"
+  },
+  "d83c_dd96": {
+    "message": "NG"
+  },
+  "d83c_dd97": {
+    "message": "OK"
+  },
+  "d83c_dd98": {
+    "message": "SOS"
+  },
+  "d83c_dd99": {
+    "message": "HAUT"
+  },
+  "d83c_dd9a": {
+    "message": "contre"
+  },
+  "d83c_de01": {
+    "message": "mot japonais \u00e2 \u20ac ~ici\u00e2 \u20ac \u2122"
+  },
+  "d83c_de02": {
+    "message": "mot japonais \u00e2\u20ac\u02dcservice\u00e2\u20ac\u2122"
+  },
+  "d83c_de1a": {
+    "message": "mot japonais \"libre\""
+  },
+  "d83c_de2f": {
+    "message": "mot japonais \"r\u00e9serv\u00e9\""
+  },
+  "d83c_de32": {
+    "message": "mot japonais \u00e2\u20ac~interdit\u00e2\u20ac\u2122"
+  },
+  "d83c_de33": {
+    "message": "mot chinois \"espace disponible\""
+  },
+  "d83c_de34": {
+    "message": "mot chinois \"r\u00e9ussir\""
+  },
+  "d83c_de35": {
+    "message": "mot chinois \"complet\""
+  },
+  "d83c_de36": {
+    "message": "mot japonais \"frais\""
+  },
+  "d83c_de37": {
+    "message": "mot japonais \"mensuel\""
+  },
+  "d83c_de38": {
+    "message": "mot chinois \"application\""
+  },
+  "d83c_de39": {
+    "message": "mot japonais \"remise\""
+  },
+  "d83c_de3a": {
+    "message": "mot chinois \"en entreprise\""
+  },
+  "d83c_de50": {
+    "message": "mot japonais \"avantage\""
+  },
+  "d83c_de51": {
+    "message": "mot chinois \"approuv\u00e9\""
+  },
+  "d83c_df00": {
+    "message": "cyclone"
+  },
+  "d83c_df01": {
+    "message": "brumeux"
+  },
+  "d83c_df02": {
+    "message": "parapluie"
+  },
+  "d83c_df03": {
+    "message": "\u00e9toiles"
+  },
+  "d83c_df04": {
+    "message": "lever de soleil sur les montagnes"
+  },
+  "d83c_df05": {
+    "message": "lever de soleil"
+  },
+  "d83c_df06": {
+    "message": "ville au cr\u00e9puscule"
+  },
+  "d83c_df07": {
+    "message": "coucher de soleil"
+  },
+  "d83c_df08": {
+    "message": "arc en ciel"
+  },
+  "d83c_df09": {
+    "message": "pont de nuit"
+  },
+  "d83c_df0a": {
+    "message": "faire signe de la main"
+  },
+  "d83c_df0b": {
+    "message": "volcan"
+  },
+  "d83c_df0c": {
+    "message": "Voie lact\u00e9e"
+  },
+  "d83c_df0d": {
+    "message": "globe Europe-Afrique"
+  },
+  "d83c_df0e": {
+    "message": "globe Am\u00e9riques"
+  },
+  "d83c_df0f": {
+    "message": "globe Asie-Australie"
+  },
+  "d83c_df10": {
+    "message": "globe avec les m\u00e9ridiens"
+  },
+  "d83c_df11": {
+    "message": "nouvelle lune"
+  },
+  "d83c_df12": {
+    "message": "lune croissante"
+  },
+  "d83c_df13": {
+    "message": "premier quartier de lune"
+  },
+  "d83c_df14": {
+    "message": "croissant de lune"
+  },
+  "d83c_df15": {
+    "message": "pleine lune"
+  },
+  "d83c_df16": {
+    "message": "lune d\u00e9croissante"
+  },
+  "d83c_df17": {
+    "message": "dernier quartier de lune"
+  },
+  "d83c_df18": {
+    "message": "lune d\u00e9croissante"
+  },
+  "d83c_df19": {
+    "message": "croissant de lune"
+  },
+  "d83c_df1a": {
+    "message": "nouvelle lune"
+  },
+  "d83c_df1b": {
+    "message": "premier quartier de lune"
+  },
+  "d83c_df1c": {
+    "message": "dernier quartier de lune"
+  },
+  "d83c_df1d": {
+    "message": "pleine lune"
+  },
+  "d83c_df1e": {
+    "message": "soleil"
+  },
+  "d83c_df1f": {
+    "message": "\u00e9toile brillante"
+  },
+  "d83c_df20": {
+    "message": "\u00e9toile filante"
+  },
+  "d83c_df30": {
+    "message": "ch\u00e2taigne"
+  },
+  "d83c_df31": {
+    "message": "pousse"
+  },
+  "d83c_df32": {
+    "message": "arbre \u00e0 feuilles persistantes"
+  },
+  "d83c_df33": {
+    "message": "arbre \u00e0 feuilles caduques"
+  },
+  "d83c_df34": {
+    "message": "palmier"
+  },
+  "d83c_df35": {
+    "message": "cactus"
+  },
+  "d83c_df37": {
+    "message": "tulipe"
+  },
+  "d83c_df38": {
+    "message": "cerisier en fleur"
+  },
+  "d83c_df39": {
+    "message": "rose"
+  },
+  "d83c_df3a": {
+    "message": "hibiscus"
+  },
+  "d83c_df3b": {
+    "message": "tournesol"
+  },
+  "d83c_df3c": {
+    "message": "fleur"
+  },
+  "d83c_df3d": {
+    "message": "bl\u00e9"
+  },
+  "d83c_df3e": {
+    "message": "plant de riz"
+  },
+  "d83c_df3f": {
+    "message": "herbe"
+  },
+  "d83c_df40": {
+    "message": "tr\u00e8fle \u00e0 quatre feuilles"
+  },
+  "d83c_df41": {
+    "message": "feuille d'\u00e9rable"
+  },
+  "d83c_df42": {
+    "message": "chute des feuilles"
+  },
+  "d83c_df43": {
+    "message": "feuille dans le vent"
+  },
+  "d83c_df44": {
+    "message": "champignon"
+  },
+  "d83c_df45": {
+    "message": "tomate"
+  },
+  "d83c_df46": {
+    "message": "aubergine"
+  },
+  "d83c_df47": {
+    "message": "raisin"
+  },
+  "d83c_df48": {
+    "message": "melon"
+  },
+  "d83c_df49": {
+    "message": "past\u00e8que"
+  },
+  "d83c_df4a": {
+    "message": "mandarine"
+  },
+  "d83c_df4b": {
+    "message": "citron"
+  },
+  "d83c_df4c": {
+    "message": "banane"
+  },
+  "d83c_df4d": {
+    "message": "ananas"
+  },
+  "d83c_df4e": {
+    "message": "pomme rouge"
+  },
+  "d83c_df4f": {
+    "message": "pomme verte"
+  },
+  "d83c_df50": {
+    "message": "poire"
+  },
+  "d83c_df51": {
+    "message": "p\u00eache"
+  },
+  "d83c_df52": {
+    "message": "cerise"
+  },
+  "d83c_df53": {
+    "message": "fraise"
+  },
+  "d83c_df54": {
+    "message": "hamburger"
+  },
+  "d83c_df55": {
+    "message": "part de pizza"
+  },
+  "d83c_df56": {
+    "message": "viande"
+  },
+  "d83c_df57": {
+    "message": "cuisse de poulet"
+  },
+  "d83c_df58": {
+    "message": "galette de riz"
+  },
+  "d83c_df59": {
+    "message": "bol de riz"
+  },
+  "d83c_df5a": {
+    "message": "riz cuit"
+  },
+  "d83c_df5b": {
+    "message": "curry et riz"
+  },
+  "d83c_df5c": {
+    "message": "ramen"
+  },
+  "d83c_df5d": {
+    "message": "spaghetti"
+  },
+  "d83c_df5e": {
+    "message": "pain"
+  },
+  "d83c_df5f": {
+    "message": "frites"
+  },
+  "d83c_df60": {
+    "message": "pommes de terre grill\u00e9es"
+  },
+  "d83c_df61": {
+    "message": "mochi"
+  },
+  "d83c_df62": {
+    "message": "oden"
+  },
+  "d83c_df63": {
+    "message": "sushi"
+  },
+  "d83c_df64": {
+    "message": "crevettes frites"
+  },
+  "d83c_df65": {
+    "message": "galette de poisson"
+  },
+  "d83c_df66": {
+    "message": "glace \u00e0 l'italienne"
+  },
+  "d83c_df67": {
+    "message": "glace pil\u00e9e"
+  },
+  "d83c_df68": {
+    "message": "glace"
+  },
+  "d83c_df69": {
+    "message": "donut"
+  },
+  "d83c_df6a": {
+    "message": "cookie"
+  },
+  "d83c_df6b": {
+    "message": "chocolat"
+  },
+  "d83c_df6c": {
+    "message": "bonbons"
+  },
+  "d83c_df6d": {
+    "message": "sucette"
+  },
+  "d83c_df6e": {
+    "message": "cr\u00e8me"
+  },
+  "d83c_df6f": {
+    "message": "pot de miel"
+  },
+  "d83c_df70": {
+    "message": "tarte"
+  },
+  "d83c_df71": {
+    "message": "bento"
+  },
+  "d83c_df72": {
+    "message": "rago\u00fbt"
+  },
+  "d83c_df73": {
+    "message": "po\u00eale \u00e0 frire"
+  },
+  "d83c_df74": {
+    "message": "fourchette et couteau"
+  },
+  "d83c_df75": {
+    "message": "tasse \u00e0 th\u00e9"
+  },
+  "d83c_df76": {
+    "message": "sak\u00e9"
+  },
+  "d83c_df77": {
+    "message": "vin"
+  },
+  "d83c_df78": {
+    "message": "cocktail"
+  },
+  "d83c_df79": {
+    "message": "boisson exotique"
+  },
+  "d83c_df7a": {
+    "message": "bi\u00e8re"
+  },
+  "d83c_df7b": {
+    "message": "chopes \u00e0 bi\u00e8re"
+  },
+  "d83c_df7c": {
+    "message": "biberon"
+  },
+  "d83c_df80": {
+    "message": "ruban"
+  },
+  "d83c_df81": {
+    "message": "cadeau"
+  },
+  "d83c_df82": {
+    "message": "g\u00e2teau d'anniversaire"
+  },
+  "d83c_df83": {
+    "message": "citrouille d'Halloween"
+  },
+  "d83c_df84": {
+    "message": "sapin de No\u00ebl"
+  },
+  "d83c_df85": {
+    "message": "p\u00e8re No\u00ebl"
+  },
+  "d83c_df86": {
+    "message": "feu d'artifice"
+  },
+  "d83c_df87": {
+    "message": "cierge magique"
+  },
+  "d83c_df88": {
+    "message": "ballon"
+  },
+  "d83c_df89": {
+    "message": "bombe de table"
+  },
+  "d83c_df8a": {
+    "message": "confettis"
+  },
+  "d83c_df8b": {
+    "message": "arbres et bandes de papier"
+  },
+  "d83c_df8c": {
+    "message": "drapeaux crois\u00e9s"
+  },
+  "d83c_df8d": {
+    "message": "d\u00e9coration en pomme de pin"
+  },
+  "d83c_df8e": {
+    "message": "poup\u00e9es"
+  },
+  "d83c_df8f": {
+    "message": "serpentin"
+  },
+  "d83c_df90": {
+    "message": "carillon"
+  },
+  "d83c_df91": {
+    "message": "clair de lune"
+  },
+  "d83c_df92": {
+    "message": "cartable"
+  },
+  "d83c_df93": {
+    "message": "volant gradu\u00e9"
+  },
+  "d83c_dfa0": {
+    "message": "carrousel"
+  },
+  "d83c_dfa1": {
+    "message": "grande roue"
+  },
+  "d83c_dfa2": {
+    "message": "montagnes russes"
+  },
+  "d83c_dfa3": {
+    "message": "p\u00eache"
+  },
+  "d83c_dfa4": {
+    "message": "micro"
+  },
+  "d83c_dfa5": {
+    "message": "cam\u00e9ra"
+  },
+  "d83c_dfa6": {
+    "message": "film"
+  },
+  "d83c_dfa7": {
+    "message": "casque"
+  },
+  "d83c_dfa8": {
+    "message": "palette de peinture"
+  },
+  "d83c_dfa9": {
+    "message": "haut de forme"
+  },
+  "d83c_dfaa": {
+    "message": "cirque"
+  },
+  "d83c_dfab": {
+    "message": "billet"
+  },
+  "d83c_dfac": {
+    "message": "clap"
+  },
+  "d83c_dfad": {
+    "message": "masque"
+  },
+  "d83c_dfae": {
+    "message": "jeu vid\u00e9o"
+  },
+  "d83c_dfaf": {
+    "message": "\u0153il de b\u0153uf"
+  },
+  "d83c_dfb0": {
+    "message": "machine \u00e0 sous"
+  },
+  "d83c_dfb1": {
+    "message": "billard"
+  },
+  "d83c_dfb2": {
+    "message": "d\u00e9 \u00e0 jouer"
+  },
+  "d83c_dfb3": {
+    "message": "quilles"
+  },
+  "d83c_dfb4": {
+    "message": "carte \u00e0 jouer"
+  },
+  "d83c_dfb5": {
+    "message": "note de musique"
+  },
+  "d83c_dfb6": {
+    "message": "notes de musique"
+  },
+  "d83c_dfb7": {
+    "message": "saxophone"
+  },
+  "d83c_dfb8": {
+    "message": "guitare"
+  },
+  "d83c_dfb9": {
+    "message": "piano"
+  },
+  "d83c_dfba": {
+    "message": "trompette"
+  },
+  "d83c_dfbb": {
+    "message": "violon"
+  },
+  "d83c_dfbc": {
+    "message": "partition"
+  },
+  "d83c_dfbd": {
+    "message": "T-shirt de course"
+  },
+  "d83c_dfbe": {
+    "message": "tennis"
+  },
+  "d83c_dfbf": {
+    "message": "ski"
+  },
+  "d83c_dfc0": {
+    "message": "basket"
+  },
+  "d83c_dfc1": {
+    "message": "drapeau \u00e0 damier"
+  },
+  "d83c_dfc2": {
+    "message": "snowboarder"
+  },
+  "d83c_dfc3": {
+    "message": "coureur"
+  },
+  "d83c_dfc4": {
+    "message": "surf"
+  },
+  "d83c_dfc6": {
+    "message": "troph\u00e9e"
+  },
+  "d83c_dfc7": {
+    "message": "course hippique"
+  },
+  "d83c_dfc8": {
+    "message": "football am\u00e9ricain"
+  },
+  "d83c_dfc9": {
+    "message": "football"
+  },
+  "d83c_dfca": {
+    "message": "nageur"
+  },
+  "d83c_dfe0": {
+    "message": "maison"
+  },
+  "d83c_dfe1": {
+    "message": "domicile"
+  },
+  "d83c_dfe2": {
+    "message": "immeuble de bureaux"
+  },
+  "d83c_dfe3": {
+    "message": "bureau de poste japonais"
+  },
+  "d83c_dfe4": {
+    "message": "bureau de poste europ\u00e9en"
+  },
+  "d83c_dfe5": {
+    "message": "h\u00f4pital"
+  },
+  "d83c_dfe6": {
+    "message": "banque"
+  },
+  "d83c_dfe7": {
+    "message": "distributeur de billets"
+  },
+  "d83c_dfe8": {
+    "message": "h\u00f4tel"
+  },
+  "d83c_dfe9": {
+    "message": "motel"
+  },
+  "d83c_dfea": {
+    "message": "sup\u00e9rette"
+  },
+  "d83c_dfeb": {
+    "message": "\u00e9cole"
+  },
+  "d83c_dfec": {
+    "message": "grand magasin"
+  },
+  "d83c_dfed": {
+    "message": "usine"
+  },
+  "d83c_dfee": {
+    "message": "lanterne rouge"
+  },
+  "d83c_dfef": {
+    "message": "ch\u00e2teau japonais"
+  },
+  "d83c_dff0": {
+    "message": "ch\u00e2teau europ\u00e9en"
+  },
+  "d83d_dc00": {
+    "message": "Rat"
+  },
+  "d83d_dc01": {
+    "message": "Souris"
+  },
+  "d83d_dc02": {
+    "message": "b\u0153uf"
+  },
+  "d83d_dc03": {
+    "message": "buffle"
+  },
+  "d83d_dc04": {
+    "message": "vache"
+  },
+  "d83d_dc06": {
+    "message": "l\u00e9opard"
+  },
+  "d83d_dc07": {
+    "message": "lapin"
+  },
+  "d83d_dc08": {
+    "message": "chat"
+  },
+  "d83d_dc09": {
+    "message": "dragon"
+  },
+  "d83d_dc0a": {
+    "message": "crocodile"
+  },
+  "d83d_dc0b": {
+    "message": "baleine"
+  },
+  "d83d_dc0c": {
+    "message": "escargot"
+  },
+  "d83d_dc0d": {
+    "message": "serpent"
+  },
+  "d83d_dc0e": {
+    "message": "cheval"
+  },
+  "d83d_dc0f": {
+    "message": "b\u00e9lier"
+  },
+  "d83d_dc10": {
+    "message": "ch\u00e8vre"
+  },
+  "d83d_dc11": {
+    "message": "mouton"
+  },
+  "d83d_dc12": {
+    "message": "singe"
+  },
+  "d83d_dc13": {
+    "message": "coq"
+  },
+  "d83d_dc14": {
+    "message": "poulet"
+  },
+  "d83d_dc15": {
+    "message": "chien"
+  },
+  "d83d_dc16": {
+    "message": "cochon"
+  },
+  "d83d_dc17": {
+    "message": "sanglier"
+  },
+  "d83d_dc18": {
+    "message": "\u00e9l\u00e9phant"
+  },
+  "d83d_dc19": {
+    "message": "poulpe"
+  },
+  "d83d_dc1a": {
+    "message": "coquillage"
+  },
+  "d83d_dc1b": {
+    "message": "erreur"
+  },
+  "d83d_dc1c": {
+    "message": "fourmi"
+  },
+  "d83d_dc1d": {
+    "message": "abeille"
+  },
+  "d83d_dc1e": {
+    "message": "coccinelle"
+  },
+  "d83d_dc1f": {
+    "message": "poisson"
+  },
+  "d83d_dc20": {
+    "message": "poissons tropicaux"
+  },
+  "d83d_dc21": {
+    "message": "t\u00e9trodon"
+  },
+  "d83d_dc22": {
+    "message": "tortue"
+  },
+  "d83d_dc23": {
+    "message": "poussin qui \u00e9clot"
+  },
+  "d83d_dc24": {
+    "message": "t\u00eate de poussin"
+  },
+  "d83d_dc25": {
+    "message": "poussin"
+  },
+  "d83d_dc26": {
+    "message": "oiseau"
+  },
+  "d83d_dc27": {
+    "message": "manchot"
+  },
+  "d83d_dc28": {
+    "message": "koala"
+  },
+  "d83d_dc29": {
+    "message": "caniche"
+  },
+  "d83d_dc2a": {
+    "message": "dromadaire"
+  },
+  "d83d_dc2b": {
+    "message": "chameau"
+  },
+  "d83d_dc2c": {
+    "message": "dauphin"
+  },
+  "d83d_dc2d": {
+    "message": "t\u00eate de souris"
+  },
+  "d83d_dc2e": {
+    "message": "t\u00eate de vache"
+  },
+  "d83d_dc2f": {
+    "message": "t\u00eate de tigre"
+  },
+  "d83d_dc30": {
+    "message": "t\u00eate de lapin"
+  },
+  "d83d_dc31": {
+    "message": "t\u00eate de chat"
+  },
+  "d83d_dc32": {
+    "message": "t\u00eate de dragon"
+  },
+  "d83d_dc33": {
+    "message": "baleine surgissant de l'eau"
+  },
+  "d83d_dc34": {
+    "message": "t\u00eate de cheval"
+  },
+  "d83d_dc35": {
+    "message": "t\u00eate de singe"
+  },
+  "d83d_dc36": {
+    "message": "t\u00eate de chien"
+  },
+  "d83d_dc37": {
+    "message": "t\u00eate de cochon"
+  },
+  "d83d_dc38": {
+    "message": "t\u00eate de grenouille"
+  },
+  "d83d_dc39": {
+    "message": "t\u00eate de hamster"
+  },
+  "d83d_dc3a": {
+    "message": "t\u00eate de loup"
+  },
+  "d83d_dc3b": {
+    "message": "t\u00eate d'ours"
+  },
+  "d83d_dc3c": {
+    "message": "t\u00eate de panda"
+  },
+  "d83d_dc3d": {
+    "message": "groin"
+  },
+  "d83d_dc3e": {
+    "message": "patte"
+  },
+  "d83d_dc40": {
+    "message": "yeux"
+  },
+  "d83d_dc42": {
+    "message": "oreille"
+  },
+  "d83d_dc43": {
+    "message": "nez"
+  },
+  "d83d_dc44": {
+    "message": "bouche"
+  },
+  "d83d_dc45": {
+    "message": "langue"
+  },
+  "d83d_dc46": {
+    "message": "doigt vers le haut"
+  },
+  "d83d_dc47": {
+    "message": "doigt vers le bas"
+  },
+  "d83d_dc48": {
+    "message": "doigt gauche"
+  },
+  "d83d_dc49": {
+    "message": "doigt droit"
+  },
+  "d83d_dc4a": {
+    "message": "poing serr\u00e9"
+  },
+  "d83d_dc4b": {
+    "message": "geste de la main"
+  },
+  "d83d_dc4c": {
+    "message": "Signe de main de validation"
+  },
+  "d83d_dc4d": {
+    "message": "pouces vers le haut"
+  },
+  "d83d_dc4e": {
+    "message": "pouces vers le bas"
+  },
+  "d83d_dc4f": {
+    "message": "applaudissements"
+  },
+  "d83d_dc50": {
+    "message": "mains ouvertes"
+  },
+  "d83d_dc51": {
+    "message": "couronne"
+  },
+  "d83d_dc52": {
+    "message": "chapeau de femme"
+  },
+  "d83d_dc53": {
+    "message": "lunettes"
+  },
+  "d83d_dc54": {
+    "message": "cravate"
+  },
+  "d83d_dc55": {
+    "message": "T-Shirt"
+  },
+  "d83d_dc56": {
+    "message": "pantalon"
+  },
+  "d83d_dc57": {
+    "message": "robe"
+  },
+  "d83d_dc58": {
+    "message": "kimono"
+  },
+  "d83d_dc59": {
+    "message": "bikini"
+  },
+  "d83d_dc5a": {
+    "message": "v\u00eatements pour femme"
+  },
+  "d83d_dc5b": {
+    "message": "porte-monnaie"
+  },
+  "d83d_dc5c": {
+    "message": "sac \u00e0 main"
+  },
+  "d83d_dc5d": {
+    "message": "pochette"
+  },
+  "d83d_dc5e": {
+    "message": "chaussure pour homme"
+  },
+  "d83d_dc5f": {
+    "message": "chaussure de sport"
+  },
+  "d83d_dc60": {
+    "message": "talon haut"
+  },
+  "d83d_dc61": {
+    "message": "sandale pour femme"
+  },
+  "d83d_dc62": {
+    "message": "chaussure pour femme"
+  },
+  "d83d_dc63": {
+    "message": "empreinte"
+  },
+  "d83d_dc64": {
+    "message": "buste en silhouette"
+  },
+  "d83d_dc65": {
+    "message": "bustes en silhouette"
+  },
+  "d83d_dc66": {
+    "message": "gar\u00e7on"
+  },
+  "d83d_dc67": {
+    "message": "fille"
+  },
+  "d83d_dc68": {
+    "message": "homme"
+  },
+  "d83d_dc69": {
+    "message": "femme"
+  },
+  "d83d_dc6a": {
+    "message": "famille"
+  },
+  "d83d_dc6b": {
+    "message": "homme et femme"
+  },
+  "d83d_dc6c": {
+    "message": "deux\u00a0hommes"
+  },
+  "d83d_dc6d": {
+    "message": "deux\u00a0femmes"
+  },
+  "d83d_dc6e": {
+    "message": "officier de police"
+  },
+  "d83d_dc6f": {
+    "message": "fille d\u00e9guis\u00e9e en lapin"
+  },
+  "d83d_dc70": {
+    "message": "mari\u00e9e"
+  },
+  "d83d_dc71": {
+    "message": "personne blonde"
+  },
+  "d83d_dc72": {
+    "message": "homme avec un guapi\u00a0mao"
+  },
+  "d83d_dc73": {
+    "message": "homme avec un turban"
+  },
+  "d83d_dc74": {
+    "message": "homme \u00e2g\u00e9"
+  },
+  "d83d_dc75": {
+    "message": "femme \u00e2g\u00e9e"
+  },
+  "d83d_dc76": {
+    "message": "b\u00e9b\u00e9"
+  },
+  "d83d_dc77": {
+    "message": "travailleur dans la construction"
+  },
+  "d83d_dc78": {
+    "message": "princesse"
+  },
+  "d83d_dc79": {
+    "message": "ogre"
+  },
+  "d83d_dc7a": {
+    "message": "lutin"
+  },
+  "d83d_dc7b": {
+    "message": "fant\u00f4me"
+  },
+  "d83d_dc7c": {
+    "message": "b\u00e9b\u00e9 ange"
+  },
+  "d83d_dc7d": {
+    "message": "\u00e9tranger"
+  },
+  "d83d_dc7e": {
+    "message": "extra-terrestre"
+  },
+  "d83d_dc7f": {
+    "message": "lutin"
+  },
+  "d83d_dc80": {
+    "message": "cr\u00e2ne"
+  },
+  "d83d_dc81": {
+    "message": "bureau d'information"
+  },
+  "d83d_dc82": {
+    "message": "garde"
+  },
+  "d83d_dc83": {
+    "message": "danseur"
+  },
+  "d83d_dc84": {
+    "message": "rouge \u00e0 l\u00e8vres"
+  },
+  "d83d_dc85": {
+    "message": "soins des ongles"
+  },
+  "d83d_dc86": {
+    "message": "massage du visage"
+  },
+  "d83d_dc87": {
+    "message": "coupe de cheveux"
+  },
+  "d83d_dc88": {
+    "message": "barbier"
+  },
+  "d83d_dc89": {
+    "message": "coup"
+  },
+  "d83d_dc8a": {
+    "message": "pilule"
+  },
+  "d83d_dc8b": {
+    "message": "trace de baiser"
+  },
+  "d83d_dc8c": {
+    "message": "lettre d'amour"
+  },
+  "d83d_dc8d": {
+    "message": "bague"
+  },
+  "d83d_dc8e": {
+    "message": "gemmes"
+  },
+  "d83d_dc8f": {
+    "message": "embrasser"
+  },
+  "d83d_dc90": {
+    "message": "bouquet"
+  },
+  "d83d_dc91": {
+    "message": "couple"
+  },
+  "d83d_dc92": {
+    "message": "chapelle de mariage"
+  },
+  "d83d_dc93": {
+    "message": "c\u0153ur qui bat"
+  },
+  "d83d_dc94": {
+    "message": "c\u0153ur bris\u00e9"
+  },
+  "d83d_dc95": {
+    "message": "deux\u00a0c\u0153urs"
+  },
+  "d83d_dc96": {
+    "message": "c\u0153ur \u00e9tincelant"
+  },
+  "d83d_dc97": {
+    "message": "c\u0153ur qui gonfle"
+  },
+  "d83d_dc98": {
+    "message": "c\u0153ur et fl\u00e8che"
+  },
+  "d83d_dc99": {
+    "message": "c\u0153ur bleu"
+  },
+  "d83d_dc9a": {
+    "message": "c\u0153ur vert"
+  },
+  "d83d_dc9b": {
+    "message": "c\u0153ur jaune"
+  },
+  "d83d_dc9c": {
+    "message": "c\u0153ur violet"
+  },
+  "d83d_dc9d": {
+    "message": "c\u0153ur avec ruban"
+  },
+  "d83d_dc9e": {
+    "message": "c\u0153urs qui tournent"
+  },
+  "d83d_dc9f": {
+    "message": "d\u00e9coration du c\u0153ur"
+  },
+  "d83d_dca0": {
+    "message": "p\u00e9tale de fleur"
+  },
+  "d83d_dca1": {
+    "message": "ampoule"
+  },
+  "d83d_dca2": {
+    "message": "col\u00e8re"
+  },
+  "d83d_dca3": {
+    "message": "bombe"
+  },
+  "d83d_dca4": {
+    "message": "symbole du sommeil"
+  },
+  "d83d_dca5": {
+    "message": "collision"
+  },
+  "d83d_dca6": {
+    "message": "gouttes de sueur"
+  },
+  "d83d_dca7": {
+    "message": "sueur froide"
+  },
+  "d83d_dca8": {
+    "message": "sprint"
+  },
+  "d83d_dca9": {
+    "message": "crotte"
+  },
+  "d83d_dcaa": {
+    "message": "biceps"
+  },
+  "d83d_dcab": {
+    "message": "\u00e9tourdi"
+  },
+  "d83d_dcac": {
+    "message": "bulle"
+  },
+  "d83d_dcad": {
+    "message": "info-bulle"
+  },
+  "d83d_dcae": {
+    "message": "tampon fleur"
+  },
+  "d83d_dcaf": {
+    "message": "partition d'orchestre"
+  },
+  "d83d_dcb0": {
+    "message": "bourse"
+  },
+  "d83d_dcb1": {
+    "message": "change de devises"
+  },
+  "d83d_dcb2": {
+    "message": "signe du dollar"
+  },
+  "d83d_dcb3": {
+    "message": "carte de paiement"
+  },
+  "d83d_dcb4": {
+    "message": "billet (yen)"
+  },
+  "d83d_dcb5": {
+    "message": "billet (dollar)"
+  },
+  "d83d_dcb6": {
+    "message": "billet (euro)"
+  },
+  "d83d_dcb7": {
+    "message": "billet (livre)"
+  },
+  "d83d_dcb8": {
+    "message": "argent qui vole"
+  },
+  "d83d_dcb9": {
+    "message": "march\u00e9 en hausse"
+  },
+  "d83d_dcba": {
+    "message": "si\u00e8ge"
+  },
+  "d83d_dcbb": {
+    "message": "PC"
+  },
+  "d83d_dcbc": {
+    "message": "mallette"
+  },
+  "d83d_dcbd": {
+    "message": "mini-disque"
+  },
+  "d83d_dcbe": {
+    "message": "disquette"
+  },
+  "d83d_dcbf": {
+    "message": "Blu-ray"
+  },
+  "d83d_dcc0": {
+    "message": "DVD"
+  },
+  "d83d_dcc1": {
+    "message": "dossier de fichiers"
+  },
+  "d83d_dcc2": {
+    "message": "dossier ouvert"
+  },
+  "d83d_dcc3": {
+    "message": "document"
+  },
+  "d83d_dcc4": {
+    "message": "document"
+  },
+  "d83d_dcc5": {
+    "message": "agenda"
+  },
+  "d83d_dcc6": {
+    "message": "calendrier \u00e0 effeuiller"
+  },
+  "d83d_dcc7": {
+    "message": "num\u00e9ro de fiche"
+  },
+  "d83d_dcc8": {
+    "message": "tendance \u00e0 la hausse"
+  },
+  "d83d_dcc9": {
+    "message": "tendance \u00e0 la baisse"
+  },
+  "d83d_dcca": {
+    "message": "histogramme"
+  },
+  "d83d_dccb": {
+    "message": "presse-papiers"
+  },
+  "d83d_dccc": {
+    "message": "punaise"
+  },
+  "d83d_dccd": {
+    "message": "punaise ronde"
+  },
+  "d83d_dcce": {
+    "message": "trombone"
+  },
+  "d83d_dccf": {
+    "message": "r\u00e8gle"
+  },
+  "d83d_dcd0": {
+    "message": "\u00e9querre"
+  },
+  "d83d_dcd1": {
+    "message": "onglets de favoris"
+  },
+  "d83d_dcd2": {
+    "message": "grand livre"
+  },
+  "d83d_dcd3": {
+    "message": "bloc-notes"
+  },
+  "d83d_dcd4": {
+    "message": "cahier d\u00e9cor\u00e9"
+  },
+  "d83d_dcd5": {
+    "message": "livre ferm\u00e9"
+  },
+  "d83d_dcd6": {
+    "message": "livre ouvert"
+  },
+  "d83d_dcd7": {
+    "message": "livre vert"
+  },
+  "d83d_dcd8": {
+    "message": "livre"
+  },
+  "d83d_dcd9": {
+    "message": "livre orange"
+  },
+  "d83d_dcda": {
+    "message": "livres"
+  },
+  "d83d_dcdb": {
+    "message": "badge"
+  },
+  "d83d_dcdc": {
+    "message": "faire d\u00e9filer"
+  },
+  "d83d_dcdd": {
+    "message": "note"
+  },
+  "d83d_dcde": {
+    "message": "t\u00e9l\u00e9phone"
+  },
+  "d83d_dcdf": {
+    "message": "t\u00e9l\u00e9avertisseur"
+  },
+  "d83d_dce0": {
+    "message": "t\u00e9l\u00e9copieur"
+  },
+  "d83d_dce1": {
+    "message": "antenne parabolique"
+  },
+  "d83d_dce2": {
+    "message": "haut-parleur"
+  },
+  "d83d_dce3": {
+    "message": "porte-voix"
+  },
+  "d83d_dce4": {
+    "message": "courrier envoy\u00e9"
+  },
+  "d83d_dce5": {
+    "message": "Bo\u00eete de r\u00e9ception"
+  },
+  "d83d_dce6": {
+    "message": "paquet"
+  },
+  "d83d_dce7": {
+    "message": "e-mail"
+  },
+  "d83d_dce8": {
+    "message": "courrier entrant"
+  },
+  "d83d_dce9": {
+    "message": "courrier sortant"
+  },
+  "d83d_dcea": {
+    "message": "bo\u00eete aux lettres ferm\u00e9e avec drapeau abaiss\u00e9"
+  },
+  "d83d_dceb": {
+    "message": "bo\u00eete aux lettres ferm\u00e9e avec drapeau relev\u00e9"
+  },
+  "d83d_dcec": {
+    "message": "bo\u00eete aux lettres ouverte avec drapeau relev\u00e9"
+  },
+  "d83d_dced": {
+    "message": "bo\u00eete aux lettres ouverte avec drapeau abaiss\u00e9"
+  },
+  "d83d_dcee": {
+    "message": "bo\u00eete aux lettres"
+  },
+  "d83d_dcef": {
+    "message": "cor"
+  },
+  "d83d_dcf0": {
+    "message": "journal"
+  },
+  "d83d_dcf1": {
+    "message": "t\u00e9l\u00e9phone portable"
+  },
+  "d83d_dcf2": {
+    "message": "t\u00e9l\u00e9phone portable avec une fl\u00e8che"
+  },
+  "d83d_dcf3": {
+    "message": "mode vibreur"
+  },
+  "d83d_dcf4": {
+    "message": "t\u00e9l\u00e9phone \u00e9teint"
+  },
+  "d83d_dcf5": {
+    "message": "\u00e9teindre les t\u00e9l\u00e9phones portables"
+  },
+  "d83d_dcf6": {
+    "message": "signaux mobiles"
+  },
+  "d83d_dcf7": {
+    "message": "appareil photo"
+  },
+  "d83d_dcf9": {
+    "message": "cam\u00e9scope"
+  },
+  "d83d_dcfa": {
+    "message": "t\u00e9l\u00e9vision"
+  },
+  "d83d_dcfb": {
+    "message": "radio"
+  },
+  "d83d_dcfc": {
+    "message": "bande vid\u00e9o"
+  },
+  "d83d_dd00": {
+    "message": "fl\u00e8ches crois\u00e9es"
+  },
+  "d83d_dd01": {
+    "message": "fl\u00e8ches dans le sens horaire"
+  },
+  "d83d_dd02": {
+    "message": "fl\u00e8ches dans le sens horaire"
+  },
+  "d83d_dd03": {
+    "message": "recharger"
+  },
+  "d83d_dd04": {
+    "message": "fl\u00e8ches dans le sens anti-horaire"
+  },
+  "d83d_dd05": {
+    "message": "luminosit\u00e9 faible"
+  },
+  "d83d_dd06": {
+    "message": "luminosit\u00e9 \u00e9lev\u00e9e"
+  },
+  "d83d_dd07": {
+    "message": "interdiction de parler"
+  },
+  "d83d_dd08": {
+    "message": "haut-parleur"
+  },
+  "d83d_dd09": {
+    "message": "haut-parleur avec un volume faible"
+  },
+  "d83d_dd0a": {
+    "message": "haut-parleur avec un volume \u00e9lev\u00e9"
+  },
+  "d83d_dd0b": {
+    "message": "batterie"
+  },
+  "d83d_dd0c": {
+    "message": "prise \u00e9lectrique"
+  },
+  "d83d_dd0d": {
+    "message": "loupe inclin\u00e9e vers la gauche"
+  },
+  "d83d_dd0e": {
+    "message": "loupe inclin\u00e9e vers la droite"
+  },
+  "d83d_dd0f": {
+    "message": "verrouiller avec un stylo \u00e0 encre"
+  },
+  "d83d_dd10": {
+    "message": "cadenas ferm\u00e9 avec une cl\u00e9"
+  },
+  "d83d_dd11": {
+    "message": "clavier"
+  },
+  "d83d_dd12": {
+    "message": "cadenas verrouill\u00e9"
+  },
+  "d83d_dd13": {
+    "message": "cadenas ouvert"
+  },
+  "d83d_dd14": {
+    "message": "cloche"
+  },
+  "d83d_dd15": {
+    "message": "pas de sonnette"
+  },
+  "d83d_dd16": {
+    "message": "signet"
+  },
+  "d83d_dd17": {
+    "message": "signe Lien"
+  },
+  "d83d_dd18": {
+    "message": "bouton radio"
+  },
+  "d83d_dd19": {
+    "message": "retour"
+  },
+  "d83d_dd1a": {
+    "message": "fin"
+  },
+  "d83d_dd1b": {
+    "message": "Fl\u00e8che ON"
+  },
+  "d83d_dd1c": {
+    "message": "Panneau Bient\u00f4t"
+  },
+  "d83d_dd1d": {
+    "message": "signe Haut"
+  },
+  "d83d_dd1e": {
+    "message": "Interdit aux mineurs"
+  },
+  "d83d_dd20": {
+    "message": "majuscules"
+  },
+  "d83d_dd21": {
+    "message": "minuscules"
+  },
+  "d83d_dd22": {
+    "message": "chiffres"
+  },
+  "d83d_dd23": {
+    "message": "symboles"
+  },
+  "d83d_dd24": {
+    "message": "Alphabet latin"
+  },
+  "d83d_dd25": {
+    "message": "feu"
+  },
+  "d83d_dd26": {
+    "message": "lampe de poche"
+  },
+  "d83d_dd27": {
+    "message": "cl\u00e9"
+  },
+  "d83d_dd28": {
+    "message": "marteau"
+  },
+  "d83d_dd29": {
+    "message": "boulon et \u00e9crou"
+  },
+  "d83d_dd2a": {
+    "message": "couteau de cuisine"
+  },
+  "d83d_dd2b": {
+    "message": "pistolet"
+  },
+  "d83d_dd2c": {
+    "message": "microscope"
+  },
+  "d83d_dd2d": {
+    "message": "t\u00e9lescope"
+  },
+  "d83d_dd2e": {
+    "message": "boule de cristal"
+  },
+  "d83d_dd2f": {
+    "message": "\u00e9toile \u00e0 six branches"
+  },
+  "d83d_dd30": {
+    "message": "feuille verte et jaune"
+  },
+  "d83d_dd31": {
+    "message": "signe de trident"
+  },
+  "d83d_dd32": {
+    "message": "bouton carr\u00e9 plein"
+  },
+  "d83d_dd33": {
+    "message": "bouton carr\u00e9 encadr\u00e9"
+  },
+  "d83d_dd34": {
+    "message": "grand cercle rouge"
+  },
+  "d83d_dd35": {
+    "message": "grand cercle bleu"
+  },
+  "d83d_dd36": {
+    "message": "gros diamant orange"
+  },
+  "d83d_dd37": {
+    "message": "gros diamant bleu"
+  },
+  "d83d_dd38": {
+    "message": "petit diamant orange"
+  },
+  "d83d_dd39": {
+    "message": "petit diamant bleu"
+  },
+  "d83d_dd3a": {
+    "message": "triangle Haut"
+  },
+  "d83d_dd3b": {
+    "message": "triangle Bas"
+  },
+  "d83d_dd3c": {
+    "message": "bouton Triangle vers le haut"
+  },
+  "d83d_dd3d": {
+    "message": "bouton Triangle vers le bas"
+  },
+  "d83d_dd50": {
+    "message": "une\u00a0heure"
+  },
+  "d83d_dd51": {
+    "message": "deux\u00a0heures"
+  },
+  "d83d_dd52": {
+    "message": "trois\u00a0heures"
+  },
+  "d83d_dd53": {
+    "message": "quatre\u00a0heures"
+  },
+  "d83d_dd54": {
+    "message": "cinq\u00a0heures"
+  },
+  "d83d_dd55": {
+    "message": "six\u00a0heures"
+  },
+  "d83d_dd56": {
+    "message": "sept\u00a0heures"
+  },
+  "d83d_dd57": {
+    "message": "huit\u00a0heures"
+  },
+  "d83d_dd58": {
+    "message": "neuf\u00a0heures"
+  },
+  "d83d_dd59": {
+    "message": "dix\u00a0heures"
+  },
+  "d83d_dd5a": {
+    "message": "onze\u00a0heures"
+  },
+  "d83d_dd5b": {
+    "message": "midi"
+  },
+  "d83d_dd5c": {
+    "message": "une\u00a0heure et demie"
+  },
+  "d83d_dd5d": {
+    "message": "deux\u00a0heures et demie"
+  },
+  "d83d_dd5e": {
+    "message": "trois\u00a0heures et demie"
+  },
+  "d83d_dd5f": {
+    "message": "quatre\u00a0heures et demie"
+  },
+  "d83d_dd60": {
+    "message": "cinq\u00a0heures et demie"
+  },
+  "d83d_dd61": {
+    "message": "six\u00a0heures et demie"
+  },
+  "d83d_dd62": {
+    "message": "sept\u00a0heures et demie"
+  },
+  "d83d_dd63": {
+    "message": "huit\u00a0heures et demie"
+  },
+  "d83d_dd64": {
+    "message": "neuf\u00a0heures et demie"
+  },
+  "d83d_dd65": {
+    "message": "dix\u00a0heures et demie"
+  },
+  "d83d_dd66": {
+    "message": "onze\u00a0heures et demie"
+  },
+  "d83d_dd67": {
+    "message": "midi et demie"
+  },
+  "d83d_ddfb": {
+    "message": "Mont\u00a0Fuji"
+  },
+  "d83d_ddfc": {
+    "message": "Tour de Tokyo"
+  },
+  "d83d_ddfd": {
+    "message": "Statue de la Libert\u00e9"
+  },
+  "d83d_ddfe": {
+    "message": "Carte du Japon"
+  },
+  "d83d_ddff": {
+    "message": "Statue Moyai"
+  },
+  "d83d_de00": {
+    "message": "sourire"
+  },
+  "d83d_de01": {
+    "message": " sourire avec des yeux rieurs"
+  },
+  "d83d_de02": {
+    "message": "larmes de joie"
+  },
+  "d83d_de03": {
+    "message": "sourire bouche ouverte"
+  },
+  "d83d_de04": {
+    "message": "sourire bouche ouverte avec yeux rieurs"
+  },
+  "d83d_de05": {
+    "message": "sourire forc\u00e9"
+  },
+  "d83d_de06": {
+    "message": " sourire bouche ouverte avec les yeux ferm\u00e9s"
+  },
+  "d83d_de07": {
+    "message": "sourire avec un halo"
+  },
+  "d83d_de08": {
+    "message": "sourire avec des cornes"
+  },
+  "d83d_de09": {
+    "message": "visage avec clin d'\u0153il"
+  },
+  "d83d_de0a": {
+    "message": "sourire"
+  },
+  "d83d_de0b": {
+    "message": "visage d'ange"
+  },
+  "d83d_de0c": {
+    "message": "visage soulag\u00e9"
+  },
+  "d83d_de0d": {
+    "message": "visage souriant"
+  },
+  "d83d_de0e": {
+    "message": "cool"
+  },
+  "d83d_de0f": {
+    "message": "petit sourire satisfait"
+  },
+  "d83d_de10": {
+    "message": "visage impassible"
+  },
+  "d83d_de11": {
+    "message": "inexpressif"
+  },
+  "d83d_de12": {
+    "message": "pas amus\u00e9"
+  },
+  "d83d_de13": {
+    "message": "sueur froide"
+  },
+  "d83d_de14": {
+    "message": "visage pensif"
+  },
+  "d83d_de15": {
+    "message": "visage confus"
+  },
+  "d83d_de16": {
+    "message": "visage d\u00e9concert\u00e9"
+  },
+  "d83d_de17": {
+    "message": "visage avec baiser"
+  },
+  "d83d_de18": {
+    "message": "envoyant des baisers"
+  },
+  "d83d_de19": {
+    "message": "baiser et sourire"
+  },
+  "d83d_de1a": {
+    "message": "baisers"
+  },
+  "d83d_de1b": {
+    "message": "langue tir\u00e9e"
+  },
+  "d83d_de1c": {
+    "message": "langue tir\u00e9e avec clin d'\u0153il"
+  },
+  "d83d_de1d": {
+    "message": "beurk"
+  },
+  "d83d_de1e": {
+    "message": "d\u00e9\u00e7u"
+  },
+  "d83d_de1f": {
+    "message": "inquiet"
+  },
+  "d83d_de20": {
+    "message": "en col\u00e8re"
+  },
+  "d83d_de21": {
+    "message": "moue"
+  },
+  "d83d_de22": {
+    "message": "pleurs"
+  },
+  "d83d_de23": {
+    "message": "s'est tromp\u00e9"
+  },
+  "d83d_de24": {
+    "message": "regard de triomphe"
+  },
+  "d83d_de25": {
+    "message": "soulagement"
+  },
+  "d83d_de26": {
+    "message": "visage renfrogn\u00e9"
+  },
+  "d83d_de27": {
+    "message": "angoiss\u00e9"
+  },
+  "d83d_de28": {
+    "message": "\u00e9pouvantable"
+  },
+  "d83d_de29": {
+    "message": "las"
+  },
+  "d83d_de2a": {
+    "message": "somnolent"
+  },
+  "d83d_de2b": {
+    "message": "fatigu\u00e9"
+  },
+  "d83d_de2c": {
+    "message": "grimace"
+  },
+  "d83d_de2d": {
+    "message": "criant \u00e0 haute voix"
+  },
+  "d83d_de2e": {
+    "message": "visage bouche ouverte"
+  },
+  "d83d_de2f": {
+    "message": "visage ferm\u00e9"
+  },
+  "d83d_de30": {
+    "message": "visage press\u00e9"
+  },
+  "d83d_de31": {
+    "message": "visage craintif"
+  },
+  "d83d_de32": {
+    "message": "visage \u00e9tonn\u00e9"
+  },
+  "d83d_de33": {
+    "message": "rougissant"
+  },
+  "d83d_de34": {
+    "message": "endormi"
+  },
+  "d83d_de35": {
+    "message": "\u00e9tourdi"
+  },
+  "d83d_de36": {
+    "message": "visage sans bouche"
+  },
+  "d83d_de37": {
+    "message": "visage avec un masque"
+  },
+  "d83d_de38": {
+    "message": "t\u00eate de chat rieur"
+  },
+  "d83d_de39": {
+    "message": "t\u00eate de chat avec larmes de joie"
+  },
+  "d83d_de3a": {
+    "message": "t\u00eate de chat souriant"
+  },
+  "d83d_de3b": {
+    "message": "t\u00eate de chat souriant"
+  },
+  "d83d_de3c": {
+    "message": "t\u00eate de chat ironique"
+  },
+  "d83d_de3d": {
+    "message": "baiser de chat"
+  },
+  "d83d_de3e": {
+    "message": "chat qui fait la moue"
+  },
+  "d83d_de3f": {
+    "message": "t\u00eate de chat avec en pleurs"
+  },
+  "d83d_de40": {
+    "message": "t\u00eate de chat fatigu\u00e9"
+  },
+  "d83d_de45": {
+    "message": "geste Pas bien"
+  },
+  "d83d_de46": {
+    "message": "geste OK"
+  },
+  "d83d_de47": {
+    "message": "je suis d\u00e9sol\u00e9(e)"
+  },
+  "d83d_de48": {
+    "message": "sourd"
+  },
+  "d83d_de49": {
+    "message": "sourd"
+  },
+  "d83d_de4a": {
+    "message": "muet"
+  },
+  "d83d_de4b": {
+    "message": "personne heureuse"
+  },
+  "d83d_de4c": {
+    "message": "hourra"
+  },
+  "d83d_de4d": {
+    "message": "personne renfrogn\u00e9e"
+  },
+  "d83d_de4e": {
+    "message": "moue"
+  },
+  "d83d_de4f": {
+    "message": "mains jointes"
+  },
+  "d83d_de80": {
+    "message": "fus\u00e9e"
+  },
+  "d83d_de81": {
+    "message": "h\u00e9licopt\u00e8re"
+  },
+  "d83d_de82": {
+    "message": "locomotive \u00e0 vapeur"
+  },
+  "d83d_de83": {
+    "message": "train"
+  },
+  "d83d_de84": {
+    "message": "train \u00e0 grande vitesse"
+  },
+  "d83d_de85": {
+    "message": "train \u00e0 grande vitesse avec t\u00eate a\u00e9rodynamique"
+  },
+  "d83d_de86": {
+    "message": "train"
+  },
+  "d83d_de87": {
+    "message": "m\u00e9tro"
+  },
+  "d83d_de88": {
+    "message": "train de banlieue"
+  },
+  "d83d_de89": {
+    "message": "gare"
+  },
+  "d83d_de8a": {
+    "message": "tramway"
+  },
+  "d83d_de8b": {
+    "message": "voiture de tramway"
+  },
+  "d83d_de8c": {
+    "message": "taxi"
+  },
+  "d83d_de8d": {
+    "message": "bus venant en sens inverse"
+  },
+  "d83d_de8e": {
+    "message": "trolleybus"
+  },
+  "d83d_de8f": {
+    "message": "arr\u00eat de bus"
+  },
+  "d83d_de90": {
+    "message": "minibus"
+  },
+  "d83d_de91": {
+    "message": "ambulance"
+  },
+  "d83d_de92": {
+    "message": "camion de pompiers"
+  },
+  "d83d_de93": {
+    "message": "voiture de police"
+  },
+  "d83d_de94": {
+    "message": "voiture de police venant en sens inverse"
+  },
+  "d83d_de95": {
+    "message": "taxi"
+  },
+  "d83d_de96": {
+    "message": "taxi venant en sens inverse"
+  },
+  "d83d_de97": {
+    "message": "voiture"
+  },
+  "d83d_de98": {
+    "message": "voiture venant en sens inverse"
+  },
+  "d83d_de99": {
+    "message": "RV"
+  },
+  "d83d_de9a": {
+    "message": "camion de livraison"
+  },
+  "d83d_de9b": {
+    "message": "camion"
+  },
+  "d83d_de9c": {
+    "message": "tracteur"
+  },
+  "d83d_de9d": {
+    "message": "monorail"
+  },
+  "d83d_de9e": {
+    "message": "chemin de fer de montagne"
+  },
+  "d83d_de9f": {
+    "message": "chemin de fer suspendu"
+  },
+  "d83d_dea0": {
+    "message": "t\u00e9l\u00e9ph\u00e9rique de montagne"
+  },
+  "d83d_dea1": {
+    "message": "t\u00e9l\u00e9ph\u00e9rique"
+  },
+  "d83d_dea2": {
+    "message": "navire"
+  },
+  "d83d_dea3": {
+    "message": "chaloupe"
+  },
+  "d83d_dea4": {
+    "message": "hors-bord"
+  },
+  "d83d_dea5": {
+    "message": "feux de signalisation horizontaux"
+  },
+  "d83d_dea6": {
+    "message": "feux de signalisation verticaux"
+  },
+  "d83d_dea7": {
+    "message": "en construction"
+  },
+  "d83d_dea8": {
+    "message": "gyrophare"
+  },
+  "d83d_dea9": {
+    "message": "balise"
+  },
+  "d83d_deaa": {
+    "message": "porte"
+  },
+  "d83d_deab": {
+    "message": "signe Interdit d'entrer"
+  },
+  "d83d_deac": {
+    "message": "signe de cigarette allum\u00e9e"
+  },
+  "d83d_dead": {
+    "message": "signe Interdiction de fumer"
+  },
+  "d83d_deae": {
+    "message": "signe de poubelle"
+  },
+  "d83d_deaf": {
+    "message": "signe Ne pas jeter"
+  },
+  "d83d_deb0": {
+    "message": "eau potable"
+  },
+  "d83d_deb1": {
+    "message": "eau non potable"
+  },
+  "d83d_deb2": {
+    "message": "v\u00e9lo"
+  },
+  "d83d_deb3": {
+    "message": "interdit aux v\u00e9los"
+  },
+  "d83d_deb4": {
+    "message": "cycliste"
+  },
+  "d83d_deb5": {
+    "message": "grimpeur"
+  },
+  "d83d_deb6": {
+    "message": "pi\u00e9ton"
+  },
+  "d83d_deb7": {
+    "message": "interdit aux pi\u00e9tons"
+  },
+  "d83d_deb8": {
+    "message": "enfants qui traversent"
+  },
+  "d83d_deb9": {
+    "message": "signe Hommes"
+  },
+  "d83d_deba": {
+    "message": "signe Femmes"
+  },
+  "d83d_debb": {
+    "message": "signe de toilettes"
+  },
+  "d83d_debc": {
+    "message": "signe B\u00e9b\u00e9"
+  },
+  "d83d_debd": {
+    "message": "toilettes"
+  },
+  "d83d_debe": {
+    "message": "WC"
+  },
+  "d83d_debf": {
+    "message": "douche"
+  },
+  "d83d_dec0": {
+    "message": "bain"
+  },
+  "d83d_dec1": {
+    "message": "baignoire"
+  },
+  "d83d_dec2": {
+    "message": "contr\u00f4le des passeports"
+  },
+  "d83d_dec3": {
+    "message": "douanes"
+  },
+  "d83d_dec4": {
+    "message": "retrait des bagages"
+  },
+  "d83d_dec5": {
+    "message": "consigne"
+  },
+  "de_ger_settings_page": {
+    "message": "Page des param\u00e8tres du clavier allemand"
+  },
+  "de_neo_ger_settings_page": {
+    "message": "Page des param\u00e8tres du clavier Neo\u00a02 allemand"
+  },
+  "dictionarytoolcategorytitle": {
+    "message": "Cat\u00e9gorie"
+  },
+  "dictionarytoolcommentnewinput": {
+    "message": "Commentaire"
+  },
+  "dictionarytoolcommenttitle": {
+    "message": "Commentaire"
+  },
+  "dictionarytooldeletedictionaryconfirm": {
+    "message": "Voulez-vous supprimer le dictionnaire \"[object Object]\"\u00a0?"
+  },
+  "dictionarytooldeletedictionarytitle": {
+    "message": "Supprimer le dictionnaire"
+  },
+  "dictionarytooldictionarylisttitle": {
+    "message": "Dictionnaires"
+  },
+  "dictionarytooldictionaryname": {
+    "message": "Nom du dictionnaire"
+  },
+  "dictionarytooldonebutton": {
+    "message": "OK"
+  },
+  "dictionarytoolexportbutton": {
+    "message": "Exporter"
+  },
+  "dictionarytoolimportbutton": {
+    "message": "Importer\u2026"
+  },
+  "dictionarytoolmenutitle": {
+    "message": "Gestion des dictionnaires"
+  },
+  "dictionarytoolnewdictionarynameplaceholder": {
+    "message": "Nouveau dictionnaire"
+  },
+  "dictionarytoolpagetitle": {
+    "message": "Dictionnaires personnels"
+  },
+  "dictionarytoolreadingnewinput": {
+    "message": "Nouvelle lecture"
+  },
+  "dictionarytoolreadingtitle": {
+    "message": "Lecture"
+  },
+  "dictionarytoolstatuserrordictionarynamecontainsinvalidcharacter": {
+    "message": "Le nom contient un ou plusieurs caract\u00e8re(s) non valide(s)."
+  },
+  "dictionarytoolstatuserrordictionarynameduplicated": {
+    "message": "Le nom existe d\u00e9j\u00e0."
+  },
+  "dictionarytoolstatuserrordictionarynameempty": {
+    "message": "Veuillez saisir un nom pour le dictionnaire."
+  },
+  "dictionarytoolstatuserrordictionarynametoolong": {
+    "message": "Le nom est trop long."
+  },
+  "dictionarytoolstatuserrordictionarysizelimitexceeded": {
+    "message": "Impossible de cr\u00e9er plus de dictionnaires."
+  },
+  "dictionarytoolstatuserroremptyfile": {
+    "message": "Le fichier est vide."
+  },
+  "dictionarytoolstatuserrorentrysizelimitexceeded": {
+    "message": "Impossible de cr\u00e9er plus d'entr\u00e9es dans ce dictionnaire."
+  },
+  "dictionarytoolstatuserrorfilenotfound": {
+    "message": "Impossible d'ouvrir le fichier."
+  },
+  "dictionarytoolstatuserrorfilesizelimitexceeded": {
+    "message": "La taille des donn\u00e9es d\u00e9passe la taille limite autoris\u00e9e pour les fichiers."
+  },
+  "dictionarytoolstatuserrorgeneral": {
+    "message": "\u00c9chec de l'op\u00e9ration."
+  },
+  "dictionarytoolstatuserrorimportinvalidentries": {
+    "message": "Impossible d'importer certains mots."
+  },
+  "dictionarytoolstatuserrorimporttoomanywords": {
+    "message": "La source de l'importation contient trop de mots."
+  },
+  "dictionarytoolstatuserrorinvalidfileformat": {
+    "message": "Impossible de lire le fichier."
+  },
+  "dictionarytoolstatuserrornoundohistory": {
+    "message": "Cette op\u00e9ration ne peut plus \u00eatre annul\u00e9e."
+  },
+  "dictionarytoolstatuserrorreadingcontainsinvalidcharacter": {
+    "message": "La lecture contient un ou plusieurs caract\u00e8re(s) non valide(s). Vous pouvez utiliser des caract\u00e8res ASCII, des hiraganas, la marque sonore vocalis\u00e9e (\u309b), la marque sonore semi-vocalis\u00e9e (\u309c), le point central (\u30fb), la marque sonore prolong\u00e9e (\u30fc), la virgule japonaise (\u3001), le point japonais (\u3002), les parenth\u00e8ses japonaises (\u300c\u300d\u300e\u300f) et le tiret ondul\u00e9 japonais (\u301c) dans la lecture."
+  },
+  "dictionarytoolstatuserrorreadingempty": {
+    "message": "Veuillez saisir la lecture."
+  },
+  "dictionarytoolstatuserrorreadingtoolong": {
+    "message": "La lecture est trop longue."
+  },
+  "dictionarytoolstatuserrortitleaddentry": {
+    "message": "Erreur lors de l'ajout d'une entr\u00e9e."
+  },
+  "dictionarytoolstatuserrortitlecreatedictionary": {
+    "message": "Erreur lors de la cr\u00e9ation du dictionnaire."
+  },
+  "dictionarytoolstatuserrortitledeletedictionary": {
+    "message": "Erreur lors de la suppression du dictionnaire."
+  },
+  "dictionarytoolstatuserrortitledeleteentry": {
+    "message": "Erreur lors de la suppression de l'entr\u00e9e."
+  },
+  "dictionarytoolstatuserrortitleeditentry": {
+    "message": "Erreur lors de la modification de l'entr\u00e9e."
+  },
+  "dictionarytoolstatuserrortitleimportdata": {
+    "message": "Erreur d'importation."
+  },
+  "dictionarytoolstatuserrortitlerenamedictionary": {
+    "message": "Erreur lors de l'attribution d'un nouveau nom au dictionnaire."
+  },
+  "dictionarytoolstatuserrorwordcontainsinvalidcharacter": {
+    "message": "Le mot contient un ou plusieurs caract\u00e8re(s) non valide(s)."
+  },
+  "dictionarytoolstatuserrorwordempty": {
+    "message": "Veuillez saisir le mot."
+  },
+  "dictionarytoolstatuserrorwordtoolong": {
+    "message": "Le mot est trop long."
+  },
+  "dictionarytoolwordnewinput": {
+    "message": "Nouveau mot"
+  },
+  "dictionarytoolwordtitle": {
+    "message": "Mot"
+  },
+  "dismiss_menu": {
+    "message": "ignorer le menu du clavier"
+  },
+  "dk_dan_settings_page": {
+    "message": "Page des param\u00e8tres du clavier danois"
+  },
+  "double_space_period": {
+    "message": "Appuyer deux fois sur la barre d'espace pour saisir un point"
+  },
+  "down_arrow": {
+    "message": "fl\u00e8che du bas"
+  },
+  "ee_est_settings_page": {
+    "message": "Page des param\u00e8tres du clavier estonien"
+  },
+  "emoji_tab_emoticon": {
+    "message": "cat\u00e9gorie d'emoji\u00a0: \u00e9motic\u00f4ne"
+  },
+  "emoji_tab_face": {
+    "message": "cat\u00e9gorie d'emoji\u00a0: visage"
+  },
+  "emoji_tab_hot": {
+    "message": "cat\u00e9gorie d'emoji\u00a0: os\u00e9"
+  },
+  "emoji_tab_nature": {
+    "message": "cat\u00e9gorie d'emoji\u00a0: nature"
+  },
+  "emoji_tab_object": {
+    "message": "cat\u00e9gorie d'emoji\u00a0: objet"
+  },
+  "emoji_tab_place": {
+    "message": "cat\u00e9gorie d'emoji\u00a0: lieu"
+  },
+  "emoji_tab_recent": {
+    "message": "cat\u00e9gorie d'emoji\u00a0: r\u00e9cent"
+  },
+  "emoji_tab_symbol": {
+    "message": "cat\u00e9gorie d'emoji\u00a0: symbole"
+  },
+  "enable_capitalization": {
+    "message": "Majuscules automatiques"
+  },
+  "enable_completion": {
+    "message": "Activer la saisie semi-automatique"
+  },
+  "enable_prediction": {
+    "message": "Activer la pr\u00e9diction du mot suivant"
+  },
+  "enter": {
+    "message": "entr\u00e9e"
+  },
+  "es_cat_cat_settings_page": {
+    "message": "Page des param\u00e8tres du clavier catalan"
+  },
+  "es_spa_settings_page": {
+    "message": "Page des param\u00e8tres du clavier espagnol"
+  },
+  "expand": {
+    "message": "D\u00e9velopper"
+  },
+  "expand_candidates": {
+    "message": "d\u00e9velopper la liste des propositions"
+  },
+  "fi_fin_settings_page": {
+    "message": "Page des param\u00e8tres du clavier finnois"
+  },
+  "footer_emoji_button": {
+    "message": "passer aux emoji"
+  },
+  "footer_handwriting_button": {
+    "message": "passer \u00e0 l'\u00e9criture manuscrite"
+  },
+  "footer_settings_button": {
+    "message": "ouvrir les param\u00e8tres du mode de saisie"
+  },
+  "fr_fra_settings_page": {
+    "message": "Page des param\u00e8tres du clavier fran\u00e7ais"
+  },
+  "fuzzy_pinyin": {
+    "message": "Activer le mode Pinyin fuzzy"
+  },
+  "gb_dvorak_eng_settings_page": {
+    "message": "Page des param\u00e8tres du clavier Dvorak britannique (anglais)"
+  },
+  "gb_extd_eng_settings_page": {
+    "message": "Page des param\u00e8tres du clavier britannique (anglais)"
+  },
+  "ge_geo_settings_page": {
+    "message": "Page des param\u00e8tres du clavier g\u00e9orgien"
+  },
+  "globe": {
+    "message": "revenir au clavier pr\u00e9c\u00e9dent"
+  },
+  "got_it": {
+    "message": "OK"
+  },
+  "gr_gre_settings_page": {
+    "message": "Page des param\u00e8tres du clavier grec"
+  },
+  "handwriting_back": {
+    "message": "Retour"
+  },
+  "handwriting_netowrk_error": {
+    "message": "Impossible d'utiliser l'\u00e9criture manuscrite, car le r\u00e9seau est indisponible."
+  },
+  "handwriting_privacy_info": {
+    "message": "Votre saisie sera envoy\u00e9e aux serveurs de Google dans le cadre de la reconnaissance textuelle."
+  },
+  "hide_keyboard": {
+    "message": "masquer le clavier"
+  },
+  "hr_scr_settings_page": {
+    "message": "Page des param\u00e8tres du clavier croate"
+  },
+  "hu_hun_settings_page": {
+    "message": "Page des param\u00e8tres du clavier hongrois"
+  },
+  "ie_ga_settings_page": {
+    "message": "Page des param\u00e8tres du clavier irlandais"
+  },
+  "ignore_correction": {
+    "message": "Ignorer la correction pour"
+  },
+  "ignore_correction_short": {
+    "message": "Ignorer la correction"
+  },
+  "il_heb_settings_page": {
+    "message": "Page des param\u00e8tres du clavier h\u00e9breu"
+  },
+  "init_lang": {
+    "message": "Le chinois est la langue de saisie initiale."
+  },
+  "init_punc": {
+    "message": "La largeur de ponctuation initiale est \"Compl\u00e8te\"."
+  },
+  "init_sbc": {
+    "message": "La largeur de caract\u00e8res initiale est \"Compl\u00e8te\"."
+  },
+  "input_hangul": {
+    "message": "Mode hang\u00fbl"
+  },
+  "input_hanja": {
+    "message": "Mode hanja"
+  },
+  "inputmethod_array": {
+    "message": "Mode de saisie tableau"
+  },
+  "inputmethod_cangjie": {
+    "message": "Mode de saisie cangjie"
+  },
+  "inputmethod_dayi": {
+    "message": "Mode de saisie dayi"
+  },
+  "inputmethod_hangul": {
+    "message": "Mode de saisie du cor\u00e9en"
+  },
+  "inputmethod_pinyin": {
+    "message": "Mode de saisie pinyin"
+  },
+  "inputmethod_quick": {
+    "message": "Mode de saisie quick"
+  },
+  "inputmethod_traditional_pinyin": {
+    "message": "Mode de saisie pinyin pour le chinois traditionnel"
+  },
+  "inputmethod_wubi": {
+    "message": "Mode de saisie wubi"
+  },
+  "inputmethod_zhuyin": {
+    "message": "Mode de saisie zhuyin"
+  },
+  "is_ice_settings_page": {
+    "message": "Page des param\u00e8tres du clavier islandais"
+  },
+  "it_ita_settings_page": {
+    "message": "Page des param\u00e8tres du clavier italien"
+  },
+  "jp_jpn_settings_page": {
+    "message": "Page des param\u00e8tres du clavier japonais"
+  },
+  "keyboard_arabic": {
+    "message": "Clavier arabe"
+  },
+  "keyboard_armenian_phonetic": {
+    "message": "Clavier phon\u00e9tique arm\u00e9nien"
+  },
+  "keyboard_belarusian": {
+    "message": "Clavier bi\u00e9lorusse"
+  },
+  "keyboard_belgian": {
+    "message": "Clavier belge"
+  },
+  "keyboard_bengali_phonetic": {
+    "message": "Clavier bengali (phon\u00e9tique)"
+  },
+  "keyboard_brazilian": {
+    "message": "Clavier br\u00e9silien"
+  },
+  "keyboard_bulgarian": {
+    "message": "Clavier bulgare"
+  },
+  "keyboard_bulgarian_phonetic": {
+    "message": "Clavier phon\u00e9tique bulgare"
+  },
+  "keyboard_canadian_english": {
+    "message": "Clavier anglais canadien"
+  },
+  "keyboard_canadian_french": {
+    "message": "Clavier franco-canadien"
+  },
+  "keyboard_canadian_multilingual": {
+    "message": "Clavier canadien multilingue"
+  },
+  "keyboard_catalan": {
+    "message": "Clavier catalan"
+  },
+  "keyboard_croatian": {
+    "message": "Clavier croate"
+  },
+  "keyboard_czech": {
+    "message": "Clavier tch\u00e8que"
+  },
+  "keyboard_czech_qwerty": {
+    "message": "Clavier QWERTY tch\u00e8que"
+  },
+  "keyboard_danish": {
+    "message": "Clavier danois"
+  },
+  "keyboard_devanagari_phonetic": {
+    "message": "Clavier d\u00e9van\u00e2gar\u00ee (phon\u00e9tique)"
+  },
+  "keyboard_estonian": {
+    "message": "Clavier estonien"
+  },
+  "keyboard_ethiopic": {
+    "message": "Clavier \u00e9thiopien"
+  },
+  "keyboard_finnish": {
+    "message": "Clavier finnois"
+  },
+  "keyboard_french": {
+    "message": "Clavier fran\u00e7ais"
+  },
+  "keyboard_georgian": {
+    "message": "Clavier g\u00e9orgien"
+  },
+  "keyboard_german": {
+    "message": "Clavier allemand"
+  },
+  "keyboard_german_neo_2": {
+    "message": "Clavier Neo\u00a02 allemand"
+  },
+  "keyboard_greek": {
+    "message": "Clavier grec"
+  },
+  "keyboard_gujarati_phonetic": {
+    "message": "Clavier gujarati (phon\u00e9tique)"
+  },
+  "keyboard_hebrew": {
+    "message": "Clavier h\u00e9breu"
+  },
+  "keyboard_hungarian": {
+    "message": "Clavier hongrois"
+  },
+  "keyboard_icelandic": {
+    "message": "Clavier islandais"
+  },
+  "keyboard_inscript": {
+    "message": "Clavier (InScript)"
+  },
+  "keyboard_irish": {
+    "message": "Clavier irlandais"
+  },
+  "keyboard_italian": {
+    "message": "Clavier italien"
+  },
+  "keyboard_itrans": {
+    "message": "Clavier (itrans)"
+  },
+  "keyboard_japanese": {
+    "message": "Clavier japonais"
+  },
+  "keyboard_kannada_phonetic": {
+    "message": "Clavier kannada (phon\u00e9tique)"
+  },
+  "keyboard_kedmanee": {
+    "message": "Clavier (kedmanee)"
+  },
+  "keyboard_khmer": {
+    "message": "Clavier khmer"
+  },
+  "keyboard_lao": {
+    "message": "Clavier lao"
+  },
+  "keyboard_latin_american": {
+    "message": "Clavier latino-am\u00e9ricain"
+  },
+  "keyboard_latvian": {
+    "message": "Clavier letton"
+  },
+  "keyboard_lithuanian": {
+    "message": "Clavier lituanien"
+  },
+  "keyboard_malayalam_phonetic": {
+    "message": "Clavier malayalam (phon\u00e9tique)"
+  },
+  "keyboard_maltese": {
+    "message": "Clavier maltais"
+  },
+  "keyboard_mongolian": {
+    "message": "Clavier mongol"
+  },
+  "keyboard_myanmar": {
+    "message": "Clavier birman MM3"
+  },
+  "keyboard_myanmar_myansan": {
+    "message": "Clavier birman Myansan"
+  },
+  "keyboard_nepali_inscript": {
+    "message": "Clavier n\u00e9palais (InScript)"
+  },
+  "keyboard_nepali_phonetic": {
+    "message": "Clavier n\u00e9palais (phon\u00e9tique)"
+  },
+  "keyboard_netherlands": {
+    "message": "Clavier n\u00e9erlandais"
+  },
+  "keyboard_none": {
+    "message": "Clavier"
+  },
+  "keyboard_norwegian": {
+    "message": "Clavier norv\u00e9gien"
+  },
+  "keyboard_pattachote": {
+    "message": "Clavier (pattachote)"
+  },
+  "keyboard_persian": {
+    "message": "Clavier persan"
+  },
+  "keyboard_phonetic": {
+    "message": "Clavier (phon\u00e9tique)"
+  },
+  "keyboard_polish": {
+    "message": "Clavier polonais"
+  },
+  "keyboard_portuguese": {
+    "message": "Clavier portugais"
+  },
+  "keyboard_romanian": {
+    "message": "Clavier roumain"
+  },
+  "keyboard_romanian_standard": {
+    "message": "Clavier roumain standard"
+  },
+  "keyboard_russian": {
+    "message": "Clavier russe"
+  },
+  "keyboard_russian_phonetic": {
+    "message": "Clavier phon\u00e9tique russe"
+  },
+  "keyboard_russian_phonetic_aatseel": {
+    "message": "Clavier phon\u00e9tique russe (AATSEEL)"
+  },
+  "keyboard_russian_phonetic_yazhert": {
+    "message": "Clavier phon\u00e9tique russe (YaZHert)"
+  },
+  "keyboard_serbian": {
+    "message": "Clavier serbe"
+  },
+  "keyboard_sinhala": {
+    "message": "Clavier cingalais"
+  },
+  "keyboard_slovakian": {
+    "message": "Clavier slovaque"
+  },
+  "keyboard_slovenian": {
+    "message": "Clavier slov\u00e8ne"
+  },
+  "keyboard_soranikurdish_ar": {
+    "message": "Clavier kurde sorani (arabe)"
+  },
+  "keyboard_soranikurdish_en": {
+    "message": "Clavier kurde sorani (anglais)"
+  },
+  "keyboard_spanish": {
+    "message": "Clavier espagnol"
+  },
+  "keyboard_swedish": {
+    "message": "Clavier su\u00e9dois"
+  },
+  "keyboard_swiss": {
+    "message": "Clavier suisse"
+  },
+  "keyboard_swiss_french": {
+    "message": "Clavier franco-suisse"
+  },
+  "keyboard_tamil99": {
+    "message": "Clavier (Tamil99)"
+  },
+  "keyboard_tamil_inscript": {
+    "message": "Clavier tamoul (InScript)"
+  },
+  "keyboard_tamil_itrans": {
+    "message": "Clavier tamoul (itrans)"
+  },
+  "keyboard_tamil_phonetic": {
+    "message": "Clavier tamoul (phon\u00e9tique)"
+  },
+  "keyboard_tamil_tamil99": {
+    "message": "Clavier tamoul (Tamil99)"
+  },
+  "keyboard_tamil_typewriter": {
+    "message": "Clavier tamoul (machine \u00e0 \u00e9crire)"
+  },
+  "keyboard_tcvn": {
+    "message": "Clavier (TCVN)"
+  },
+  "keyboard_telex": {
+    "message": "Clavier (T\u00e9lex)"
+  },
+  "keyboard_telugu_phonetic": {
+    "message": "Clavier t\u00e9lougou (phon\u00e9tique)"
+  },
+  "keyboard_thai_kedmanee": {
+    "message": "Clavier tha\u00ef (kedmanee)"
+  },
+  "keyboard_thai_pattachote": {
+    "message": "Clavier tha\u00ef (pattachote)"
+  },
+  "keyboard_thai_tis": {
+    "message": "Clavier tha\u00ef (TIS\u00a0820-2531)"
+  },
+  "keyboard_tis": {
+    "message": "Clavier (TIS 820-2531)"
+  },
+  "keyboard_turkish": {
+    "message": "Clavier turc"
+  },
+  "keyboard_typewriter": {
+    "message": "Clavier (machine \u00e0 \u00e9crire)"
+  },
+  "keyboard_uk": {
+    "message": "Clavier britannique"
+  },
+  "keyboard_uk_dvorak": {
+    "message": "Clavier Dvorak britannique"
+  },
+  "keyboard_ukrainian": {
+    "message": "Clavier ukrainien"
+  },
+  "keyboard_us": {
+    "message": "Clavier am\u00e9ricain"
+  },
+  "keyboard_us_colemak": {
+    "message": "Clavier Colemak am\u00e9ricain"
+  },
+  "keyboard_us_dvorak": {
+    "message": "Clavier Dvorak am\u00e9ricain"
+  },
+  "keyboard_us_extended": {
+    "message": "Clavier \u00e9tendu am\u00e9ricain"
+  },
+  "keyboard_us_international": {
+    "message": "Clavier international am\u00e9ricain"
+  },
+  "keyboard_vietnamese_tcvn": {
+    "message": "Clavier vietnamien (TCVN)"
+  },
+  "keyboard_vietnamese_telex": {
+    "message": "Clavier vietnamien (T\u00e9lex)"
+  },
+  "keyboard_vietnamese_viqr": {
+    "message": "Clavier vietnamien (VIQR)"
+  },
+  "keyboard_vietnamese_vni": {
+    "message": "Clavier vietnamien (VNI)"
+  },
+  "keyboard_viqr": {
+    "message": "Clavier (VIQR)"
+  },
+  "keyboard_vni": {
+    "message": "Clavier (VNI)"
+  },
+  "korean_hanja_display": {
+    "message": "Mode des candidats hanja (caract\u00e8res chinois)"
+  },
+  "korean_keyboard_layout": {
+    "message": "Disposition du clavier cor\u00e9en"
+  },
+  "korean_settings_page": {
+    "message": "Page des param\u00e8tres du mode de saisie du cor\u00e9en"
+  },
+  "korean_syllable_input": {
+    "message": "Saisir une syllabe \u00e0 la fois"
+  },
+  "latam_spa_settings_page": {
+    "message": "Page des param\u00e8tres du clavier latino-am\u00e9ricain (espagnol)"
+  },
+  "latin_settings_page": {
+    "message": "Param\u00e8tres"
+  },
+  "left_arrow": {
+    "message": "fl\u00e8che de gauche"
+  },
+  "lt_lit_settings_page": {
+    "message": "Page des param\u00e8tres du clavier lituanien"
+  },
+  "lv_apostrophe_lav_settings_page": {
+    "message": "Page des param\u00e8tres du clavier letton (letton)"
+  },
+  "menu_key": {
+    "message": "ouvrir le menu du clavier"
+  },
+  "mn_mon_settings_page": {
+    "message": "Page des param\u00e8tres du clavier mongol"
+  },
+  "move_page_key_above": {
+    "message": "Utiliser les touches - et = pour paginer une liste d'entr\u00e9es"
+  },
+  "move_page_key_below": {
+    "message": "Utiliser les touches , et . pour paginer une liste d'entr\u00e9es"
+  },
+  "never_auto_correct": {
+    "message": "D\u00e9sactiv\u00e9"
+  },
+  "no_nob_settings_page": {
+    "message": "Page des param\u00e8tres du clavier norv\u00e9gien"
+  },
+  "pause": {
+    "message": "Interrompre"
+  },
+  "physical_auto_correction_level": {
+    "message": "Correction automatique"
+  },
+  "physical_enable_capitalization": {
+    "message": "Majuscules automatiques"
+  },
+  "physical_keyboard": {
+    "message": "Clavier physique"
+  },
+  "pinyin_settings_page": {
+    "message": "Page des param\u00e8tres du pinyin"
+  },
+  "pl_pol_settings_page": {
+    "message": "Page des param\u00e8tres du clavier polonais"
+  },
+  "pt_por_settings_page": {
+    "message": "Page des param\u00e8tres du clavier portugais"
+  },
+  "right_arrow": {
+    "message": "fl\u00e8che de droite"
+  },
+  "ro_rum_settings_page": {
+    "message": "Page des param\u00e8tres du clavier roumain"
+  },
+  "rs_srp_settings_page": {
+    "message": "Page des param\u00e8tres du clavier serbe"
+  },
+  "ru_phonetic_rus_settings_page": {
+    "message": "Page des param\u00e8tres du clavier phon\u00e9tique russe"
+  },
+  "ru_rus_settings_page": {
+    "message": "Page des param\u00e8tres du clavier russe"
+  },
+  "se_swe_settings_page": {
+    "message": "Page des param\u00e8tres du clavier su\u00e9dois"
+  },
+  "settings": {
+    "message": "Param\u00e8tres"
+  },
+  "shift": {
+    "message": "maj"
+  },
+  "shift_lock": {
+    "message": "verrouillage des majuscules"
+  },
+  "show_candidate_mode": {
+    "message": "D\u00e9lai d'affichage du menu d\u00e9roulant des suggestions"
+  },
+  "show_candidates_1000": {
+    "message": "Afficher le menu d\u00e9roulant des suggestions apr\u00e8s 1\u00a0s"
+  },
+  "show_candidates_2000": {
+    "message": "Afficher le menu d\u00e9roulant des suggestions apr\u00e8s 2\u00a0s"
+  },
+  "show_candidates_500": {
+    "message": "Afficher le menu d\u00e9roulant des suggestions apr\u00e8s 500\u00a0ms"
+  },
+  "show_candidates_5000": {
+    "message": "Afficher le menu d\u00e9roulant des suggestions apr\u00e8s 5\u00a0s"
+  },
+  "show_candidates_backspace": {
+    "message": "Afficher le menu d\u00e9roulant des suggestions en appuyant sur la touche Retour arri\u00e8re"
+  },
+  "show_hangul_candidate": {
+    "message": "Afficher les entr\u00e9es en mode hang\u00fbl"
+  },
+  "shrink_candidates": {
+    "message": "r\u00e9duire la liste des propositions"
+  },
+  "si_slv_settings_page": {
+    "message": "Page des param\u00e8tres du clavier slov\u00e8ne"
+  },
+  "sk_slo_settings_page": {
+    "message": "Page des param\u00e8tres du clavier slovaque"
+  },
+  "smiley": {
+    "message": "\u00e9motic\u00f4ne"
+  },
+  "sometimes_auto_correct": {
+    "message": "Mod\u00e9r\u00e9"
+  },
+  "sound_on_keypress": {
+    "message": "Son \u00e0 chaque touche"
+  },
+  "space": {
+    "message": "espace"
+  },
+  "switch_to": {
+    "message": "passer \u00e0 "
+  },
+  "switch_to_compact_layout": {
+    "message": "Passer \u00e0 la mise en page compacte"
+  },
+  "switch_to_full_layout": {
+    "message": "Passer \u00e0 la mise en page compl\u00e8te"
+  },
+  "switch_to_keyboard_prefix": {
+    "message": "passer \u00e0 "
+  },
+  "switched_to": {
+    "message": "pass\u00e9 \u00e0 "
+  },
+  "tab": {
+    "message": "tabulation"
+  },
+  "touch_keyboard": {
+    "message": "Clavier \u00e0 l'\u00e9cran"
+  },
+  "tr_tur_settings_page": {
+    "message": "Page des param\u00e8tres du clavier turc"
+  },
+  "transliteration_am": {
+    "message": "Translitt\u00e9ration (salam \u2192 \u1230\u120b\u121d)"
+  },
+  "transliteration_ar": {
+    "message": "Translitt\u00e9ration (marhaban \u2190 \u0645\u0631\u062d\u0628\u0627)"
+  },
+  "transliteration_be": {
+    "message": "Translitt\u00e9ration (pryvitannie \u2192 \u043f\u0440\u044b\u0432\u0456\u0442\u0430\u043d\u043d\u0435)"
+  },
+  "transliteration_bg": {
+    "message": "Translitt\u00e9ration (zdrasti \u2192 \u0437\u0434\u0440\u0430\u0441\u0442\u0438)"
+  },
+  "transliteration_bn": {
+    "message": "Translitt\u00e9ration (namaskar \u2192 \u09a8\u09ae\u09b8\u09cd\u0995\u09be\u09b0)"
+  },
+  "transliteration_el": {
+    "message": "Translitt\u00e9ration (geia \u2192 \u03b3\u03b5\u03b9\u03b1)"
+  },
+  "transliteration_fa": {
+    "message": "Translitt\u00e9ration (salam \u2190 \u0633\u0644\u0627\u0645)"
+  },
+  "transliteration_gu": {
+    "message": "Translitt\u00e9ration (namaste \u2192 \u0aa8\u0aae\u0ab8\u0acd\u0aa4\u0ac7)"
+  },
+  "transliteration_he": {
+    "message": "Translitt\u00e9ration (shalom \u2190 \u05e9\u05dc\u05d5\u05dd)"
+  },
+  "transliteration_hi": {
+    "message": "Translitt\u00e9ration (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_kn": {
+    "message": "Translitt\u00e9ration (namaskaram \u2192 \u0ca8\u0cae\u0cb8\u0ccd\u0c95\u0cbe\u0cb0)"
+  },
+  "transliteration_ml": {
+    "message": "Translitt\u00e9ration (namaskar \u2192 \u0d28\u0d2e\u0d38\u0d4d\u0d15\u0d3e\u0d30\u0d02)"
+  },
+  "transliteration_mr": {
+    "message": "Translitt\u00e9ration (namaste \u2192 \u0928\u092e\u0938\u094d\u0915\u093e\u0930)"
+  },
+  "transliteration_ne": {
+    "message": "Translitt\u00e9ration (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_or": {
+    "message": "Translitt\u00e9ration (mausam \u2192 \u0b28\u0b2e\u0b38\u0b4d\u0b24\u0b47)"
+  },
+  "transliteration_pa": {
+    "message": "Translitt\u00e9ration (mausam \u2192 \u0a2e\u0a4c\u0a38\u0a2e)"
+  },
+  "transliteration_ru": {
+    "message": "Translitt\u00e9ration (privet \u2192 \u043f\u0440\u0438\u0432\u0435\u0442)"
+  },
+  "transliteration_sa": {
+    "message": "Translitt\u00e9ration (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_si": {
+    "message": "Translitt\u00e9ration (halo \u2192 \u0dc4\u0dbd\u0ddd)"
+  },
+  "transliteration_sr": {
+    "message": "Translitt\u00e9ration (zdravo \u2192 \u0437\u0434\u0440\u0430\u0432\u043e)"
+  },
+  "transliteration_ta": {
+    "message": "Translitt\u00e9ration (vanakkam \u2192 \u0bb5\u0ba3\u0b95\u0bcd\u0b95\u0bae\u0bcd)"
+  },
+  "transliteration_te": {
+    "message": "Translitt\u00e9ration (emandi \u2192 \u0c0f\u0c2e\u0c02\u0c21\u0c40)"
+  },
+  "transliteration_ti": {
+    "message": "Translitt\u00e9ration (selam \u2192 \u1230\u120b\u121d)"
+  },
+  "transliteration_uk": {
+    "message": "Translitt\u00e9ration (pryvit \u2192 \u043f\u0440\u0438\u0432\u0456\u0442)"
+  },
+  "transliteration_ur": {
+    "message": "Translitt\u00e9ration (salam \u2190 \u0633\u0644\u0627\u0645)"
+  },
+  "transliteration_vi": {
+    "message": "Translitt\u00e9ration (chao \u2192 ch\u00e0o)"
+  },
+  "ua_ukr_settings_page": {
+    "message": "Page des param\u00e8tres du clavier ukrainien"
+  },
+  "up_arrow": {
+    "message": "fl\u00e8che du haut"
+  },
+  "us_altgr_intl_eng_settings_page": {
+    "message": "Page des param\u00e8tres du clavier \u00e9tendu am\u00e9ricain (anglais)"
+  },
+  "us_colemak_eng_settings_page": {
+    "message": "Page des param\u00e8tres du clavier Colemak am\u00e9ricain (anglais)"
+  },
+  "us_dvorak_eng_settings_page": {
+    "message": "Page des param\u00e8tres du clavier Dvorak am\u00e9ricain (anglais)"
+  },
+  "us_eng_settings_page": {
+    "message": "Page des param\u00e8tres du clavier am\u00e9ricain (anglais)"
+  },
+  "us_fil_settings_page": {
+    "message": "Page des param\u00e8tres du clavier am\u00e9ricain (filipino)"
+  },
+  "us_ind_settings_page": {
+    "message": "Page des param\u00e8tres du clavier am\u00e9ricain (indon\u00e9sien)"
+  },
+  "us_intl_eng_settings_page": {
+    "message": "Page des param\u00e8tres du clavier international am\u00e9ricain (anglais)"
+  },
+  "us_intl_nld_settings_page": {
+    "message": "Page des param\u00e8tres du clavier international am\u00e9ricain (n\u00e9erlandais)"
+  },
+  "us_intl_por_settings_page": {
+    "message": "Page des param\u00e8tres du clavier international am\u00e9ricain (portugais du Br\u00e9sil)"
+  },
+  "us_msa_settings_page": {
+    "message": "Page des param\u00e8tres du clavier am\u00e9ricain (malais)"
+  },
+  "user_dict": {
+    "message": "Activer le dictionnaire personnel"
+  },
+  "user_dict_add": {
+    "message": "Ajouter"
+  },
+  "user_dict_clear": {
+    "message": "Tout effacer"
+  },
+  "user_dict_manage": {
+    "message": "G\u00e9rer le dictionnaire personnel..."
+  },
+  "user_dict_new_word": {
+    "message": "Nouveau mot"
+  },
+  "user_dict_remove": {
+    "message": "Supprimer la s\u00e9lection"
+  },
+  "user_dict_reset": {
+    "message": "R\u00e9initialiser toutes les entr\u00e9es du dictionnaire"
+  },
+  "user_dict_save": {
+    "message": "Enregistrer"
+  },
+  "user_dict_sync": {
+    "message": "Synchroniser le dictionnaire personnel"
+  },
+  "user_dict_title": {
+    "message": "Dictionnaire personnel"
+  },
+  "voice": {
+    "message": "Voix"
+  },
+  "voice_privacy_info": {
+    "message": "Votre saisie vocale sera envoy\u00e9e aux serveurs de Google dans le cadre de la reconnaissance textuelle."
+  },
+  "voice_turn_off": {
+    "message": "d\u00e9sactiver l'outil de saisie vocale"
+  },
+  "voice_turn_on": {
+    "message": "activer l'outil de saisie vocale"
+  },
+  "wait": {
+    "message": "Attendre"
+  },
+  "zhuyin_keyboard_layout": {
+    "message": "Type de clavier"
+  },
+  "zhuyin_page_size": {
+    "message": "Nombre d'entr\u00e9es par page"
+  },
+  "zhuyin_select_keys": {
+    "message": "Touches de s\u00e9lection"
+  },
+  "zhuyin_settings_page": {
+    "message": "Page des param\u00e8tres du zhuyin"
+  }
+}

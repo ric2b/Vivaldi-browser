@@ -1,0 +1,60 @@
+include_rules = [
+  "+ios/chrome/grit",
+
+  "+breakpad/src/client/ios",
+  "+components/autofill/core/browser",
+  "+components/autofill/core/common",
+  "+components/autofill/ios/browser",
+  "+components/bookmarks",
+  "+components/content_settings/core",
+  "+components/data_reduction_proxy/core/common",
+  "+components/dom_distiller/core",
+  "+components/dom_distiller/ios",
+  "+components/enhanced_bookmarks",
+  "+components/favicon/core",
+  "+components/favicon_base",
+  "+components/google/core/browser",
+  "+components/history/core/browser",
+  "+components/history/ios/browser",
+  "+components/infobars/core",
+  "+components/keyed_service/core",
+  "+components/keyed_service/ios",
+  "+components/leveldb_proto",
+  "+components/metrics",
+  "-components/metrics/profile",  # Depends on //content.
+  "+components/password_manager/core/browser",
+  "+components/pref_registry",
+  "+components/search_engines",
+  "+components/signin/core/browser",
+  "+components/signin/core/common",
+  "+components/signin/ios/browser",
+  "+components/suggestions",
+  "+components/sync_driver",
+  "+components/translate/core",
+  "+components/translate/ios",
+  "+components/undo",
+  "+components/variations",
+  "+components/web_resource",
+  "+components/webdata_services",
+  "+components/webp_transcode",
+  "+google_apis",
+  "+ios/net",
+  "+ios/public/provider/chrome",
+  "+ios/public/provider/components",
+  "+ios/web/public",
+  "+net",
+  "+sync",
+  "+third_party/google_toolbox_for_mac",
+  "+ui",
+
+  # For tests.
+  "+ios/chrome/test",
+  "+ios/public/test",
+
+  # Only parts of skia are compiled on iOS, so we explicitly list the
+  # files that can be included to avoid bringing in more code.
+  "+skia/ext/skia_utils_ios.h",
+
+  # Generated file for translated strings in components.
+  "+grit/components_strings.h",
+]

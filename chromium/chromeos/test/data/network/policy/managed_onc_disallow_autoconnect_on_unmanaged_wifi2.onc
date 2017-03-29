@@ -1,0 +1,25 @@
+{
+   "Name": {
+      "Active": "wifi2"
+   },
+   "Source": "User",
+   "Type": {
+      "Active": "WiFi"
+   },
+   "WiFi": {
+      "AutoConnect": {
+         "Active": false,
+         "Effective": "UserPolicy",
+         "UserPolicy": false
+      },
+      "HexSSID": {
+         "Active": "7769666932" // "wifi2"
+      },
+      "SSID": {
+         "Active": "wifi2"
+      },
+      "Security": {
+         "Active": "WPA-PSK"
+      }
+   }
+}

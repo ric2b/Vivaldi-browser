@@ -1,0 +1,226 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//extensions/extensions.gni")
+import("//testing/test.gni")
+import("//tools/grit/grit_rule.gni")
+import("//tools/grit/repack.gni")
+
+assert(enable_extensions)
+
+# GYP version: extensions/extensions_resources.gyp:extensions_resources
+group("extensions_resources") {
+  deps = [
+    ":extensions_browser_resources",
+    ":extensions_renderer_resources",
+    ":extensions_resources_grd",
+  ]
+}
+
+# GYP version: extensions/extensions_resources.gyp:extensions_resources
+#              (extensions_resources action)
+grit("extensions_resources_grd") {
+  source = "extensions_resources.grd"
+  outputs = [
+    "grit/extensions_resources.h",
+    "extensions_resources.pak",
+  ]
+}
+
+# GYP version: extensions/extensions_resources.gyp:extensions_resources
+#              (extensions_browser_resources action)
+grit("extensions_browser_resources") {
+  source = "browser/resources/extensions_browser_resources.grd"
+  outputs = [
+    "grit/extensions_browser_resources.h",
+    "grit/extensions_browser_resources_map.cc",
+    "grit/extensions_browser_resources_map.h",
+    "extensions_browser_resources_100_percent.pak",
+    "extensions_browser_resources_200_percent.pak",
+  ]
+  grit_flags = [
+    "-E",
+    "mojom_root=" + rebase_path(root_gen_dir),
+  ]
+}
+
+# GYP version: extensions/extensions_resources.gyp:extensions_resources
+#              (extensions_renderer_resources action)
+grit("extensions_renderer_resources") {
+  source = "renderer/resources/extensions_renderer_resources.grd"
+  outputs = [
+    "grit/extensions_renderer_resources.h",
+    "extensions_renderer_resources.pak",
+  ]
+  grit_flags = [
+    "-E",
+    "mojom_root=" + rebase_path(root_gen_dir),
+  ]
+
+  deps = [
+    "//chrome/browser/media/router:mojo_bindings__generator",
+    "//device/serial:serial_mojo__generator",
+    "//extensions/common:mojo__generator",
+    "//extensions/common/api:mojom__generator",
+  ]
+}
+
+source_set("test_support") {
+  testonly = true
+  sources = rebase_path(extensions_gypi_values.extensions_test_support_sources,
+                        ".",
+                        "//extensions")
+
+  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+
+  deps = [
+    ":extensions_resources",
+    "//base",
+    "//base:prefs_test_support",
+    "//components/guest_view/browser:test_support",
+    "//content/public/common",
+    "//content/test:test_support",
+    "//extensions/browser",
+    "//extensions/common",
+    "//extensions/common/api",
+    "//extensions/common/api:api_registration",
+    "//net:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  public_deps = [
+    "//content/public/browser",
+    "//extensions/common/api/cast_channel:cast_channel_proto",
+  ]
+}
+
+# GYP version: //extensions/extensions.gyp:extensions_shell_and_test_pak
+repack("shell_and_test_pak") {
+  sources = [
+    "$root_gen_dir/blink/devtools_resources.pak",
+    "$root_gen_dir/blink/public/resources/blink_image_resources_100_percent.pak",
+    "$root_gen_dir/blink/public/resources/blink_resources.pak",
+    "$root_gen_dir/content/app/strings/content_strings_en-US.pak",
+    "$root_gen_dir/content/content_resources.pak",
+    "$root_gen_dir/content/shell/shell_resources.pak",
+    "$root_gen_dir/extensions/extensions_browser_resources_100_percent.pak",
+    "$root_gen_dir/extensions/extensions_renderer_resources.pak",
+    "$root_gen_dir/extensions/extensions_resources.pak",
+    "$root_gen_dir/extensions/shell/app_shell_resources.pak",
+    "$root_gen_dir/extensions/strings/extensions_strings_en-US.pak",
+    "$root_gen_dir/ui/resources/ui_resources_100_percent.pak",
+    "$root_gen_dir/ui/strings/app_locale_settings_en-US.pak",
+    "$root_gen_dir/ui/strings/ui_strings_en-US.pak",
+  ]
+
+  output = "$root_out_dir/extensions_shell_and_test.pak"
+
+  deps = [
+    ":extensions_resources",
+    "//content:resources",
+    "//content/app/strings",
+    "//content/browser/devtools:devtools_resources",
+    "//content/shell:resources",
+    "//extensions/shell:resources",
+    "//extensions/strings",
+    "//third_party/WebKit/public:image_resources",
+    "//third_party/WebKit/public:resources",
+    "//ui/resources",
+    "//ui/strings",
+  ]
+}
+
+test("extensions_unittests") {
+  sources =
+      rebase_path(extensions_tests_gypi_values.extensions_unittests_sources,
+                  ".",
+                  "//extensions")
+
+  sources += [
+    # TODO(rockot): DisplayInfoProvider::Create() is only implemented in Chrome
+    # and app_shell. This is wrong.
+    "shell/browser/shell_display_info_provider.cc",
+  ]
+
+  deps = [
+    ":extensions_resources",
+    ":shell_and_test_pak",
+    ":test_support",
+    "//base",
+    "//base:prefs_test_support",
+    "//base/test:test_support",
+    "//components/keyed_service/content",
+    "//components/user_prefs",
+    "//content/test:test_support",
+    "//device/bluetooth:mocks",
+    "//device/serial",
+    "//device/serial:test_support",
+    "//extensions/common",
+    "//extensions/common/api/cast_channel:cast_channel_proto",
+    "//extensions/renderer",
+    "//extensions/strings",
+    "//extensions/utility",
+    "//mojo/application/public/interfaces",
+    "//mojo/environment:chromium",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/leveldatabase",
+    "//third_party/mojo/src/mojo/edk/js",
+    "//third_party/mojo/src/mojo/edk/system",
+    "//third_party/mojo/src/mojo/public/cpp/bindings",
+  ]
+
+  if (is_win) {
+    deps += [ "//base/allocator" ]
+  }
+
+  if (is_chromeos) {
+    sources += [
+      # TODO(rockot): There are two implementations of VpnServiceFactory, a
+      # stub in app_shell and a real one in Chrome. This is wrong.
+      "shell/browser/api/vpn_provider/vpn_service_factory.cc",
+    ]
+
+    deps += [ "//chromeos:test_support" ]
+  }
+}
+
+test("extensions_browsertests") {
+  sources =
+      rebase_path(extensions_tests_gypi_values.extensions_browsertests_sources,
+                  ".",
+                  "//extensions")
+
+  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+
+  deps = [
+    ":test_support",
+    "shell:app_shell_lib",
+
+    # TODO(yoz): find the right deps
+    "//base",
+    "//base:prefs_test_support",
+    "//base/test:test_support",
+    "//components/storage_monitor:test_support",
+    "//content/test:test_support",
+    "//device/bluetooth:mocks",
+    "//device/usb:mocks",
+    "//mojo/environment:chromium",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/mojo/src/mojo/edk/js",
+    "//third_party/mojo/src/mojo/edk/system",
+    "//third_party/mojo/src/mojo/public/cpp/bindings",
+  ]
+
+  if (is_win) {
+    deps += [ "//base/allocator" ]
+  }
+
+  if (is_mac) {
+    deps += [ "shell:app_shell" ]  # Needed for App Shell.app's Helper.
+  }
+}

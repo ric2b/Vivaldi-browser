@@ -1,0 +1,46 @@
+<!doctype html>
+<html i18n-values="dir:textdirection;lang:language">
+<head>
+<meta name="viewport" content="width=device-width">
+<meta charset="utf-8">
+<title i18n-content="blockPageTitle"></title>
+<link rel="stylesheet" href="../../../ui/webui/resources/css/widgets.css">
+<link rel="stylesheet" href="supervised_user_block_interstitial.css">
+<script src="../../../ui/webui/resources/js/cr.js"></script>
+<script src="../../../ui/webui/resources/js/util.js"></script>
+<script src="supervised_user_block_interstitial.js"></script>
+</head>
+
+<body>
+<div id="main-frame-blocked">
+  <div id="box">
+    <div id="content-top">
+      <img id="error-img">
+      <div id="avatar-container">
+        <img id="avatar-img" class="avatar-img" hidden>
+        <img id="second-avatar-img" class="avatar-img" hidden>
+      </div>
+      <h1>
+        <div id="block-page-message" i18n-content="blockPageMessage"></div>
+        <div id="request-failed-message" i18n-content="requestFailedMessage"
+            hidden></div>
+        <div id="request-sent-message" i18n-content="requestSentMessage" hidden>
+        </div>
+        <div id="block-reason-message" i18n-content="blockReasonMessage"></div>
+      </h1>
+      <div id="button-container">
+        <button id="back-button" class="custom-appearance"
+            i18n-content="backButton">
+        </button>
+        <button id="request-access-button" class="custom-appearance"
+            i18n-content="requestAccessButton">
+        </button>
+      </div>
+      <h1>
+        <a id="feedback-link" is="action-link" i18n-content="feedbackLink"></a>
+      </h1>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,41 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("backend") {
+  sources = [
+    "audio_pipeline_device.cc",
+    "audio_pipeline_device.h",
+    "audio_pipeline_device_default.cc",
+    "audio_pipeline_device_default.h",
+    "media_clock_device.cc",
+    "media_clock_device.h",
+    "media_clock_device_default.cc",
+    "media_clock_device_default.h",
+    "media_component_device.cc",
+    "media_component_device.h",
+    "media_component_device_default.cc",
+    "media_component_device_default.h",
+    "media_pipeline_device.cc",
+    "media_pipeline_device.h",
+    "media_pipeline_device_factory.h",
+    "media_pipeline_device_factory_default.cc",
+    "media_pipeline_device_factory_default.h",
+    "media_pipeline_device_factory_simple.cc",
+    "media_pipeline_device_params.cc",
+    "media_pipeline_device_params.h",
+    "video_pipeline_device.cc",
+    "video_pipeline_device.h",
+    "video_pipeline_device_default.cc",
+    "video_pipeline_device_default.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chromecast/media/base",
+    "//chromecast/media/cma/base",
+    "//media",
+  ]
+
+  configs += [ "//chromecast:config" ]
+}

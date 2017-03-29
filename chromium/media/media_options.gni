@@ -1,0 +1,57 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+declare_args() {
+  # Allows distributions to link pulseaudio directly (DT_NEEDED) instead of
+  # using dlopen. This helps with automated detection of ABI mismatches and
+  # prevents silent errors.
+  link_pulseaudio = false
+
+  # Enable usage of FFmpeg within the media library. Used for most software
+  # based decoding, demuxing, and sometimes optimized FFTs. If disabled,
+  # implementors must provide their own demuxers and decoders.
+  media_use_ffmpeg = true
+
+  # Enable usage of libvpx within the media library. Used for software based
+  # decoding of VP9 and VP8A type content.
+  media_use_libvpx = true
+
+  # Neither Android nor iOS use ffmpeg or libvpx.
+  if (is_android || is_ios) {
+    media_use_ffmpeg = false
+    media_use_libvpx = false
+  }
+
+  # Override to dynamically link the cras (ChromeOS audio) library.
+  use_cras = false
+
+  # Enables runtime selection of PulseAudio library.
+  use_pulseaudio = false
+
+  # Enables runtime selection of ALSA library for audio.
+  use_alsa = false
+
+  # TODO(GYP): How to handled the "embedded" use case?
+  # Original conditional: (OS=="linux" or OS=="freebsd" or OS=="solaris") and embedded!=1
+  if (is_posix && !is_android && !is_mac) {
+    use_alsa = true
+    if (!use_cras) {
+      use_pulseaudio = true
+    }
+  }
+
+  # Enables the MPEG2-TS stream parser for use with Media Source. Disabled by
+  # default since it's not available on the normal Web Platform and costs money.
+  enable_mpeg2ts_stream_parser = false
+
+  # Experiment to enable mojo media application: http://crbug.com/431776
+  # Valid options are:
+  # - "none": Do not use mojo media application.
+  # - "browser": Use mojo media application hosted in the browser process.
+  # - "utility": Use mojo media application hosted in the utility process.
+  enable_mojo_media = "none"
+
+  # TODO(GYP): This should be a platform define.
+  is_openbsd = false
+}

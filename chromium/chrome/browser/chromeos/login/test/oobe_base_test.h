@@ -1,0 +1,121 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef CHROME_BROWSER_CHROMEOS_LOGIN_TEST_OOBE_BASE_TEST_H_
+#define CHROME_BROWSER_CHROMEOS_LOGIN_TEST_OOBE_BASE_TEST_H_
+
+#include <string>
+
+#include "base/callback.h"
+#include "base/command_line.h"
+#include "chrome/browser/chromeos/login/test/https_forwarder.h"
+#include "chrome/browser/chromeos/login/test/js_checker.h"
+#include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
+#include "chrome/browser/chromeos/login/ui/webui_login_display.h"
+#include "chrome/browser/extensions/extension_apitest.h"
+#include "chrome/test/base/in_process_browser_test.h"
+#include "content/public/test/test_utils.h"
+#include "google_apis/gaia/fake_gaia.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
+
+namespace content {
+class WebUI;
+class WindowedNotificationObserver;
+}
+
+namespace extensions {
+class ScopedCurrentChannel;
+}
+
+namespace chromeos {
+
+class NetworkPortalDetectorTestImpl;
+
+// Base class for OOBE, login, SAML and Kiosk tests.
+class OobeBaseTest : public ExtensionApiTest {
+ public:
+  // Default fake user email and password, may be used by tests.
+
+  static const char kFakeUserEmail[];
+  static const char kFakeUserPassword[];
+
+  // FakeGaia is configured to return these cookies for kFakeUserEmail.
+  static const char kFakeSIDCookie[];
+  static const char kFakeLSIDCookie[];
+
+  OobeBaseTest();
+  ~OobeBaseTest() override;
+
+  // Subclasses may register their own custom request handlers that will
+  // process requests prior it gets handled by FakeGaia instance.
+  virtual void RegisterAdditionalRequestHandlers();
+
+ protected:
+  // InProcessBrowserTest overrides.
+  void SetUp() override;
+  void SetUpInProcessBrowserTestFixture() override;
+  bool SetUpUserDataDirectory() override;
+  void SetUpOnMainThread() override;
+  void TearDownOnMainThread() override;
+  void SetUpCommandLine(base::CommandLine* command_line) override;
+
+  virtual void InitHttpsForwarders();
+
+  // Network status control functions.
+  void SimulateNetworkOffline();
+  void SimulateNetworkOnline();
+  void SimulateNetworkPortal();
+
+  base::Closure SimulateNetworkOfflineClosure();
+  base::Closure SimulateNetworkOnlineClosure();
+  base::Closure SimulateNetworkPortalClosure();
+
+  // Checks JavaScript |expression| in login screen.
+  void JsExpect(const std::string& expression);
+
+  test::JSChecker& JS() { return js_checker_; }
+
+  bool use_webview() { return use_webview_; }
+  void set_use_webview(bool use_webview) { use_webview_ = use_webview; }
+
+  bool initialize_fake_merge_session() {
+    return initialize_fake_merge_session_;
+  }
+  void set_initialize_fake_merge_session(bool value) {
+    initialize_fake_merge_session_ = value;
+  }
+
+  // Returns chrome://oobe WebUI.
+  content::WebUI* GetLoginUI();
+
+  // Returns login display.
+  WebUILoginDisplay* GetLoginDisplay();
+
+  void WaitForGaiaPageLoad();
+  void WaitForSigninScreen();
+  void ExecuteJsInSigninFrame(const std::string& js);
+  void SetSignFormField(const std::string& field_id,
+                        const std::string& field_value);
+
+  scoped_ptr<FakeGaia> fake_gaia_;
+  NetworkPortalDetectorTestImpl* network_portal_detector_;
+
+  // Whether to use background networking. Note this is only effective when it
+  // is set before SetUpCommandLine is invoked.
+  bool needs_background_networking_;
+
+  scoped_ptr<content::WindowedNotificationObserver> login_screen_load_observer_;
+  scoped_ptr<extensions::ScopedCurrentChannel> scoped_channel_;
+  HTTPSForwarder gaia_https_forwarder_;
+  std::string gaia_frame_parent_;
+  bool use_webview_;
+  bool initialize_fake_merge_session_;
+  test::JSChecker js_checker_;
+
+  DISALLOW_COPY_AND_ASSIGN(OobeBaseTest);
+};
+
+}  // namespace chromeos
+
+#endif  // CHROME_BROWSER_CHROMEOS_LOGIN_TEST_OOBE_BASE_TEST_H_

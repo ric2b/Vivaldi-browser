@@ -1,0 +1,271 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//tools/grit/grit_rule.gni")
+
+if (is_android) {
+  import("//build/config/android/rules.gni")  # For generate_jni().
+}
+
+config("bluetooth_config") {
+  if (is_win) {
+    ldflags = [
+      "/DELAYLOAD:BluetoothApis.dll",
+
+      # Despite MSDN stating that Bthprops.dll contains the
+      # symbols declared by bthprops.lib, they actually reside here:
+      "/DELAYLOAD:Bthprops.cpl",
+      "/DELAYLOAD:setupapi.dll",
+    ]
+  }
+}
+
+component("bluetooth") {
+  sources = [
+    "android/bluetooth_jni_registrar.cc",
+    "android/bluetooth_jni_registrar.h",
+    "android/wrappers.cc",
+    "android/wrappers.h",
+    "bluetooth_adapter.cc",
+    "bluetooth_adapter.h",
+    "bluetooth_adapter_android.cc",
+    "bluetooth_adapter_android.h",
+    "bluetooth_adapter_chromeos.cc",
+    "bluetooth_adapter_chromeos.h",
+    "bluetooth_adapter_factory.cc",
+    "bluetooth_adapter_factory.h",
+    "bluetooth_adapter_mac.h",
+    "bluetooth_adapter_mac.mm",
+    "bluetooth_adapter_profile_chromeos.cc",
+    "bluetooth_adapter_profile_chromeos.h",
+    "bluetooth_adapter_win.cc",
+    "bluetooth_adapter_win.h",
+    "bluetooth_advertisement.cc",
+    "bluetooth_advertisement.h",
+    "bluetooth_advertisement_chromeos.cc",
+    "bluetooth_advertisement_chromeos.h",
+    "bluetooth_audio_sink.cc",
+    "bluetooth_audio_sink.h",
+    "bluetooth_audio_sink_chromeos.cc",
+    "bluetooth_audio_sink_chromeos.h",
+    "bluetooth_channel_mac.h",
+    "bluetooth_channel_mac.mm",
+    "bluetooth_classic_device_mac.h",
+    "bluetooth_classic_device_mac.mm",
+    "bluetooth_device.cc",
+    "bluetooth_device.h",
+    "bluetooth_device_chromeos.cc",
+    "bluetooth_device_chromeos.h",
+    "bluetooth_device_mac.h",
+    "bluetooth_device_mac.mm",
+    "bluetooth_device_win.cc",
+    "bluetooth_device_win.h",
+    "bluetooth_discovery_filter.cc",
+    "bluetooth_discovery_filter.h",
+    "bluetooth_discovery_manager_mac.h",
+    "bluetooth_discovery_manager_mac.mm",
+    "bluetooth_discovery_session.cc",
+    "bluetooth_discovery_session.h",
+    "bluetooth_gatt_characteristic.cc",
+    "bluetooth_gatt_characteristic.h",
+    "bluetooth_gatt_connection.cc",
+    "bluetooth_gatt_connection.h",
+    "bluetooth_gatt_connection_chromeos.cc",
+    "bluetooth_gatt_connection_chromeos.h",
+    "bluetooth_gatt_descriptor.cc",
+    "bluetooth_gatt_descriptor.h",
+    "bluetooth_gatt_notify_session.cc",
+    "bluetooth_gatt_notify_session.h",
+    "bluetooth_gatt_notify_session_chromeos.cc",
+    "bluetooth_gatt_notify_session_chromeos.h",
+    "bluetooth_gatt_service.cc",
+    "bluetooth_gatt_service.h",
+    "bluetooth_init_win.cc",
+    "bluetooth_init_win.h",
+    "bluetooth_l2cap_channel_mac.h",
+    "bluetooth_l2cap_channel_mac.mm",
+    "bluetooth_low_energy_defs_win.cc",
+    "bluetooth_low_energy_defs_win.h",
+    "bluetooth_low_energy_device_mac.h",
+    "bluetooth_low_energy_device_mac.mm",
+    "bluetooth_low_energy_discovery_manager_mac.h",
+    "bluetooth_low_energy_discovery_manager_mac.mm",
+    "bluetooth_low_energy_win.cc",
+    "bluetooth_low_energy_win.h",
+    "bluetooth_pairing_chromeos.cc",
+    "bluetooth_pairing_chromeos.h",
+    "bluetooth_remote_gatt_characteristic_chromeos.cc",
+    "bluetooth_remote_gatt_characteristic_chromeos.h",
+    "bluetooth_remote_gatt_descriptor_chromeos.cc",
+    "bluetooth_remote_gatt_descriptor_chromeos.h",
+    "bluetooth_remote_gatt_service_chromeos.cc",
+    "bluetooth_remote_gatt_service_chromeos.h",
+    "bluetooth_rfcomm_channel_mac.h",
+    "bluetooth_rfcomm_channel_mac.mm",
+    "bluetooth_service_record_win.cc",
+    "bluetooth_service_record_win.h",
+    "bluetooth_socket.cc",
+    "bluetooth_socket.h",
+    "bluetooth_socket_chromeos.cc",
+    "bluetooth_socket_chromeos.h",
+    "bluetooth_socket_mac.h",
+    "bluetooth_socket_mac.mm",
+    "bluetooth_socket_net.cc",
+    "bluetooth_socket_net.h",
+    "bluetooth_socket_thread.cc",
+    "bluetooth_socket_thread.h",
+    "bluetooth_socket_win.cc",
+    "bluetooth_socket_win.h",
+    "bluetooth_task_manager_win.cc",
+    "bluetooth_task_manager_win.h",
+    "bluetooth_uuid.cc",
+    "bluetooth_uuid.h",
+  ]
+
+  defines = [ "DEVICE_BLUETOOTH_IMPLEMENTATION" ]
+
+  all_dependent_configs = [ ":bluetooth_config" ]
+
+  deps = [
+    ":strings",
+    "uribeacon",
+    "//base",
+    "//net",
+    "//ui/base",
+  ]
+
+  if (is_android) {
+    deps += [ ":jni_headers" ]
+  }
+
+  if (is_chromeos) {
+    deps += [
+      "//chromeos",
+      "//dbus",
+    ]
+  }
+
+  if (is_mac) {
+    libs = [ "IOBluetooth.framework" ]
+  }
+
+  if (is_win) {
+    libs = [ "setupapi.lib" ]
+  }
+}
+
+grit("strings") {
+  source = "bluetooth_strings.grd"
+  outputs = [
+    "grit/device_bluetooth_strings.h",
+    "device_bluetooth_strings_am.pak",
+    "device_bluetooth_strings_ar.pak",
+    "device_bluetooth_strings_bg.pak",
+    "device_bluetooth_strings_bn.pak",
+    "device_bluetooth_strings_ca.pak",
+    "device_bluetooth_strings_cs.pak",
+    "device_bluetooth_strings_da.pak",
+    "device_bluetooth_strings_de.pak",
+    "device_bluetooth_strings_el.pak",
+    "device_bluetooth_strings_en-GB.pak",
+    "device_bluetooth_strings_en-US.pak",
+    "device_bluetooth_strings_es.pak",
+    "device_bluetooth_strings_es-419.pak",
+    "device_bluetooth_strings_et.pak",
+    "device_bluetooth_strings_fa.pak",
+    "device_bluetooth_strings_fake-bidi.pak",
+    "device_bluetooth_strings_fi.pak",
+    "device_bluetooth_strings_fil.pak",
+    "device_bluetooth_strings_fr.pak",
+    "device_bluetooth_strings_gu.pak",
+    "device_bluetooth_strings_he.pak",
+    "device_bluetooth_strings_hi.pak",
+    "device_bluetooth_strings_hr.pak",
+    "device_bluetooth_strings_hu.pak",
+    "device_bluetooth_strings_id.pak",
+    "device_bluetooth_strings_it.pak",
+    "device_bluetooth_strings_ja.pak",
+    "device_bluetooth_strings_kn.pak",
+    "device_bluetooth_strings_ko.pak",
+    "device_bluetooth_strings_lt.pak",
+    "device_bluetooth_strings_lv.pak",
+    "device_bluetooth_strings_ml.pak",
+    "device_bluetooth_strings_mr.pak",
+    "device_bluetooth_strings_ms.pak",
+    "device_bluetooth_strings_nl.pak",
+    "device_bluetooth_strings_nb.pak",
+    "device_bluetooth_strings_pl.pak",
+    "device_bluetooth_strings_pt-BR.pak",
+    "device_bluetooth_strings_pt-PT.pak",
+    "device_bluetooth_strings_ro.pak",
+    "device_bluetooth_strings_ru.pak",
+    "device_bluetooth_strings_sk.pak",
+    "device_bluetooth_strings_sl.pak",
+    "device_bluetooth_strings_sr.pak",
+    "device_bluetooth_strings_sv.pak",
+    "device_bluetooth_strings_sw.pak",
+    "device_bluetooth_strings_ta.pak",
+    "device_bluetooth_strings_te.pak",
+    "device_bluetooth_strings_th.pak",
+    "device_bluetooth_strings_tr.pak",
+    "device_bluetooth_strings_uk.pak",
+    "device_bluetooth_strings_vi.pak",
+    "device_bluetooth_strings_zh-CN.pak",
+    "device_bluetooth_strings_zh-TW.pak",
+  ]
+}
+
+static_library("mocks") {
+  testonly = true
+  sources = [
+    "test/mock_bluetooth_adapter.cc",
+    "test/mock_bluetooth_adapter.h",
+    "test/mock_bluetooth_advertisement.cc",
+    "test/mock_bluetooth_advertisement.h",
+    "test/mock_bluetooth_central_manager_mac.h",
+    "test/mock_bluetooth_central_manager_mac.mm",
+    "test/mock_bluetooth_device.cc",
+    "test/mock_bluetooth_device.h",
+    "test/mock_bluetooth_discovery_session.cc",
+    "test/mock_bluetooth_discovery_session.h",
+    "test/mock_bluetooth_gatt_characteristic.cc",
+    "test/mock_bluetooth_gatt_characteristic.h",
+    "test/mock_bluetooth_gatt_connection.cc",
+    "test/mock_bluetooth_gatt_connection.h",
+    "test/mock_bluetooth_gatt_descriptor.cc",
+    "test/mock_bluetooth_gatt_descriptor.h",
+    "test/mock_bluetooth_gatt_notify_session.cc",
+    "test/mock_bluetooth_gatt_notify_session.h",
+    "test/mock_bluetooth_gatt_service.cc",
+    "test/mock_bluetooth_gatt_service.h",
+    "test/mock_bluetooth_socket.cc",
+    "test/mock_bluetooth_socket.h",
+  ]
+
+  deps = [
+    ":bluetooth",
+    "//base",
+    "//net",
+    "//testing/gmock",
+  ]
+}
+
+if (is_android) {
+  java_sources_needing_jni = [
+    "android/java/src/org/chromium/device/bluetooth/ChromeBluetoothAdapter.java",
+    "android/java/src/org/chromium/device/bluetooth/Wrappers.java",
+  ]
+
+  generate_jni("jni_headers") {
+    sources = java_sources_needing_jni
+    jni_package = "bluetooth"
+  }
+
+  android_library("java") {
+    java_files = java_sources_needing_jni
+    deps = [
+      "//base:base_java",
+    ]
+  }
+}

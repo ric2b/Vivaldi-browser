@@ -1,0 +1,55 @@
+// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+//
+#ifndef ANDROID_WEBVIEW_NATIVE_STATE_SERIALIZER_H_
+#define ANDROID_WEBVIEW_NATIVE_STATE_SERIALIZER_H_
+
+#include "base/compiler_specific.h"
+
+namespace base {
+
+class Pickle;
+class PickleIterator;
+
+}  // namespace base
+
+namespace content {
+
+class NavigationEntry;
+class WebContents;
+
+}  // namespace content
+
+namespace android_webview {
+
+// Write and restore a WebContents to and from a pickle. Return true on
+// success.
+
+// Note that |pickle| may be changed even if function returns false.
+bool WriteToPickle(const content::WebContents& web_contents,
+                   base::Pickle* pickle) WARN_UNUSED_RESULT;
+
+// |web_contents| will not be modified if function returns false.
+bool RestoreFromPickle(base::PickleIterator* iterator,
+                       content::WebContents* web_contents) WARN_UNUSED_RESULT;
+
+
+namespace internal {
+
+// Functions below are individual helper functiosn called by functions above.
+// They are broken up for unit testing, and should not be called out side of
+// tests.
+bool WriteHeaderToPickle(base::Pickle* pickle) WARN_UNUSED_RESULT;
+bool RestoreHeaderFromPickle(base::PickleIterator* iterator) WARN_UNUSED_RESULT;
+bool WriteNavigationEntryToPickle(const content::NavigationEntry& entry,
+                                  base::Pickle* pickle) WARN_UNUSED_RESULT;
+bool RestoreNavigationEntryFromPickle(
+    base::PickleIterator* iterator,
+    content::NavigationEntry* entry) WARN_UNUSED_RESULT;
+
+}  // namespace interanl
+
+}  // namespace android_webview
+
+#endif  // ANDROID_WEBVIEW_NATIVE_STATE_SERIALIZER_H_

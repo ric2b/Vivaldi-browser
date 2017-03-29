@@ -1,0 +1,38 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "ui/ozone/platform/cast/surface_ozone_egl_cast.h"
+
+#include "ui/gfx/vsync_provider.h"
+#include "ui/ozone/platform/cast/surface_factory_cast.h"
+
+namespace ui {
+
+SurfaceOzoneEglCast::~SurfaceOzoneEglCast() {
+  parent_->ChildDestroyed();
+}
+
+intptr_t SurfaceOzoneEglCast::GetNativeWindow() {
+  return reinterpret_cast<intptr_t>(parent_->GetNativeWindow());
+}
+
+bool SurfaceOzoneEglCast::OnSwapBuffers() {
+  return true;
+}
+
+bool SurfaceOzoneEglCast::OnSwapBuffersAsync(
+    const SwapCompletionCallback& callback) {
+  callback.Run(gfx::SwapResult::SWAP_ACK);
+  return true;
+}
+
+bool SurfaceOzoneEglCast::ResizeNativeWindow(const gfx::Size& viewport_size) {
+  return parent_->ResizeDisplay(viewport_size);
+}
+
+scoped_ptr<gfx::VSyncProvider> SurfaceOzoneEglCast::CreateVSyncProvider() {
+  return nullptr;
+}
+
+}  // namespace ui

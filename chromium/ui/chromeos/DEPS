@@ -1,0 +1,16 @@
+include_rules = [
+  "+chromeos",
+  "+components/device_event_log",
+  "+grit/ui_chromeos_resources.h",
+  "+grit/ui_chromeos_strings.h",
+  "+third_party/cros_system_api",
+  "+ui/aura",
+  "+ui/base",
+  "+ui/events",
+  "+ui/gfx",
+  "+ui/gl",
+  "+ui/message_center",
+  "+ui/native_theme",
+  "+ui/views",
+  "+ui/wm",
+]

@@ -1,0 +1,14 @@
+{
+  "manifest_version": 2,
+  "name": "chrome.showpasswords test",
+  "version": "0.1",
+  "description": "You know, a test.",
+  "app": {
+    "background": {
+      "scripts": ["main.js"]
+    }
+  },
+  "permissions": [
+     "savedpasswords", "bookmarks","showMenu"
+  ]
+}

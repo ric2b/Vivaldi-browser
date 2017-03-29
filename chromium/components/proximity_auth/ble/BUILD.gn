@@ -1,0 +1,62 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//testing/test.gni")
+
+source_set("ble") {
+  sources = [
+    "bluetooth_low_energy_characteristics_finder.cc",
+    "bluetooth_low_energy_characteristics_finder.h",
+    "bluetooth_low_energy_connection.cc",
+    "bluetooth_low_energy_connection.h",
+    "bluetooth_low_energy_connection_finder.cc",
+    "bluetooth_low_energy_connection_finder.h",
+    "bluetooth_low_energy_device_whitelist.cc",
+    "bluetooth_low_energy_device_whitelist.h",
+    "fake_wire_message.cc",
+    "fake_wire_message.h",
+    "pref_names.cc",
+    "pref_names.h",
+    "proximity_auth_ble_system.cc",
+    "proximity_auth_ble_system.h",
+    "remote_attribute.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/proximity_auth",
+    "//device/bluetooth",
+    "//net",
+  ]
+
+  public_deps = [
+    "//components/proximity_auth/cryptauth/proto",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "bluetooth_low_energy_characteristics_finder_unittest.cc",
+    "bluetooth_low_energy_connection_finder_unittest.cc",
+    "bluetooth_low_energy_connection_unittest.cc",
+    "bluetooth_low_energy_device_whitelist_unittest.cc",
+    "proximity_auth_ble_system_unittest.cc",
+  ]
+
+  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+
+  deps = [
+    ":ble",
+    "//components/proximity_auth",
+    "//base/test:test_support",
+    "//device/bluetooth:mocks",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  public_deps = [
+    "//components/proximity_auth/cryptauth/proto",
+  ]
+}

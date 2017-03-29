@@ -1,0 +1,133 @@
+# Copyright (c) 2013 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+{
+  'conditions': [
+    ['OS=="linux"', {
+      'variables': {
+        'files': [
+          '<(PRODUCT_DIR)/libosmesa.so',
+        ],
+      },
+    }],
+    ['disable_nacl==0 and OS=="linux"', {
+      'variables': {
+        'files': [
+          '<(PRODUCT_DIR)/nacl_helper<(EXECUTABLE_SUFFIX)',
+          '<(PRODUCT_DIR)/nacl_helper_bootstrap<(EXECUTABLE_SUFFIX)',
+        ]
+      }
+    }],
+    ['disable_nacl==0 and OS=="linux" and (target_arch=="x64" or target_arch=="ia32" or target_arch=="arm")', {
+      'variables': {
+        'files': [
+          '<(PRODUCT_DIR)/nacl_helper_nonsfi<(EXECUTABLE_SUFFIX)',
+        ]
+      }
+    }],
+    ['OS=="linux" or OS=="mac" or OS=="win"', {
+      'variables': {
+        'files': [
+          '<(PRODUCT_DIR)/resources.pak',
+        ],
+      },
+    }],
+    ['OS=="linux" or OS=="win"', {
+      'variables': {
+        'command': [
+          '<(PRODUCT_DIR)/vivaldi<(EXECUTABLE_SUFFIX)',
+        ],
+        'files': [
+          '<(PRODUCT_DIR)/vivaldi<(EXECUTABLE_SUFFIX)',
+          '<(PRODUCT_DIR)/vivaldi_100_percent.pak',
+          '<(PRODUCT_DIR)/locales/en-US.pak',
+          '<(PRODUCT_DIR)/locales/fr.pak',
+          '<(PRODUCT_DIR)/resources/extension/',
+        ],
+      },
+    }],
+    ['disable_nacl==0 and (OS=="win" or (OS=="linux" and target_arch=="x64"))', {
+      'variables': {
+        'files': [
+          '<(PRODUCT_DIR)/nacl_irt_x86_64.nexe',
+        ],
+      },
+    }],
+    ['disable_nacl==0 and OS=="linux" and target_arch=="arm"', {
+      'variables': {
+        'files': [
+          '<(PRODUCT_DIR)/nacl_irt_arm.nexe',
+        ],
+      },
+    }],
+    ['OS=="mac"', {
+      'variables': {
+        'command': [
+          '<(PRODUCT_DIR)/<(mac_product_name).app/Contents/MacOS/<(mac_product_name)',
+        ],
+        'files': [
+          '<(PRODUCT_DIR)/<(mac_product_name) Framework.framework/',
+          '<(PRODUCT_DIR)/<(mac_product_name) Helper.app/',
+          '<(PRODUCT_DIR)/<(mac_product_name).app/',
+          '<(PRODUCT_DIR)/exif.so',
+        ],
+      },
+    }],
+    ['OS=="mac" and asan==1 and fastbuild==0', {
+      'variables': {
+        'files': [
+          '<(PRODUCT_DIR)/<(mac_product_name) Framework.framework.dSYM/',
+          '<(PRODUCT_DIR)/<(mac_product_name) Helper.app.dSYM/',
+          '<(PRODUCT_DIR)/<(mac_product_name).app.dSYM/',
+          '<(PRODUCT_DIR)/exif.so.dSYM/',
+        ],
+      },
+    }],
+    ['OS=="win"', {
+      'variables': {
+        'files': [
+          '<(PRODUCT_DIR)/<(version_full).manifest',
+          '<(PRODUCT_DIR)/vivaldi_200_percent.pak',
+          '<(PRODUCT_DIR)/vivaldi.dll',
+          '<(PRODUCT_DIR)/vivaldi_elf.dll',
+          '<(PRODUCT_DIR)/libexif.dll',
+          '<(PRODUCT_DIR)/osmesa.dll',
+        ],
+      },
+    }],
+    ['OS=="win" and target_arch=="ia32"', {
+      'variables': {
+        'files': [
+          '<(PRODUCT_DIR)/wow_helper.exe',
+        ],
+      },
+    }],
+    ['disable_nacl==0 and OS=="win" and target_arch=="ia32"', {
+      'variables': {
+        'files': [
+          '<(PRODUCT_DIR)/nacl64.exe',
+          '<(PRODUCT_DIR)/nacl_irt_x86_32.nexe',
+        ],
+      },
+    }],
+    ['OS=="win" and component=="static_library"', {
+      'variables': {
+        'files': [
+          '<(PRODUCT_DIR)/vivaldi_child.dll',
+        ],
+      },
+    }],
+    ['OS=="win" and kasko==1', {
+      'variables': {
+        'files': [
+          '<(PRODUCT_DIR)/kasko.dll',
+        ],
+      },
+    }],
+  ],
+  'includes': [
+    '../base/base.isolate',
+    '../third_party/angle/angle.isolate',
+    '../gin/v8.isolate',
+  ],
+}

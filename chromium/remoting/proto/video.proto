@@ -1,0 +1,81 @@
+// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Protocol for video messages.
+
+syntax = "proto2";
+
+option optimize_for = LITE_RUNTIME;
+
+package remoting;
+
+message VideoPacketFormat {
+  // Identifies how the image was encoded.
+  enum Encoding {
+    ENCODING_INVALID = -1;
+    ENCODING_VERBATIM = 0;
+    ENCODING_ZLIB = 1;
+    ENCODING_VP8 = 2;
+    ENCODING_VP9 = 3;
+  };
+
+  // The encoding used for this image update.
+  optional Encoding encoding = 5 [default = ENCODING_INVALID];
+
+  // Width and height of the whole screen.
+  optional int32 screen_width = 6;
+  optional int32 screen_height = 7;
+
+  // Horizontal and vertical DPI of the screen. If either of these is zero or
+  // unset, the corresponding DPI should be assumed to be 96 (Windows' default)
+  optional int32 x_dpi = 8;
+  optional int32 y_dpi = 9;
+}
+
+// TODO(hclam): Remove this message once we can obtain dirty rects from libvpx.
+message Rect {
+  optional int32 x = 1;
+  optional int32 y = 2;
+  optional int32 width = 3;
+  optional int32 height = 4;
+}
+
+message VideoPacket {
+  optional VideoPacketFormat format = 4;
+
+  optional bytes data = 5;
+
+  // List of rectangles updated by this frame.
+  repeated Rect dirty_rects = 6;
+
+  // Time in milliseconds spent in capturing this video frame.
+  optional int64 capture_time_ms = 7;
+
+  // Time in milliseconds spent in encoding this video frame.
+  optional int64 encode_time_ms = 8;
+
+  // The client's timestamp of the latest event received by the host before
+  // starting to capture this video frame.
+  optional int64 latest_event_timestamp = 9;
+
+  repeated Rect desktop_shape_rects = 10;
+
+  // True when |desktop_shape_rects| should be used.
+  optional bool use_desktop_shape = 11;
+
+  // Optional frame timestamp. Used in tests to estimate frame latency.
+  optional int64 timestamp = 12;
+
+  // Frame identifier used to match VideoFrame and VideoAck.
+  optional int32 frame_id = 13;
+}
+
+// VideoAck acknowledges that the frame in the VideoPacket with the same
+// frame_id has been rendered. VideoAck messages must be sent only for frames
+// that have frame_id field set. They must be sent the same order in which
+// the corresponding VideoPackets were received.
+message VideoAck {
+  // Frame ID.
+  optional int32 frame_id = 1;
+}

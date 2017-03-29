@@ -1,0 +1,108 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("update_client") {
+  sources = [
+    "action.cc",
+    "action.h",
+    "action_update.cc",
+    "action_update.h",
+    "action_update_check.cc",
+    "action_update_check.h",
+    "action_wait.cc",
+    "action_wait.h",
+    "background_downloader_win.cc",
+    "background_downloader_win.h",
+    "component_patcher.cc",
+    "component_patcher.h",
+    "component_patcher_operation.cc",
+    "component_patcher_operation.h",
+    "component_unpacker.cc",
+    "component_unpacker.h",
+    "configurator.h",
+    "crx_downloader.cc",
+    "crx_downloader.h",
+    "crx_update_item.h",
+    "ping_manager.cc",
+    "ping_manager.h",
+    "request_sender.cc",
+    "request_sender.h",
+    "task.h",
+    "task_update.cc",
+    "task_update.h",
+    "update_checker.cc",
+    "update_checker.h",
+    "update_client.cc",
+    "update_client.h",
+    "update_client_internal.h",
+    "update_engine.cc",
+    "update_engine.h",
+    "update_query_params.cc",
+    "update_query_params.h",
+    "update_query_params_delegate.cc",
+    "update_query_params_delegate.h",
+    "update_response.cc",
+    "update_response.h",
+    "url_fetcher_downloader.cc",
+    "url_fetcher_downloader.h",
+    "utils.cc",
+    "utils.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/crx_file",
+    "//courgette:courgette_lib",
+    "//crypto",
+    "//third_party/libxml",
+    "//third_party/zlib:zip",
+    "//net",
+    "//url",
+  ]
+}
+
+source_set("test_support") {
+  testonly = true
+  sources = [
+    "test_configurator.cc",
+    "test_configurator.h",
+    "test_installer.cc",
+    "test_installer.h",
+    "url_request_post_interceptor.cc",
+    "url_request_post_interceptor.h",
+  ]
+
+  deps = [
+    ":update_client",
+    "//base",
+    "//net:test_support",
+    "//testing/gtest",
+    "//testing/gmock",
+    "//url",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "component_patcher_unittest.cc",
+    "crx_downloader_unittest.cc",
+    "ping_manager_unittest.cc",
+    "request_sender_unittest.cc",
+    "update_checker_unittest.cc",
+    "update_client_unittest.cc",
+    "update_response_unittest.cc",
+  ]
+
+  deps = [
+    ":update_client",
+    ":test_support",
+    "//base",
+    "//courgette:courgette_lib",
+    "//net:test_support",
+    "//testing/gtest",
+    "//testing/gmock",
+    "//third_party/libxml",
+  ]
+}

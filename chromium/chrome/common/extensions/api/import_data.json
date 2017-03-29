@@ -1,0 +1,376 @@
+// Copyright (c) 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+[
+  {
+    "namespace": "importData",
+    "description": "Use the <code>chrome.displayBrowsers</code> to display installed browsers.",
+    "types": [
+      {
+        "id": "UserProfileItem",
+        "type": "object",
+        "description": "UserProfileItem. Contains info for userprofile",
+        "properties": {
+          "profileDisplayName": {
+            "type": "string",
+            "description": "The profile display name."
+          },
+          "profileName": {
+            "type": "string",
+            "description": "The profile name."
+          }
+        }
+      },
+      {
+        "id": "ProfileItem",
+        "type": "object",
+        "description": "ProfileItem.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Import item name."
+          },
+          "index": {
+            "type": "integer",
+            "description": "The profile item index."
+          },
+          "history": {
+            "type": "boolean",
+            "description": "Does profile support history."
+          },
+          "favorites": {
+            "type": "boolean",
+            "description": "Does profile support favorites."
+          },
+          "passwords": {
+            "type": "boolean",
+            "description": "Does profile support passwords."
+          },
+          "search": {
+            "type": "boolean",
+            "description": "Does profile support search."
+          },
+          "notes": {
+            "type": "boolean",
+            "description": "Does profile support notes."
+          },
+          "UserProfiles": {
+            "name": "Profiles",
+            "type": "array",
+            "items": {
+              "$ref": "UserProfileItem"
+            }
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "getProfiles",
+        "type": "function",
+        "description": "Retrieves import data profiles.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "results",
+                "type": "array",
+                "items": {"$ref": "ProfileItem"}
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "startImport",
+        "type": "function",
+        "description": "Start import process.",
+        "parameters": [
+          {
+            "name": "itemsToImport",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "serialized_type": "int64"
+            }
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "setVivaldiAsDefaultBrowser",
+        "type": "function",
+        "description": "Set Vivaldi as the default browser.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "isVivaldiDefaultBrowser",
+        "type": "function",
+        "description": "Is Vivaldi the default browser.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "launchNetworkSettings",
+        "type": "function",
+        "description": "Launch network settings.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "savePage",
+        "type": "function",
+        "description": "Saves web page.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "openPage",
+        "type": "function",
+        "description": "Open web page.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "setVivaldiLanguage",
+        "type": "function",
+        "description": "Set Vivaldi language settings.",
+        "parameters": [
+          {
+            "name": "locale",
+            "type": "string"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "setDefaultContentSettings",
+        "type": "function",
+        "description": "Set Vivaldi default content settings.",
+        "parameters": [
+          {
+            "name": "contentSetting",
+            "type": "string"
+          },
+          {
+            "name": "value",
+            "type": "string"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getDefaultContentSettings",
+        "type": "function",
+        "description": "Set Vivaldi default content settings.",
+        "parameters": [
+          {
+            "name": "contentSetting",
+            "type": "string"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "setBlockThirdPartyCookies",
+        "type": "function",
+        "description": "Set Vivaldi default content settings.",
+        "parameters": [
+          {
+            "name": "block3rdParty",
+            "type": "boolean"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "boolean"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getBlockThirdPartyCookies",
+        "type": "function",
+        "description": "Set Vivaldi default content settings.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "blockThirdParty",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "boolean"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "openTaskManager",
+        "type": "function",
+        "description": "Opens Vivaldi task manager dialog.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "showDevTools",
+        "type": "function",
+        "description": "Open developer tools.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getStartupAction",
+        "type": "function",
+        "description": "Returns the startup action.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "results",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "setStartupAction",
+        "type": "function",
+        "description": "Returns the startup action.",
+        "parameters": [
+          {
+            "name": "startup",
+            "type": "string"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "results",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -1,0 +1,134 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+Polymer((function() {
+  var DEFAULT_EMAIL_DOMAIN = '@gmail.com';
+
+  return {
+    is: 'offline-gaia',
+
+    properties: {
+      disabled: {
+        type: Boolean,
+        value: false
+      },
+
+      enterpriseInfo: String,
+
+      emailDomain: String
+    },
+
+    ready: function() {
+      /**
+       * Workaround for
+       * https://github.com/PolymerElements/neon-animation/issues/32
+       * TODO(dzhioev): Remove when fixed in Polymer.
+       */
+      var pages = this.$.animatedPages;
+      delete pages._squelchNextFinishEvent;
+      Object.defineProperty(pages, '_squelchNextFinishEvent',
+          { get: function() { return false; } });
+    },
+
+    onAnimationFinish_: function() {
+      this.$.backButton.hidden = this.isEmailSectionActive_();
+      this.focus();
+    },
+
+    focus: function() {
+      if (this.isEmailSectionActive_())
+        this.$.emailInput.focus();
+      else
+        this.$.passwordInput.focus();
+    },
+
+    onForgotPasswordClicked_: function() {
+      this.$.forgotPasswordDlg.fitInto = this;
+      this.disabled = true;
+      this.$.forgotPasswordDlg.open();
+      this.$.passwordCard.classList.add('full-disabled');
+      this.$.forgotPasswordDlg.focus();
+    },
+
+    onDialogOverlayClosed_: function() {
+      this.disabled = false;
+      this.$.passwordCard.classList.remove('full-disabled');
+    },
+
+    setEmail: function(email) {
+      if (email) {
+        if (this.emailDomain)
+          email = email.replace(this.emailDomain, '');
+        this.switchToPasswordCard(email);
+        this.$.passwordInput.isInvalid = true;
+      } else {
+        this.$.emailInput.value = '';
+        this.switchToEmailCard();
+      }
+    },
+
+    onBack_: function() {
+      this.$.backButton.hidden = true;
+      this.switchToEmailCard();
+    },
+
+    isRTL_: function() {
+      return !!document.querySelector('html[dir=rtl]');
+    },
+
+    isEmailSectionActive_: function() {
+      return this.$.animatedPages.selected == 'emailSection';
+    },
+
+    switchToEmailCard() {
+      this.$.passwordInput.value = '';
+      this.$.passwordInput.isInvalid = false;
+      this.$.emailInput.isInvalid = false;
+      if (this.isEmailSectionActive_())
+        return;
+      this.$.animatedPages.entryAnimation =
+          'slide-from-' + (this.isRTL_() ? 'right' : 'left') + '-animation';
+      this.$.animatedPages.exitAnimation =
+          'slide-' + (this.isRTL_() ? 'left' : 'right') + '-animation';
+      this.$.animatedPages.selected = 'emailSection';
+    },
+
+    switchToPasswordCard(email) {
+      this.$.emailInput.value = email;
+      if (email.indexOf('@') === -1) {
+        if (this.emailDomain)
+          email = email + this.emailDomain;
+        else
+          email = email + DEFAULT_EMAIL_DOMAIN;
+      }
+      this.$.passwordHeader.email = email;
+      if (!this.isEmailSectionActive_())
+        return;
+      this.$.animatedPages.entryAnimation =
+          'slide-from-' + (this.isRTL_() ? 'left' : 'right') + '-animation';
+      this.$.animatedPages.exitAnimation =
+          'slide-' + (this.isRTL_() ? 'right' : 'left') + '-animation';
+      this.$.animatedPages.selected = 'passwordSection';
+    },
+
+    onEmailSubmitted_: function() {
+      if (this.$.emailInput.checkValidity())
+        this.switchToPasswordCard(this.$.emailInput.value);
+      else
+        this.$.emailInput.focus();
+    },
+
+    onPasswordSubmitted_: function() {
+      if (!this.$.passwordInput.checkValidity())
+        return;
+      var msg = {
+        'useOffline': true,
+        'email': this.$.passwordHeader.email,
+        'password': this.$.passwordInput.value
+      };
+      this.$.passwordInput.value = '';
+      this.fire('authCompleted', msg);
+    }
+  };
+})());

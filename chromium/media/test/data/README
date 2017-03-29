@@ -1,0 +1,192 @@
+// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+bear-320x240.webm - WebM encode of bear.1280x720.mp4 resized to 320x240.
+bear-320x240-video-only.webm - The video track of bear-320x240.webm.
+bear-320x240-audio-only.webm - The audio track of bear-320x240.webm.
+bear-vp9.webm - VP9 video only WebM file.
+bear-vp9-opus.webm - VP9 Video with Opus Audio.
+bear-vp8-webvtt.webm - WebM VP8 video with WebVTT subtitle track.
+bear-vp8a.webm - WebM VP8 video with alpha channel.
+bear-vp8a-odd-dimensions.webm - WebM VP8 video with alpha channel and odd dimensions.
+bear-opus.webm - Opus Audio only WebM file.
+bear-opus-end-trimming.webm - File to test end trimming. It has one byte
+                              artificially added so that there is maximum
+                              padding at the end. It is an Opus Audio only WebM
+                              file.
+no_streams.webm - Header, Info, & Tracks element from bear-320x240.webm slightly corrupted so it looks
+                  like there are no tracks.
+nonzero-start-time.webm - Has the same headers as bear-320x240.webm but the first cluster of this file
+                          is the second cluster of bear-320x240.webm. This creates the situation where
+                          the media data doesn't start at time 0.
+bear-320x240-live.webm - bear-320x240.webm remuxed w/o a duration and using clusters with unknown sizes.
+                         ffmpeg -i bear-320x240.webm -acodec copy -vcodec copy -f webm pipe:1 > bear-320x240-live.webm
+vp8-I-frame-160x240 - The first I frame of a 160x240 reencode of bear-320x240.webm.
+vp8-I-frame-320x120 - The first I frame of a 320x120 reencode of bear-320x240.webm.
+vp8-I-frame-320x240 - The first I frame of bear-320x240.webm.
+vp8-I-frame-320x480 - The first I frame of a 320x480 reencode of bear-320x240.webm.
+vp8-I-frame-640x240 - The first I frame of a 640x240 reencode of bear-320x240.webm.
+vp8-corrupt-I-frame - A copy of vp8-I-frame-320x240 w/ all bytes XORed w/ 0xA5.
+
+Vorbis test data from bear.ogv (44100 Hz, 16 bits, stereo)
+vorbis-extradata - Vorbis extradata section
+vorbis-packet-0  - timestamp: 0ms, duration: 0ms
+vorbis-packet-1  - timestamp: 0ms, duration: 0ms
+vorbis-packet-2  - timestamp: 0ms, duration: 0ms
+vorbis-packet-3  - timestamp: 2902ms, duration: 0ms
+
+// Encrypted Files
+bear-1280x720-a_frag-cenc.mp4 - A fragmented MP4 version of the audio track of bear-1280x720.mp4 encrypted (ISO CENC) using key ID [1] and key [2].
+bear-1280x720-a_frag-cenc-key_rotation.mp4 - A fragmented MP4 version of the audio track of bear-1280x720.mp4 encrypted (ISO CENC) using key ID [1] and key [2] with key rotation [3].
+bear-1280x720-a_frag-cenc_clear-all.mp4 - Same as bear-1280x720-a_frag-cenc.mp4 but no fragments are encrypted.
+bear-1280x720-v_frag-cenc.mp4 - A fragmented MP4 version of the video track of bear-1280x720.mp4 encrypted (ISO CENC) using key ID [1] and key [2].
+bear-1280x720-v_frag-cenc-key_rotation.mp4 - A fragmented MP4 version of the video track of bear-1280x720.mp4 encrypted (ISO CENC) using key ID [1] and key [2] with key rotation [3].
+bear-1280x720-v_frag-cenc_clear-all.mp4 - Same as bear-1280x720-v_frag-cenc.mp4 but no fragments are encrypted.
+bear-1280x720-a_frag-cenc_missing-saiz-saio.mp4 - An invalid file similar to bear-1280x720-a_frag-cenc.mp4 but has no saiz and saio boxes. To save space, it has only one encrypted sample.
+bear-320x240-16x9-aspect-av_enc-av.webm - bear-320x240-16x9-aspect.webm with audio & video encrypted using key ID [1] and key [2]
+bear-320x240-av_enc-av.webm - bear-320x240.webm with audio & video encrypted using key ID [1] and key [2].
+bear-320x240-av_enc-av_clear-1s.webm - Same as bear-320x240-av_enc-av.webm but with no frames in the first second encrypted.
+bear-320x240-av_enc-av_clear-all.webm - Same as bear-320x240-av_enc-av.webm but with no frames encrypted.
+bear-640x360-av_enc-av.webm - bear-640x360.webm with audio & video encrypted using key ID [1] and key [2].
+bear-320x240-av_enc-v.webm - bear-320x240.webm with video track encrypted using key ID [1] and key [2].
+bear-320x240-av_enc-a.webm - bear-320x240.webm with audio track encrypted using key ID [1] and key [2].
+bear-320x240-v_enc-v.webm - bear-320x240-video-only.webm encrypted using key ID [1] and key [2].
+bear-320x240-v-vp9_enc-v.webm - bear-vp9.webm VP9 video only encrypted using key ID [1] and key [2].
+bear-320x240-opus-a_enc-a.webm - bear-opus.webm encrypted using key ID [1] and key[2].
+bear-320x240-opus-av_enc-av.webm - bear-vp9-opus.webm with audio & video encrypted using key ID [1] and key[2].
+bear-320x240-opus-av_enc-v.webm - bear-vp9-opus.webm with video track encrypted using key ID [1] and key[2].
+bear-640x360-a_frag-cenc.mp4 - A fragmented MP4 version of the audio track of bear-640x360.mp4 encrypted (ISO CENC) using key ID [1] and key [2].
+bear-640x360-a_frag-cenc-key_rotation.mp4 - A fragmented MP4 version of the audio track of bear-640x360.mp4 encrypted (ISO CENC) using key ID [1] and key [2] with key rotation [3].
+bear-640x360-v_frag-cenc.mp4 - A fragmented MP4 version of the video track of bear-640x360.mp4 encrypted (ISO CENC) using key ID [1] and key [2].
+bear-640x360-v_frag-cenc-key_rotation.mp4 - A fragmented MP4 version of the video track of bear-640x360.mp4 encrypted (ISO CENC) using key ID [1] and key [2] with key rotation [3].
+bear-a_enc-a.webm - bear-320x240-audio-only.webm encrypted using key ID [1] and key [2].
+frame_size_change-av_enc-v.webm - third_party/WebKit/LayoutTests/media/resources/frame_size_change.webm encrypted using key ID [1] and key [2].
+
+
+[1] 30313233343536373839303132333435
+[2] ebdd62f16814d27b68ef122afce4ae3c
+[3] KeyIds and Keys are created by left rotating key ID [1] and key [2] using
+    std::rotate for every new crypto period. This is only for testing. The
+    actual key rotation algorithm is often much more complicated.
+
+// Container Tests (additional containers derived from bear.ogv)
+bear.ac3    -- created using "avconv -i bear.ogv -f ac3 -b 192k bear.ac3".
+bear.adts   -- created using "avconv -i bear.ogv -f adts -strict experimental bear.adts".
+bear.aiff   -- created using "avconv -i bear.ogv -f aiff bear.aiff".
+bear.asf    -- created using "avconv -i bear.ogv -f asf bear.asf".
+bear.avi    -- created using "avconv -i bear.ogv -f avi -b 192k bear.avi".
+bear.eac3   -- created using "avconv -i bear.ogv -f eac3 bear.eac3".
+bear.flac   -- created using "avconv -i bear.ogv -f flac bear.flac".
+bear.flv    -- created using "avconv -i bear.ogv -f flv bear.flv".
+bear.h261   -- created using "avconv -i bear.ogv -f h261 -s:0 cif bear.h261".
+bear.h263   -- created using "avconv -i bear.ogv -f h263 -s:0 cif bear.h263".
+bear.m2ts   -- created using "avconv -i bear.ogv -f mpegts bear.m2ts".
+bear.mjpeg  -- created using "avconv -i bear.ogv -f mjpeg bear.mjpeg".
+bear.mpeg   -- created using "avconv -i bear.ogv -f mpeg bear.mpeg".
+bear.rm     -- created using "avconv -i bear.ogv -f rm -b 192k bear.rm".
+bear.swf    -- created using "avconv -i bear.ogv -f swf -an bear.swf".
+
+// VDA test files: test-25fps
+test-25fps.h264:
+  Using ffmpeg SVN-r0.5.9-4:0.5.9-0ubuntu0.10.04.1 @ WebKit r122718, generated
+  with:
+  ffmpeg -i third_party/WebKit/LayoutTests/media/content/test-25fps.mp4 \
+      -vcodec copy -vbsf h264_mp4toannexb -an test-25fps.h264
+
+test-25fps.h264.md5:
+  MD5s of RGB thumbnail rendered version of test-25fps.h264 decoded with Intel
+  VAAPI on Haswell, Ivy Bridge, Sandy Bridge and V4L2VDA on Exynos.
+  Written out by video_decode_accelerator_unittest.
+  These differ between implementations because color space-converted frames are
+  not specified to the last bit and GLES shader/texture filtering
+  precision varies.
+
+test-25fps.vp8:
+  ffmpeg git-2012-07-19-a8d8e86, libvpx ToT 7/19, chromium r147247,
+  mkvextract v5.0.1
+  ffmpeg -i test-25fps.h264 -vcodec libvpx -an test-25fps.webm && \
+      mkvextract tracks test-25fps.webm 1:test-25fps.vp8 && rm test-25fps.webm
+
+test-25fps.vp8.md5:
+  MD5 of RGB thumbnail rendered version of test-25fps.vp8 decoded with V4L2VDA
+  on Exynos. Written out by video_decode_accelerator_unittest.
+
+test-25fps.vp9:
+  avconv 9.16-6:9.16-0ubuntu0.14.04.1, vpxenc v1.3.0
+  avconv -i test-25fps.h264 -c:v rawvideo -pix_fmt yuv420p test-25fps_i420.yuv
+  vpxenc test-25fps_i420.yuv -o test-25fps.vp9 --codec=vp9 -w 320 -h 240 --ivf \
+      --profile=0 --kf-min-dist=0 --kf-max-dist=150 --lag-in-frames=24 \
+      --drop-frame=0 --target-bitrate=140 --cq-level=23 --min-q=4 --max-q=56 \
+      --static-thresh=1000 --arnr-maxframes=7 --arnr-strength=5 --arnr-type=3 \
+      --cpu-used=1 --good --tile-columns=1 --passes=2 --threads=1 --fps=25/1 \
+      --end-usage=cq --auto-alt-ref=1 --bias-pct=50 --minsection-pct=0 \
+      --maxsection-pct=2000 --undershoot-pct=100
+
+test-25fps.vp9.md5:
+  MD5 of RGB thumbnail rendered version of test-25fps.vp9. Written out by
+  video_decode_accelerator_unittest.
+
+// VDA test files: bear
+bear.h264:
+  Using ffmpeg version 0.8.6-4:0.8.6-0ubuntu0.12.04.1, generated with
+  bear.mp4 (https://chromiumcodereview.appspot.com/10805089):
+  ffmpeg -i bear.mp4 -vcodec copy -vbsf h264_mp4toannexb \
+      -an bear.h264
+
+bear.h264.md5:
+  MD5s of RGB thumbnail rendered version of bear.h264 decoded with Intel
+  VAAPI on Ivy Bridge and Sandy Bridge and V4L2VDA on Exynos.
+  Written out by video_decode_accelerator_unittest.
+  These differ between implementations because color space-converted frames are
+  not specified to the last bit and GLES shader/texture filtering
+  precision varies.
+
+// VDA test files: npot-video
+npot-video.h264:
+  Using ffmpeg version 0.8.6-4:0.8.6-0ubuntu0.12.04.1, generated with
+  npot-video.mp4 (https://codereview.chromium.org/8342021):
+  ffmpeg -i npot-video.mp4 -vcodec copy -vbsf h264_mp4toannexb \
+      -an npot-video.h264
+
+npot-video.h264.md5:
+  MD5s of RGB thumbnail rendered version of npot-video.h264 decoded with Intel
+  VAAPI on Ivy Bridge and Sandy Bridge and V4L2VDA on Exynos.
+  Written out by video_decode_accelerator_unittest.
+  These differ between implementations because color space-converted frames are
+  not specified to the last bit and GLES shader/texture filtering
+  precision varies.
+
+// VDA test files: red-green
+red-green.h264:
+  Using ffmpeg version 0.8.6-4:0.8.6-0ubuntu0.12.04.1, generated with
+  red-green.mp4 (https://codereview.chromium.org/8342021):
+  ffmpeg -i red-green.mp4 -vcodec copy -vbsf h264_mp4toannexb \
+      -an red-green.h264
+
+red-green.h264.md5:
+  MD5s of RGB thumbnail rendered version of red-green.h264 decoded with Intel
+  VAAPI on Ivy Bridge and Sandy Bridge and V4L2VDA on Exynos.
+  Written out by video_decode_accelerator_unittest.
+  These differ between implementations because color space-converted frames are
+  not specified to the last bit and GLES shader/texture filtering
+  precision varies.
+
+// VEA test files:
+bear_320x192_40frames.yuv
+  First 40 raw i420 frames of bear-1280x720.mp4 scaled down to 320x192 for
+  video_encode_accelerator_unittest.
+
+// JPEG test files:
+pixel-1280x720.jpg - single MJEPG encoded frame of 1280x720, captured on
+ Chromebook Pixel.
+blank-1x1.jpg - 1x1 small picture to test special cases.
+
+// MP4 files with non-square pixels.
+media/test/data/bear-640x360-non_square_pixel-with_pasp.mp4
+  Size in TKHD is (639.2x360) and size in STSD is (470x360). A PASP box is
+  present with hSpacing=34 and vSpacing=25. Note that 470.0 * 34 / 25 = 639.2.
+
+media/test/data/bear-640x360-non_square_pixel-without_pasp.mp4
+  Size in TKHD is (639.2x360) and size in STSD is (470x360). No PASP box is
+  present.

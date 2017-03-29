@@ -1,0 +1,37 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module content;
+
+import "content/public/common/background_sync.mojom";
+import "content/public/common/permission_status.mojom";
+
+enum BackgroundSyncError {
+  NONE,
+  STORAGE,
+  NOT_FOUND,
+  NO_SERVICE_WORKER,
+  MAX=NO_SERVICE_WORKER
+};
+
+interface BackgroundSyncService {
+  Register(SyncRegistration options, int64 service_worker_registration_id)
+      => (BackgroundSyncError err, SyncRegistration options);
+  GetRegistration(BackgroundSyncPeriodicity periodicity, string tag,
+                  int64 service_worker_registration_id)
+      => (BackgroundSyncError err, SyncRegistration? registration);
+  GetRegistrations(BackgroundSyncPeriodicity periodicity,
+                   int64 service_worker_registration_id)
+      => (BackgroundSyncError err, array<SyncRegistration> registrations);
+  Unregister(BackgroundSyncPeriodicity periodicity, int64 id, string tag,
+             int64 service_worker_registration_id) => (BackgroundSyncError err);
+  GetPermissionStatus(BackgroundSyncPeriodicity periodicity,
+                      int64 service_worker_registration_id)
+      => (BackgroundSyncError err, PermissionStatus status);
+};
+
+interface BackgoundSyncServiceClient {
+  Sync(SyncRegistration event);
+};
+

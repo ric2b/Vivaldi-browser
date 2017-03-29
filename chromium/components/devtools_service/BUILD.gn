@@ -1,0 +1,42 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//mojo/public/mojo_application.gni")
+
+source_set("lib") {
+  sources = [
+    "devtools_agent_host.cc",
+    "devtools_agent_host.h",
+    "devtools_http_server.cc",
+    "devtools_http_server.h",
+    "devtools_registry_impl.cc",
+    "devtools_registry_impl.h",
+    "devtools_service.cc",
+    "devtools_service.h",
+    "devtools_service_delegate.cc",
+    "devtools_service_delegate.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/devtools_service/public/interfaces",
+    "//mojo/application/public/cpp",
+    "//mojo/common",
+    "//mojo/services/network/public/cpp",
+    "//mojo/services/network/public/interfaces",
+    "//third_party/mojo/src/mojo/public/cpp/bindings",
+    "//url",
+  ]
+}
+
+mojo_native_application("devtools_service") {
+  sources = [
+    "main.cc",
+  ]
+
+  deps = [
+    ":lib",
+    "//mojo/application/public/cpp",
+  ]
+}

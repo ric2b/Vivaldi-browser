@@ -1,0 +1,79 @@
+# For Linux sandboxing
+jln@chromium.org
+
+# For security review of sandboxes
+per-file sandbox_win.cc=set noparent
+per-file sandbox_win.cc=jschuh@chromium.org
+per-file sandbox_win.cc=cpu@chromium.org
+per-file sandbox_win.cc=wfh@chromium.org
+
+# Mac Sandbox.
+per-file sandbox_init_mac.*=rsesek@chromium.org
+per-file sandbox_mac*=rsesek@chromium.org
+per-file *.sb=set noparent
+per-file *.sb=rsesek@chromium.org
+
+per-file pepper*=ananta@chromium.org
+per-file pepper*=bauerb@chromium.org
+per-file plugin*=ananta@chromium.org
+per-file plugin*=bauerb@chromium.org
+
+# Changes to IPC messages require a security review to avoid introducing
+# new sandbox escapes.
+per-file *_message*.h=set noparent
+per-file *_message*.h=dcheng@chromium.org
+per-file *_message*.h=inferno@chromium.org
+per-file *_message*.h=jln@chromium.org
+per-file *_message*.h=jschuh@chromium.org
+per-file *_message*.h=kenrb@chromium.org
+per-file *_message*.h=mkwst@chromium.org
+per-file *_message*.h=nasko@chromium.org
+per-file *_message*.h=palmer@chromium.org
+per-file *_message*.h=tsepez@chromium.org
+per-file *_message*.h=wfh@chromium.org
+
+per-file *_messages.cc=set noparent
+per-file *_messages.cc=dcheng@chromium.org
+per-file *_messages.cc=inferno@chromium.org
+per-file *_messages.cc=jln@chromium.org
+per-file *_messages.cc=jschuh@chromium.org
+per-file *_messages.cc=kenrb@chromium.org
+per-file *_messages.cc=mkwst@chromium.org
+per-file *_messages.cc=nasko@chromium.org
+per-file *_messages.cc=palmer@chromium.org
+per-file *_messages.cc=tsepez@chromium.org
+per-file *_messages.cc=wfh@chromium.org
+
+per-file *param_traits*.h=set noparent
+per-file *param_traits*.h=dcheng@chromium.org
+per-file *param_traits*.h=inferno@chromium.org
+per-file *param_traits*.h=jln@chromium.org
+per-file *param_traits*.h=jschuh@chromium.org
+per-file *param_traits*.h=kenrb@chromium.org
+per-file *param_traits*.h=mkwst@chromium.org
+per-file *param_traits*.h=nasko@chromium.org
+per-file *param_traits*.h=palmer@chromium.org
+per-file *param_traits*.h=tsepez@chromium.org
+per-file *param_traits*.h=wfh@chromium.org
+
+# Changes to Mojo interfaces require a security review to avoid
+# introducing new sandbox escapes.
+per-file *.mojom=set noparent
+per-file *.mojom=tsepez@chromium.org
+
+# Accessibility
+per-file accessibility_node_data.*=dmazzoni@chromium.org
+per-file accessibility_node_data.*=dtseng@chromium.org
+
+# WebSocket
+per-file websocket.*=ricea@chromium.org
+per-file websocket.*=tyoshino@chromium.org
+per-file websocket.*=yhirano@chromium.org
+
+# Compositor
+per-file cc_messages_unittest.cc=danakj@chromium.org
+per-file cc_messages_perftest.cc=danakj@chromium.org
+
+# DirectWrite
+per-file dwrite_font_platform_win*=shrikant@chromium.org
+per-file dwrite_font_platform_win*=scottmg@chromium.org

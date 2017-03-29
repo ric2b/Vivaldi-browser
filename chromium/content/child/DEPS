@@ -1,0 +1,14 @@
+include_rules = [
+  # Allow inclusion of specific components that we depend on. We may only
+  # depend on components which we share with the mojo html_viewer.
+  "+components/mime_util",
+  "+components/scheduler/child",
+  "+components/scheduler/common",
+  "+components/tracing",
+  "+components/webcrypto",
+
+  "+content/app/strings/grit",  # For generated headers
+  "+content/public/child",
+  "+media/base",
+  "+v8/include/v8.h"
+]

@@ -1,0 +1,8 @@
+include_rules = [
+  "+chrome/app/chrome_crash_reporter_client.h",
+  "+components/crash",
+  "+components/nacl",
+  "+content/public/app/startup_helper_win.h",
+  "+content/public/common/content_switches.h",
+  "+sandbox/win/src",
+]

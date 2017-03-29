@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "sites": [
+    {
+      "name": "YouTube",
+      "url": "http://www.youtube.com",
+      "thumbnails": {
+        "128": "youtube_128.png"
+      },
+      "whitelist": [
+        "youtube.com",
+        "ytimg.com",
+        "https://googleusercontent.com",
+        "gstatic.com"
+      ]
+    },
+    {
+      "name": "Homestar Runner",
+      "url": "http://homestarrunner.com"
+    },
+    {
+      "whitelist": [
+        "example.com",
+        "www.iana.org/domains/example/"
+      ]
+    }
+  ]
+}

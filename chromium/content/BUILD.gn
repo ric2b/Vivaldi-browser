@@ -1,0 +1,100 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//tools/grit/grit_rule.gni")
+
+# Applied by targets internal to content.
+config("content_implementation") {
+  defines = [ "CONTENT_IMPLEMENTATION" ]
+}
+
+# When targets depend on, e.g. //content/public/browser, what happens? To
+# facilitate the complexity here, the "public" targets are groups that forward
+# to the right thing depending on the build mode. Say for additional
+# illustration, the public browser sources also depend on the public common
+# ones.
+#
+# The non-component build is easy:
+# foo ->
+#   //content/public/browser (group) ->
+#     //content/public/browser:browser_sources (source set) ->
+#       //content/browser (source set, this is the non-public browser target)
+#       //content/public/common:common_sources (source set)
+#
+# The component build is more complicated because we want everybody to depend on
+# one content shared library regardless of which public target they depend on:
+# foo ->
+#   //content/public/browser (group) ->
+#     //content (shared library) ->
+#       //content/public/browser:browser_sources (source set) ->
+#         //content/browser (source set; this is the non-public browser target)
+#         //content/public/common:common_sources (source set)
+#
+# That the internal content dependencies must depend on the *_sources targets
+# to avoid dependency cycles, and external dependencies must depend on the
+# //content/public/browser and similar targets to avoid double-linking (these
+# targets make sure the dependency goes through the content shared library
+# when doing a component build).
+
+content_shared_components = [
+  "//content/gpu:gpu_sources",
+  "//content/public/browser:browser_sources",
+  "//content/public/child:child_sources",
+  "//content/public/common:common_sources",
+  "//content/public/plugin:plugin_sources",
+  "//content/public/renderer:renderer_sources",
+  "//content/public/utility:utility_sources",
+]
+
+if (enable_plugins) {
+  content_shared_components += [ "//content/ppapi_plugin:ppapi_plugin_sources" ]
+}
+
+if (is_component_build) {
+  shared_library("content") {
+    public_deps =
+        content_shared_components + [ "//content/public/app:both_sources" ]
+  }
+} else {
+  group("content") {
+    deps = content_shared_components
+  }
+}
+
+grit("resources") {
+  source = "content_resources.grd"
+  use_qualified_include = true
+  outputs = [
+    "grit/content_resources.h",
+    "content_resources.pak",
+    "content_resources.rc",
+  ]
+}
+
+# This target exists to "hold" the content_export header so we can do proper
+# inclusion testing of it.
+source_set("export") {
+  visibility = [ "//content/*" ]
+  sources = [
+    "content/common/content_export.h",
+  ]
+}
+
+# In the GYP build, this file is listed in several targets. In GN just have
+# those targets depend on this one. This can be depended on for any
+# platform for simplicity, and is a no-op on non-Windows.
+source_set("startup_helper_win") {
+  if (is_win) {
+    sources = [
+      "app/startup_helper_win.cc",
+      "public/app/startup_helper_win.h",
+    ]
+
+    deps = [
+      "//base",
+      "//base:i18n",
+      "//sandbox",
+    ]
+  }
+}

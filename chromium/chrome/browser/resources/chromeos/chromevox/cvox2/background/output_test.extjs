@@ -1,0 +1,372 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+GEN_INCLUDE(['../../testing/assert_additions.js']);
+GEN_INCLUDE(['../../testing/chromevox_next_e2e_test_base.js']);
+
+/**
+ * Test fixture for output.js.
+ * @constructor
+ * @extends {ChromeVoxNextE2ETestBase}
+ */
+function OutputE2ETest() {
+  ChromeVoxNextE2ETest.call(this);
+}
+
+OutputE2ETest.prototype = {
+  __proto__: ChromeVoxNextE2ETest.prototype,
+
+  /** @override */
+  setUp: function() {
+    window.Dir = AutomationUtil.Dir;
+  }
+};
+
+TEST_F('OutputE2ETest', 'Links', function() {
+  this.runWithLoadedTree('<a href="#">Click here</a>',
+    function(root) {
+      var el = root.firstChild.firstChild;
+      var range = cursors.Range.fromNode(el);
+      var o = new Output().withSpeechAndBraille(range, null, 'navigate');
+      assertEqualsJSON({string_: 'Click hereLink', 'spans_': [
+        // Attributes.
+        {value: 'name', start: 0, end: 10},
+
+        // Link earcon (based on the name).
+        {value: {}, start: 0, end: 10},
+
+        {value: 'role', start: 10, end: 14}
+      ]}, o.toSpannable());
+  });
+});
+
+TEST_F('OutputE2ETest', 'Checkbox', function() {
+  this.runWithLoadedTree('<input type="checkbox">',
+    function(root) {
+      var el = root.firstChild.firstChild;
+      var range = cursors.Range.fromNode(el);
+      var o = new Output().withSpeechAndBraille(range, null, 'navigate');
+      assertEqualsJSON({string_: 'Check boxnot checked', 'spans_': [
+        // Attributes.
+        {value: 'name', start: 0, end: 0},
+        {value: 'role', start: 0, end: 9},
+        {value: 'state', start: 9, end: 20},
+
+        // Link earcon (based on the state).
+        {value: {}, start: 9, end: 20}
+      ]}, o.toSpannable());
+  });
+});
+
+TEST_F('OutputE2ETest', 'InLineTextBoxValueGetsIgnored', function() {
+  this.runWithLoadedTree('<p>OK',
+    function(root) {
+      var el = root.firstChild.firstChild.firstChild;
+      assertEquals('inlineTextBox', el.role);
+      var range = cursors.Range.fromNode(el);
+      var o = new Output().withSpeechAndBraille(range, null, 'navigate');
+      assertEqualsJSON({string_: 'OK', 'spans_': [
+        // Attributes.
+        {value: 'name', start: 0, end: 2}
+      ]}, o.toSpannable());
+
+      el = root.firstChild.firstChild;
+      assertEquals('staticText', el.role);
+      range = cursors.Range.fromNode(el);
+      o = new Output().withSpeechAndBraille(range, null, 'navigate');
+      assertEqualsJSON({string_: 'OK', 'spans_': [
+        // Attributes.
+        {value: 'value', start: 0, end: 2},
+
+        // The name is an empty string.
+        {value: 'name', start: 2, end: 2}
+      ]}, o.toSpannable());
+  });
+});
+
+TEST_F('OutputE2ETest', 'Headings', function() {
+  this.runWithLoadedTree(function() {/*!
+      <h1>a</h1><h2>b</h2><h3>c</h3><h4>d</h4><h5>e</h5><h6>f</h6>
+      <h1><a href="a.com">b</a></h1> */},
+    function(root) {
+      var el = root.firstChild;
+      var range = cursors.Range.fromNode(el);
+      var o = new Output().withSpeechAndBraille(range, null, 'navigate');
+      assertEqualsJSON({string_: 'Heading 1a', 'spans_': [
+        // Attributes.
+        {value: 'nameOrDescendants', start: 9, end: 10}
+      ]}, o.toSpannable());
+
+      el = el.nextSibling;
+      range = cursors.Range.fromNode(el);
+      o = new Output().withSpeechAndBraille(range, null, 'navigate');
+      assertEqualsJSON({string_: 'Heading 2b', 'spans_': [
+        // Attributes.
+        {value: 'nameOrDescendants', start: 9, end: 10}
+      ]}, o.toSpannable());
+
+      el = el.nextSibling;
+      range = cursors.Range.fromNode(el);
+      o = new Output().withSpeechAndBraille(range, null, 'navigate');
+      assertEqualsJSON({string_: 'Heading 3c', 'spans_': [
+        // Attributes.
+        {value: 'nameOrDescendants', start: 9, end: 10}
+      ]}, o.toSpannable());
+
+      el = el.nextSibling;
+      range = cursors.Range.fromNode(el);
+      o = new Output().withSpeechAndBraille(range, null, 'navigate');
+      assertEqualsJSON({string_: 'Heading 4d', 'spans_': [
+        // Attributes.
+        {value: 'nameOrDescendants', start: 9, end: 10}
+      ]}, o.toSpannable());
+
+      el = el.nextSibling;
+      range = cursors.Range.fromNode(el);
+      o = new Output().withSpeechAndBraille(range, null, 'navigate');
+      assertEqualsJSON({string_: 'Heading 5e', 'spans_': [
+        // Attributes.
+        {value: 'nameOrDescendants', start: 9, end: 10}
+      ]}, o.toSpannable());
+
+      el = el.nextSibling;
+      range = cursors.Range.fromNode(el);
+      o = new Output().withSpeechAndBraille(range, null, 'navigate');
+      assertEqualsJSON({string_: 'Heading 6f', 'spans_': [
+        // Attributes.
+        {value: 'nameOrDescendants', start: 9, end: 10}
+      ]}, o.toSpannable());
+
+      el = el.nextSibling;
+      range = cursors.Range.fromNode(el);
+      o = new Output().withSpeechAndBraille(range, null, 'navigate');
+      assertEqualsJSON({string_: 'Heading 1|b|Link', 'spans_': [
+        // Link.
+        {value: 'name', start: 10, end: 11},
+        {value: {}, start: 10, end: 11},
+        {value: 'role', start: 12, end: 16}
+      ]}, o.toSpannableForTest());
+  });
+});
+
+TEST_F('OutputE2ETest', 'Audio', function() {
+  this.runWithLoadedTree('<audio src="foo.mp3" controls></audio>',
+    function(root) {
+      var el = root.firstChild.firstChild.firstChild.firstChild;
+      var range = cursors.Range.fromNode(el);
+      var o = new Output().withSpeechAndBraille(range, null, 'navigate');
+      assertEqualsJSON(
+          {string_: 'media control|Tool bar|||play|begin playback|Button',
+           spans_:
+              // Entered container toolbar.
+
+              // Button.
+              [{value: 'name', start: 23, end: 23},
+
+              // Button earcon.
+              {value: {}, start: 23, end: 23},
+
+              {value: 'value', start: 24, end: 24},
+              {value: 'description', start: 25, end: 29},
+              {value: 'help', start: 30, end: 44},
+              {value: 'role', start: 45, end: 51}]
+          }, o.toSpannableForTest());
+
+      el = el.nextSibling;
+      var prevRange = range;
+      range = cursors.Range.fromNode(el);
+      var o = new Output().withSpeechAndBraille(range, prevRange, 'navigate');
+      assertEqualsJSON({string_: '0, , slider|audio time scrubber',
+          spans_:
+              [{value: 'help', start: 12, end: 31}]
+          }, o.toSpannableForTest());
+  });
+});
+
+TEST_F('OutputE2ETest', 'Input', function() {
+  this.runWithLoadedTree(
+      '<input type="text"></input>' +
+      '<input type="email"></input>' +
+      '<input type="password"></input>' +
+      '<input type="tel"></input>'          +
+      '<input type="number"></input>' +
+      '<input type="time"></input>' +
+      '<input type="date"></input>',
+    function(root) {
+      var expected = {string_: '', 'spans_': [
+              {value: 'name', start: 0, end: 0},
+
+              // Earcon
+              {value: {}, start: 0, end: 0},
+
+              // Selection span.
+              {value: {startIndex: 0, endIndex: 0}, start: 1, end: 1},
+
+              {value: 'value', start: 1, end: 1}
+      ]};
+
+      var expectedValues = [
+        '||Edit text',
+        '||Edit text, email entry',
+        '||Password edit text',
+        '||Edit text, number entry',
+        {string_: '||Spin button', spans_: [{value: 'name', start: 0, end: 0},
+            {value: {}, start: 0, end: 0},
+            {value: {startIndex: 0, endIndex: 0}, start: 1, end: 1},
+            {value: 'value', start: 1, end: 1},
+            {value: 'role', start: 2, end: 13}]},
+        {string_: '||inputTime', spans_: [{value: 'name', start: 0, end: 0},
+            {value: 'value', start: 1, end: 1},
+            {value: 'role', start: 2, end: 11}]},
+        {string_: '||Date control', spans_: [{value: 'name', start: 0, end: 0},
+            {value: 'value', start: 1, end: 1},
+            {value: 'role', start: 2, end: 14}]}
+      ];
+
+      var el = root.firstChild.firstChild;
+      expectedValues.forEach(function(expectedValue) {
+        var range = cursors.Range.fromNode(el);
+        var o = new Output().withSpeechAndBraille(range, null, 'navigate');
+        if (typeof expectedValue == 'object') {
+          assertEqualsJSON(expectedValue, o.toSpannableForTest());
+        } else {
+          expected.string_ = expectedValue;
+          assertEqualsJSON(expected, o.toSpannableForTest());
+        }
+        el = el.nextSibling;
+      });
+  });
+});
+
+TEST_F('OutputE2ETest', 'List', function() {
+  this.runWithLoadedTree(
+      '<ul><li>a<li>b<li>c</ul>',
+    function(root) {
+      var el = root.firstChild.firstChild;
+      var range = cursors.Range.fromNode(el);
+      var o = new Output().withSpeechAndBraille(range, null, 'navigate');
+      assertEqualsJSON({string_: 'list|with 3 items|a||List item', spans_: [
+          {value: 'name', start: 18, end: 19},
+          {value: {}, start: 18, end: 19},
+          {value: 'value', start:20, end: 20},
+          {value: 'role', start: 21, end: 30}
+      ]}, o.toSpannableForTest());
+  });
+});
+
+TEST_F('OutputE2ETest', 'Tree', function() {
+  this.runWithLoadedTree(function() {/*!
+    <ul role="tree">
+      <li aria-expanded="true" role="treeitem">a
+      <li role="treeitem">b
+      <li aria-expanded="false" role="treeitem">c
+    </ul>
+  */},
+  function(root) {
+    var el = root.firstChild.children[0].firstChild;
+    var range = cursors.Range.fromNode(el);
+    var o = new Output().withSpeechAndBraille(range, null, 'navigate');
+    assertEqualsJSON(
+        {string_: '|Tree|with 3 items|Tree item|Expanded| 1 of 3 | level 1 |a|',
+        spans_: [
+          // Enter rule.
+
+          // TreeItem.
+          {value: 'role','start': 19, end: 28},
+          {value: 'state', start: 29, end: 37},
+
+          // InLineTextBox.
+          {value: 'value', start: 57, end: 58},
+          {value: 'name', start: 59, end: 59}
+    ]}, o.toSpannableForTest());
+
+    el = root.firstChild.children[1].firstChild;
+    var range = cursors.Range.fromNode(el);
+    var o = new Output().withSpeechAndBraille(range, null, 'navigate');
+    assertEqualsJSON(
+        {string_: '|Tree|with 3 items|Tree item| 2 of 3 | level 1 |b|',
+        spans_: [
+          // Enter rule.
+
+          // TreeItem.
+          {value: 'role','start': 19, end: 28},
+
+          // InLineTextBox.
+          {value: 'value', start: 48, end: 49},
+          {value: 'name', start: 50, end: 50}
+    ]}, o.toSpannableForTest());
+
+    el = root.firstChild.children[2].firstChild;
+    var range = cursors.Range.fromNode(el);
+    var o = new Output().withSpeechAndBraille(range, null, 'navigate');
+    assertEqualsJSON(
+        {string_: '|Tree|with 3 items|Tree item|Collapsed| 3 of 3 | level 1 |c|',
+        spans_: [
+          // Enter rule.
+
+          // TreeItem.
+          {value: 'role','start': 19, end: 28},
+          {value: 'state', start: 29, end: 38},
+
+          // InLineTextBox.
+          {value: 'value', start: 58, end: 59},
+          {value: 'name', start: 60, end: 60}
+    ]}, o.toSpannableForTest());
+  });
+});
+
+TEST_F('OutputE2ETest', 'Menu', function() {
+  this.runWithLoadedTree(function() {/*!
+    <div role="menu">
+      <div role="menuitem">a</div>
+    </div>
+  */},
+  function(root) {
+    var el = root.firstChild.firstChild;
+    var range = cursors.Range.fromNode(el);
+    var o = new Output().withSpeechAndBraille(range, null, 'navigate');
+    assertEqualsJSON({string_:
+            '|Menu|with 1 items|a, menu item| 1 of 1 ', spans_: [
+        {value: 'name', start: 0, end: 0},
+        {value: 'role', start:1, end: 5}
+    ]}, o.toSpannableForTest());
+  });
+});
+
+TEST_F('OutputE2ETest', 'ListBox', function() {
+  this.runWithLoadedTree(function() {/*!
+    <select multiple>
+      <option>1</option>
+      <option>2</option>
+    </select>
+  */},
+  function(root) {
+    var el = root.firstChild.firstChild.firstChild;
+    var range = cursors.Range.fromNode(el);
+    var o = new Output().withSpeechAndBraille(range, null, 'navigate');
+    assertEqualsJSON({string_: '|List box|with 2 items||List item| 1 of 2 ',
+        spans_: [
+          // ListBox.
+          // Earcon.
+          {value: {}, start: 0, end: 0},
+
+          {value: 'name', start: 23, end: 23},
+
+          // Earcon.
+          {value: {}, start: 23, end: 23},
+
+          {value: 'role', start:24, end: 33}
+    ]}, o.toSpannableForTest());
+  });
+});
+
+SYNC_TEST_F('OutputE2ETest', 'MessageIdValidity', function() {
+  for (var key in Output.ROLE_INFO_) {
+    var value = Output.ROLE_INFO_[key];
+    cvox.ChromeVox.msgs.getMsg(value.msgId);
+    assertFalse(/[A-Z]+/.test(value.msgId));
+    if (value.earconId)
+      assertNotNullNorUndefined(cvox.AbstractEarcons[value.earconId]);
+  }
+});

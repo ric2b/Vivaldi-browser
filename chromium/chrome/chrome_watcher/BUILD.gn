@@ -1,0 +1,41 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chrome/version.gni")
+
+source_set("client") {
+  sources = [
+    "chrome_watcher_main_api.cc",
+    "chrome_watcher_main_api.h",
+  ]
+  deps = [
+    "//base",
+  ]
+}
+
+process_version("chrome_watcher_resources") {
+  sources = [
+    "chrome_watcher.ver",
+  ]
+  output = "$target_gen_dir/chrome_watcher_version.rc"
+}
+
+shared_library("chrome_watcher") {
+  sources = [
+    "chrome_watcher_main.cc",
+  ]
+  inputs = [
+    "chrome_watcher.def",
+  ]
+  deps = [
+    ":chrome_watcher_resources",
+    ":client",
+    "//chrome/installer/util",
+    "//base",
+    "//components/browser_watcher",
+  ]
+  ldflags = [ "/DEF:" + rebase_path("chrome_watcher.def", root_build_dir) ]
+  configs -= [ "//build/config/win:console" ]
+  configs += [ "//build/config/win:windowed" ]
+}

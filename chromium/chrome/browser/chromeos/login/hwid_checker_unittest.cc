@@ -1,0 +1,127 @@
+// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "chrome/browser/chromeos/login/hwid_checker.h"
+
+#include "testing/gtest/include/gtest/gtest.h"
+
+
+namespace chromeos {
+
+TEST(HWIDCheckerTest, EmptyHWID) {
+  EXPECT_FALSE(IsHWIDCorrect(""));
+}
+
+TEST(HWIDCheckerTest, HWIDv2) {
+  EXPECT_TRUE(IsHWIDCorrect("SOME DATA 7861"));
+  EXPECT_FALSE(IsHWIDCorrect("SOME DATA 7861 "));
+  EXPECT_FALSE(IsHWIDCorrect("SOME DATA 786 1"));
+  EXPECT_FALSE(IsHWIDCorrect("SOME DATA 786"));
+  EXPECT_FALSE(IsHWIDCorrect("SOME DATA7861"));
+}
+
+TEST(HWIDCheckerTest, ExceptionalHWID) {
+  EXPECT_TRUE(IsHWIDCorrect("SPRING A7N3-BJKQ-E"));
+  EXPECT_TRUE(IsHWIDCorrect("SPRING A7N3-BJKK-3K"));
+  EXPECT_TRUE(IsHWIDCorrect("SPRING A7N3-BJKK-2GI"));
+  EXPECT_TRUE(IsHWIDCorrect("SPRING A7N3-BJKK-2MRO"));
+  EXPECT_TRUE(IsHWIDCorrect("SPRING A7N3-BJKK-2MDG-V"));
+  EXPECT_TRUE(IsHWIDCorrect("SPRING DAKB-NM"));
+  EXPECT_TRUE(IsHWIDCorrect("FALCO APOM-3"));
+
+  // Not exceptions.
+  EXPECT_FALSE(IsHWIDCorrect("SPRING 3A7N-BJKZ-F"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING LA7N-BJK7-H"));
+  EXPECT_FALSE(IsHWIDCorrect("FALCO BPO6-C"));
+
+  // Degenerate cases.
+  EXPECT_FALSE(IsHWIDCorrect("SPRING"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING "));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING KD"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING T7"));
+
+  // No board name.
+  EXPECT_FALSE(IsHWIDCorrect(" CA7N-BJKV-T"));
+  EXPECT_FALSE(IsHWIDCorrect("CA7N-BJKH-S"));
+
+  // Excess fields.
+  EXPECT_FALSE(IsHWIDCorrect("SPRING WINTER CA7N-BJK7-T"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING CA7N-BJKN-D WINTER"));
+
+  // Incorrect BOM format.
+  EXPECT_FALSE(IsHWIDCorrect("SPRING CA7-NBJK-YO"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING CA-7NBJ-KYO"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING -CA7N-BJKY-O"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING CA7N-BJKK-FS-UN"));
+
+  // Incorrect characters.
+  EXPECT_FALSE(IsHWIDCorrect("SPRING CA9N-BJKL-P"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING CA7N-B0KT-S"));
+  EXPECT_FALSE(IsHWIDCorrect("SPrING CA7N-BJKH-W"));
+
+  // Random changes.
+  EXPECT_FALSE(IsHWIDCorrect("SPRUNG CA7N-BJKY-O"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING CA7N-8JKY-O"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING CA7N-BJSY-O"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRINGS CA7N-BJKY-O"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING CA7N-BJKM-L"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRINGXCA7N-BJKZ-F"));
+}
+
+TEST(HWIDCheckerTest, HWIDv3) {
+  EXPECT_TRUE(IsHWIDCorrect("SPRING E2B-C3D-E8X"));
+  EXPECT_TRUE(IsHWIDCorrect("SPRING E2B-C3D-E8X-D8J"));
+  EXPECT_TRUE(IsHWIDCorrect("FALCO B67-36Y"));
+
+  // Exceptions.
+  EXPECT_FALSE(IsHWIDCorrect("SPRING D2B-C3D-E5D"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING A2B-C3D-E8X-D7T"));
+  EXPECT_FALSE(IsHWIDCorrect("FALCO A67-35W"));
+
+  // Degenerate cases.
+  EXPECT_FALSE(IsHWIDCorrect("SPRING"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING "));
+  EXPECT_TRUE(IsHWIDCorrect("SPRING Z34"));
+
+  // No board name.
+  EXPECT_FALSE(IsHWIDCorrect(" C7N-J3V-T4J"));
+  EXPECT_FALSE(IsHWIDCorrect("C7N-J3V-T2I"));
+
+  // Excess fields.
+  EXPECT_FALSE(IsHWIDCorrect("SPRING WINTER E2B-C3D-E3K"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING E2B-C3D-E72 WINTER"));
+
+  // Incorrect BOM format.
+  EXPECT_FALSE(IsHWIDCorrect("SPRING E2BC3D-E8X"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING E2-B-C3D-E8X"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING E2B-C3D-E8X-"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING E2B-C3D-E85-Y"));
+
+  // Incorrect characters.
+  EXPECT_FALSE(IsHWIDCorrect("SPrING E2B-C3D-E3P"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING EAB-C3D-E7Y"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING E2B-C1D-E3W"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING E28-C3D-E7Z"));
+
+  // Random changes.
+  EXPECT_FALSE(IsHWIDCorrect("SPRING E2L-C3D-E8X"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING E2B-C3D-X8X"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRINGZE2B-C3D-E8X"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRMNG E2B-C3D-E8X"));
+  EXPECT_FALSE(IsHWIDCorrect("SPRING E2B-C3D-EIX"));
+}
+
+TEST(HWIDCheckerTest, KnownHWIDs) {
+  EXPECT_TRUE(IsHWIDCorrect("DELL HORIZON MAGENTA 8992"));
+  EXPECT_FALSE(IsHWIDCorrect("DELL HORIZ0N MAGENTA 8992"));
+
+  EXPECT_TRUE(IsHWIDCorrect("DELL HORIZON MAGENTA DVT 4770"));
+  EXPECT_FALSE(IsHWIDCorrect("DELL MAGENTA HORIZON DVT 4770"));
+
+  EXPECT_TRUE(IsHWIDCorrect("SAMS ALEX GAMMA DVT 9247"));
+  EXPECT_FALSE(IsHWIDCorrect("SAMS ALPX GAMMA DVT 9247"));
+}
+
+} // namespace chromeos
+

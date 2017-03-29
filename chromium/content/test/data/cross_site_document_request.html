@@ -1,0 +1,51 @@
+<html>
+<head>
+</head>
+<body>
+
+<p>This test does cross-site XHR fetches of documents with the Same Origin
+Policy turned off in the renderer. The Same Origin Policy can be circumvented
+when the renderer is compromised, but site isolation ought to block cross-site
+documents at the IPC layer.</p>
+
+<p>We only block cross-site documents with a blacklisted mime type (text/html,
+text/xml, application/json), that are correctly sniffed as the content type that
+they claim to be. We also block text/plain documents when their body looks like
+one of the blacklisted content types.</p>
+
+<script>
+var pathPrefix = "http://bar.com/files/site_isolation/";
+
+// To be called from the browsertest via ExecuteScriptAndExtractBool().
+function sendRequest(resourceUrl) {
+  var xhr = new XMLHttpRequest();
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState == 4) {
+      // At one point this test operated with an experimental flag to actually
+      // block requests in the render process -- in that case the blocked
+      // response was replaced with the literal string " ". That flag has been
+      // removed (circa June 2015), but when browser process document blocking
+      // is implemented, we may wish to update this test accordingly.
+      var wasBlocked = xhr.responseText == " ";
+      document.getElementById("response_body").value +=
+          ("\n" + "response to " + resourceUrl + "(" +
+           xhr.getResponseHeader("content-type") + ") " +
+           (wasBlocked ? "blocked" : "not-blocked"));
+
+      domAutomationController.setAutomationId(0);
+      domAutomationController.send(wasBlocked);
+    }
+  }
+  xhr.open('GET', pathPrefix + resourceUrl);
+  xhr.send();
+}
+
+window.onload = function() {
+  // The call to pushState with another domain will succeed, since the
+  // test uses --disable-web-security.
+  history.pushState('', '', 'http://bar.com/files/main.html');
+}
+</script>
+<textarea rows=20 cols=50 id='response_body'></textarea>
+</body>
+</html>

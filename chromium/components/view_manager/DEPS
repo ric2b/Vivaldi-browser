@@ -1,0 +1,12 @@
+include_rules = [
+  "+cc",
+  "+components/gpu",
+  "+mojo/application",
+  "+mojo/common",
+  "+mojo/converters",
+  "+mojo/services/network/public",
+  "+mojo/shell",
+  "+third_party/mojo/src/mojo/public",
+  "+third_party/mojo_services",
+  "+ui",
+]

@@ -1,0 +1,34 @@
+/* Copyright 2013 The Chromium Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file. */
+
+html,
+body {
+  -webkit-user-select: none;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  padding: 0;
+  width: 100%;
+}
+
+#doodle {
+  display: none;
+  justify-content: center;
+}
+
+#default_logo {
+  background-image: -webkit-image-set(
+    url(chrome://theme/IDR_LOCAL_NTP_IMAGES_LOGO_PNG) 1x,
+    url(chrome://theme/IDR_LOCAL_NTP_IMAGES_LOGO_PNG@2x) 2x);
+  background-repeat: no-repeat;
+  height: 95px;
+  margin: auto;
+  width: 269px;
+}
+
+#logo_container {
+  bottom: 0;
+  position: absolute;
+  width: 100%;
+}

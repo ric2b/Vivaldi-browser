@@ -1,0 +1,87 @@
+/* Copyright 2015 The Chromium Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file. */
+
+.active-sink {
+  color: rgb(33, 150, 243);
+}
+
+#container-header.cast-mode {
+  /* TODO(kdresner): Update this when we get a real color. */
+  background-color: rgb(244, 67, 54);
+}
+
+#container-header.filter {
+  background-color: rgb(57, 73, 171);
+}
+
+#container-header.route-details {
+  display: none;
+}
+
+#container-header.sink-list {
+  background-color: rgb(33, 150, 243);
+}
+
+#device-missing {
+  align-items: center;
+  color: rgb(33, 150, 243);
+  display: flex;
+  height: 150px;
+  justify-content: center;
+}
+
+#header-text {
+  -webkit-padding-start: 5px;
+  flex-grow: 1;
+  font-size: 1.4em;
+  margin: 0;
+}
+
+.route {
+  color: rgb(150, 150, 150);
+}
+
+paper-item {
+  cursor: pointer;
+  font-size: 1.0em;
+  line-height: 0;
+  min-height: 0;
+  padding: 14px 0;
+}
+
+paper-item:hover {
+  background-color: rgb(238, 238, 238);
+  border: 0;
+}
+
+paper-item iron-icon {
+  -webkit-padding-end: 16px;
+  -webkit-padding-start: 20px;
+  height: 16px;
+  width: 16px;
+}
+
+paper-menu {
+  -webkit-user-select: none;
+  color: rgb(0, 0, 0);
+  padding: 0;
+}
+
+.sink-content {
+  display: flex;
+  flex-direction: row;
+}
+
+#sink-list {
+  max-height: 275px;
+  overflow-y: scroll;
+}
+
+.sink-text {
+  line-height: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 250px;
+}

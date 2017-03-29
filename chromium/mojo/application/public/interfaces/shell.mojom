@@ -1,0 +1,50 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module mojo;
+
+import "mojo/application/public/interfaces/service_provider.mojom";
+import "network/public/interfaces/url_loader.mojom";
+
+// An interface through which a Mojo application may communicate with the Mojo
+// system and request connections to other applications.
+interface Shell {
+  // Establishes a connection with another application (located at
+  // |request->url|) through which the calling application and the other
+  // application may request services from one another. |application_url| is a
+  // URLRequest in case this is called for an HTTP navigation, in which case
+  // HTTP specific information like POST data, referrer header etc... needed.
+  //
+  // If the calling application would like to request services from the other
+  // application, it should pass a valid interface request in the |services|
+  // parameter (i.e. one containing a valid message pipe endpoint). If the other
+  // application does not wish to offer services, it may either not bind an
+  // implementation to the interface request, or else bind an implementation
+  // that will reject some or all service requests.
+  //
+  // If the calling application would like to offer services to the other
+  // application, it should pass a bound interface through the
+  // |exposed_services| parameter. The other application may then request
+  // services through that interface.
+  //
+  // At least one of |services| or |exposed_services| should be valid/bound in
+  // the call.
+  //
+  // If the |application_url| does not contain a domain, but is of the form
+  // "mojo:{service}", it is up to the Mojo shell to select an appropriate
+  // application for the service. Currently, the shell does this based on the
+  // value of its --origin flag.
+  ConnectToApplication(URLRequest application_url,
+                       ServiceProvider&? services,
+                       ServiceProvider? exposed_services);
+
+  // When there are no more instantiated services in an application, it should
+  // start its shutdown process by calling this method. Additionally, it should
+  // keep track of any new service requests that come in. The shell will then
+  // call Application::OnQuitRequested and start queueing new service requests.
+  // If the application didn't get any new service requests in the meantime, it
+  // should call the callback with a true value. Otherwise it should call it
+  // with false.
+  QuitApplication();
+};

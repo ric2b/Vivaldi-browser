@@ -1,0 +1,88 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Use the <code>chrome.enterprise.platformKeys</code> API to generate
+// hardware-backed keys and to install certificates for these keys. The
+// certificates will be managed by the platform and can be used for TLS
+// authentication, network access or by other extension through
+// $(ref:platformKeys chrome.platformKeys).
+[platforms = ("chromeos")]
+namespace enterprise.platformKeys {
+  [nocompile, noinline_doc] dictionary Token {
+    // Uniquely identifies this <code>Token</code>.
+    // <p>Static IDs are <code>"user"</code> and <code>"system"</code>,
+    // referring to the platform's user-specific and the system-wide hardware
+    // token, respectively. Any other tokens (with other identifiers) might be
+    // returned by $(ref:enterprise.platformKeys.getTokens).</p>
+    DOMString id;
+
+    // Implements the WebCrypto's
+    // <a href="http://www.w3.org/TR/WebCryptoAPI/#subtlecrypto-interface">SubtleCrypto</a>
+    // interface. The cryptographic operations, including key generation, are
+    // hardware-backed.
+    // <p>Only non-extractable RSASSA-PKCS1-V1_5 keys with
+    // <code>modulusLength</code> up to 2048 can be generated. Each key can be
+    // used for signing data at most once.</p>
+    // <p>Keys generated on a specific <code>Token</code> cannot be used with
+    // any other Tokens, nor can they be used with
+    // <code>window.crypto.subtle</code>. Equally, <code>Key</code> objects
+    // created with <code>window.crypto.subtle</code> cannot be used with this
+    // interface.</p>
+    [instanceOf = SubtleCrypto] object subtleCrypto;
+  };
+
+  // Invoked by <code>getTokens</code> with the list of available Tokens.
+  // |tokens|: The list of available tokens.
+  callback GetTokensCallback = void(Token[] tokens);
+
+  // Callback to which the certificates are passed.
+  // |certificates|: The list of certificates, each in DER encoding of a X.509
+  //     certificate.
+  callback GetCertificatesCallback = void(ArrayBuffer[] certificates);
+
+  // Invoked by importCertificate or removeCertificate when the respective
+  // operation is finished.
+  callback DoneCallback = void();
+
+  interface Functions {
+    // Returns the available Tokens. In a regular user's session the list will
+    // always contain the user's token with <code>id</code> <code>"user"</code>.
+    // If a system-wide TPM token is available, the returned list will also
+    // contain the system-wide token with <code>id</code> <code>"system"</code>.
+    // The system-wide token will be the same for all sessions on this device
+    // (device in the sense of e.g. a Chromebook).
+    [nocompile] static void getTokens(GetTokensCallback callback);
+
+    // Returns the list of all client certificates available from the given
+    // token. Can be used to check for the existence and expiration of client
+    // certificates that are usable for a certain authentication.
+    // |tokenId|: The id of a Token returned by <code>getTokens</code>.
+    // |callback|: Called back with the list of the available certificates.
+    static void getCertificates(DOMString tokenId,
+                                GetCertificatesCallback callback);
+
+    // Imports <code>certificate</code> to the given token if the certified key
+    // is already stored in this token.
+    // After a successful certification request, this function should be used to
+    // store the obtained certificate and to make it available to the operating
+    // system and browser for authentication.
+    // |tokenId|: The id of a Token returned by <code>getTokens</code>.
+    // |certificate|: The DER encoding of a X.509 certificate.
+    // |callback|: Called back when this operation is finished.
+    static void importCertificate(DOMString tokenId,
+                                  ArrayBuffer certificate,
+                                  optional DoneCallback callback);
+
+    // Removes <code>certificate</code> from the given token if present.
+    // Should be used to remove obsolete certificates so that they are not
+    // considered during authentication and do not clutter the certificate
+    // choice. Should be used to free storage in the certificate store.
+    // |tokenId|: The id of a Token returned by <code>getTokens</code>.
+    // |certificate|: The DER encoding of a X.509 certificate.
+    // |callback|: Called back when this operation is finished.
+    static void removeCertificate(DOMString tokenId,
+                                  ArrayBuffer certificate,
+                                  optional DoneCallback callback);
+  };
+};

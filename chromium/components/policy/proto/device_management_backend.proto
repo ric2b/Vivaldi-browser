@@ -1,0 +1,1165 @@
+// Copyright 2013 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+syntax = "proto2";
+
+option optimize_for = LITE_RUNTIME;
+
+package enterprise_management;
+
+// Request from device to server to register device.
+message DeviceRegisterRequest {
+  // Reregister device without erasing server state.  It can be used
+  // to refresh dmtoken etc.  Client MUST set this value to true if it
+  // reuses an existing device id.
+  optional bool reregister = 1;
+
+  // Device register type.  This field does not exist for TT release.
+  // When a client requests for policies, server should verify the
+  // client has been registered properly.  For example, a client must
+  // register with type DEVICE in order to retrieve device policies.
+  enum Type {
+    TT   = 0;             // Register for TT release.
+    USER = 1;             // Register for Chrome OS user polices.
+    DEVICE = 2;           // Register for device policies.
+    BROWSER = 3;          // Register for Chrome user policies.
+    ANDROID_BROWSER = 4;  // Register for Android Chrome browser user policies.
+    IOS_BROWSER = 5;      // Register for iOS Chrome browser user policies.
+  }
+  // NOTE: we also use this field to detect client version.  If this
+  // field is missing, then the request comes from TT.  We will remove
+  // Chrome OS TT support once it is over.
+  optional Type type = 2 [default = TT];
+
+  // Machine hardware id, such as serial number.
+  // This field is required if register type == DEVICE.
+  optional string machine_id = 3;
+
+  // Machine model name, such as "ZGA", "Cr-48", "Nexus One".  If the
+  // model name is not available, client SHOULD send generic name like
+  // "Android", or "Chrome OS".
+  optional string machine_model = 4;
+
+  // OBSOLETE: Legacy auto-enrollment is not longer supported.
+  optional bool OBSOLETE_auto_enrolled = 5 [deprecated = true];
+
+  // Indicates a requisition of the registering entity that the server can act
+  // upon. This allows clients to pass hints e.g. at device enrollment time
+  // about the intended use of the device.
+  optional string requisition = 6;
+
+  // The current server-backed state key for the client, if applicable. This can
+  // be used by the server to link the registration request to an existing
+  // device record for re-enrollment.
+  optional bytes server_backed_state_key = 7;
+
+  // Enumerates different flavors of registration.
+  enum Flavor {
+    // User manually enrolls a device for device management.
+    FLAVOR_ENROLLMENT_MANUAL = 0;
+    // User re-starts enrollment manually to recover from loss of policy.
+    FLAVOR_ENROLLMENT_MANUAL_RENEW = 1;
+    // Device enrollment forced by local device configuration, such as OEM
+    // partition flags to force enrollment.
+    FLAVOR_ENROLLMENT_LOCAL_FORCED = 2;
+    // Enrollment advertised by local device configuration, such as OEM
+    // partition flags indicating to prompt for enrollment, but allowing the
+    // user to skip.
+    FLAVOR_ENROLLMENT_LOCAL_ADVERTISED = 3;
+    // Device state downloaded from the server during OOBE indicates that
+    // (re-)enrollment is mandatory.
+    FLAVOR_ENROLLMENT_SERVER_FORCED = 4;
+    // Device state downloaded from the server during OOBE indicates that the
+    // device should prompt for (re-)enrollment, but the user is allowed to
+    // skip.
+    FLAVOR_ENROLLMENT_SERVER_ADVERTISED = 5;
+    // Device detected in steady state that it is supposed to be enrolled, but
+    // the policy is missing.
+    FLAVOR_ENROLLMENT_RECOVERY = 6;
+    // User policy registration for a logged-in user.
+    FLAVOR_USER_REGISTRATION = 7;
+  };
+
+  // Indicates the registration flavor. This is passed to the server FYI when
+  // registering for policy so the server can distinguish registration triggers.
+  optional Flavor flavor = 8;
+}
+
+// Response from server to device register request.
+message DeviceRegisterResponse {
+  // Device management token for this registration.  This token MUST be
+  // part of HTTP Authorization header for all future requests from
+  // device to server.
+  required string device_management_token = 1;
+
+  // Device display name.  By default, server generates the name in
+  // the format of "Machine Model - Machine Id".  However, domain
+  // admin can update it using CPanel, so do NOT treat it as constant.
+  optional string machine_name = 2;
+
+  // Enum listing the possible modes the device should be locked into when the
+  // registration is finished.
+  enum DeviceMode {
+    // In ENTERPRISE mode the device has no local owner and device settings are
+    // controlled through the cloud policy infrastructure. Auto-enrollment is
+    // supported in that mode.
+    ENTERPRISE = 0;
+    // Devices in RETAIL mode also have no local owner and get their device
+    // settings from the cloud, but additionally this mode enables the demo
+    // account on the device.
+    RETAIL = 1;
+  }
+  optional DeviceMode enrollment_type = 3 [default = ENTERPRISE];
+}
+
+// Request from device to server to unregister device.
+// GoogleDMToken MUST be in HTTP Authorization header.
+message DeviceUnregisterRequest {
+}
+
+// Response from server to device for unregister request.
+message DeviceUnregisterResponse {
+}
+
+// Request from device to server to upload device EMCert
+// (enterprise machine cert used for remote attestation).
+// GoogleDMToken MUST be in HTTP Authorization header.
+message DeviceCertUploadRequest {
+  // EMCert in X.509 format.
+  optional bytes device_certificate = 1;
+}
+
+// Response from server to device for cert upload request.
+message DeviceCertUploadResponse {
+}
+
+// Request to access a Google service with the given scope.
+message DeviceServiceApiAccessRequest {
+  // The list of auth scopes the device requests from DMServer.
+  repeated string auth_scope = 1;
+
+  // OAuth2 client ID to which the returned authorization code is bound.
+  optional string oauth2_client_id = 2;
+}
+
+message DeviceServiceApiAccessResponse {
+  // The OAuth2 authorization code for the requested scope(s).
+  // This can be exchanged for a refresh token.
+  //
+  // The server may send a successful response but not set this field or set an
+  // empty string to reject the auth code request and instruct the client to
+  // skip robot account auth setup.
+  optional string auth_code = 1;
+}
+
+message PolicyFetchRequest {
+  // This is the policy type, which maps to D3 policy type internally.
+  // By convention, we use "/" as separator to create policy namespace.
+  // The policy type names are case insensitive.
+  //
+  // Possible values for Chrome OS are:
+  //   google/chromeos/device => ChromeDeviceSettingsProto
+  //   google/chromeos/user => ChromeSettingsProto
+  //   google/chromeos/publicaccount => ChromeSettingsProto
+  //   google/chrome/extension => ExternalPolicyData
+  //   google/android/user => ChromeSettingsProto
+  //   google/ios/user => ChromeSettingsProto
+  optional string policy_type = 1;
+
+  // This is the last policy timestamp that client received from server.
+  optional int64 timestamp = 2;
+
+  // Tell server what kind of security signature is required.
+  enum SignatureType {
+    NONE = 0;
+    SHA1_RSA = 1;
+  }
+  optional SignatureType signature_type = 3 [default = NONE];
+
+  // The version number of the public key that is currently stored
+  // on the client. This should be the last number the server had
+  // supplied as new_public_key_version in PolicyData.
+  // This field is unspecified if the client does not yet have a
+  // public key.
+  optional int32 public_key_version = 4;
+
+  // Machine hardware id, such as serial number.
+  // This field is should be set only if the serial number for the device is
+  // missing from the server, as indicated by the valid_serial_number_missing
+  // field in the last policy fetch response.
+  optional string machine_id = 5;
+
+  // This field is used for devices to send the additional ID to fetch settings.
+  // Retrieving some settings requires more than just device or user ID.
+  // For example, to retrieve public account, devices need to pass in
+  // public account ID in addition to device ID. To retrieve extension or
+  // plug-in settings, devices need to pass in extension/plug-in ID in
+  // addition to user ID.
+  // policy_type represents the type of settings (e.g. public account,
+  // extension) devices request to fetch.
+  optional string settings_entity_id = 6;
+
+  // If this fetch is due to a policy invalidation, this field contains the
+  // version provided with the invalidation. The server interprets this value
+  // and the value of invalidation_payload to fetch the up-to-date policy.
+  optional int64 invalidation_version = 7;
+
+  // If this fetch is due to a policy invalidation, this field contains the
+  // payload delivered with the invalidation. The server interprets this value
+  // and the value of invalidation_version to fetch the up-to-date policy.
+  optional bytes invalidation_payload = 8;
+
+  // Hash string for the chrome policy verification public key which is embedded
+  // into Chrome binary. Matching private key will be used by the server
+  // to sign per-domain policy keys during key rotation. If server does not
+  // have the key which matches this hash string, that could indicate malicious
+  // or out-of-date Chrome client.
+  optional string verification_key_hash = 9;
+}
+
+// This message customizes how the device behaves when it is disabled by its
+// owner. The message will be sent as part of the DeviceState fetched during
+// normal operation and as part of the DeviceStateRetrievalResponse fetched when
+// the device is wiped/reinstalled.
+message DisabledState {
+  // A message to the finder/thief that should be shown on the screen.
+  optional string message = 1;
+}
+
+message DeviceState {
+  // Modes of operation that the device can be in.
+  enum DeviceMode {
+    // The device is operating normally. Sessions can be started and the device
+    // can be used.
+    DEVICE_MODE_NORMAL = 0;
+    // The device has been disabled by its owner. The device will show a warning
+    // screen and will not allow any sessions to be started.
+    DEVICE_MODE_DISABLED = 1;
+  }
+  // The mode of operation that the device should be in.
+  optional DeviceMode device_mode = 1 [default = DEVICE_MODE_NORMAL];
+
+  // State that is relevant only when the |device_mode| is
+  // |DEVICE_MODE_DISABLED|.
+  optional DisabledState disabled_state = 2;
+}
+
+// This message is included in serialized form in PolicyFetchResponse
+// below.  It may also be signed, with the signature being created for
+// the serialized form.
+message PolicyData {
+  // See PolicyFetchRequest.policy_type.
+  optional string policy_type = 1;
+
+  // [timestamp] is milliseconds since Epoch in UTC timezone. It is
+  // included here so that the time at which the server issued this
+  // response cannot be faked (as protection against replay attacks).
+  // It is the timestamp generated by DMServer, NOT the time admin
+  // last updated the policy or anything like that.
+  optional int64 timestamp = 2;
+
+  // The DM token that was used by the client in the HTTP POST header
+  // for authenticating the request. It is included here again so that
+  // the client can verify that the response is meant for him (and not
+  // issued by a replay or man-in-the-middle attack).
+  optional string request_token = 3;
+
+  // The serialized value of the actual policy protobuf.  This can be
+  // deserialized to an instance of, for example, ChromeSettingsProto,
+  // ChromeDeviceSettingsProto, or ExternalPolicyData.
+  optional bytes policy_value = 4;
+
+  // The device display name assigned by the server.  It is only
+  // filled if the display name is available.
+  //
+  // The display name of the machine as generated by the server or set
+  // by the Administrator in the CPanel GUI. This is the same thing as
+  // |machine_name| in DeviceRegisterResponse but it might have
+  // changed since then.
+  optional string machine_name = 5;
+
+  // Version number of the server's current public key. (The key that
+  // was used to sign this response. Numbering should start at 1 and be
+  // increased by 1 at each key rotation.)
+  optional int32 public_key_version = 6;
+
+  // The user this policy is intended for. In case of device policy, the name
+  // of the owner (who registered the device).
+  optional string username = 7;
+
+  // In this field the DMServer should echo back the "deviceid" HTTP parameter
+  // from the request.
+  optional string device_id = 8;
+
+  // Indicates which state this association with DMServer is in. This can be
+  // used to tell the client that it is not receiving policy even though the
+  // registration with the server is kept active.
+  enum AssociationState {
+    // Association is active and policy is pushed.
+    ACTIVE = 0;
+    // Association is alive, but the corresponding domain is not managed.
+    UNMANAGED = 1;
+    // Client got dropped on the server side.
+    DEPROVISIONED = 2;
+  }
+  optional AssociationState state = 9 [default = ACTIVE];
+
+  // Indicates if the the server cannot find a valid serial number for the
+  // device.  If this flag is set, the device should send the valid serial
+  // number with a device policy fetch request.  Note that this only
+  // applies to device policy.
+  optional bool valid_serial_number_missing = 10;
+
+  // Indicates which public account or extension/plug-in this policy data is
+  // for. See PolicyFetchRequest.settings_entity_id for more details.
+  optional string settings_entity_id = 11;
+
+  // Indicates the identity the device service account is associated with.
+  // This is only sent as part of device policy fetch.
+  optional string service_account_identity = 12;
+
+  // The object source which hosts policy objects within the invalidation
+  // service. This value is combined with invalidation_name to form the object
+  // id used to register for invalidations to this policy.
+  optional int32 invalidation_source = 13;
+
+  // The name which uniquely identifies this policy within the invalidation
+  // service object source. This value is combined with invalidation_source to
+  // form the object id used to register for invalidations to this policy.
+  optional bytes invalidation_name = 14;
+
+  // Server-provided identifier of the fetched policy. This is to be used
+  // by the client when requesting Policy Posture assertion through an API
+  // call or SAML flow.
+  optional string policy_token = 15;
+
+  // Indicates the management mode of the device. Note that old policies do not
+  // have this field. If this field is not set but request_token is set, assume
+  // the management mode is ENTERPRISE_MANAGED. If both this field and
+  // request_token are not set, assume the management mode is LOCAL_OWNER.
+  enum ManagementMode {
+    // The device is owned locally. The policies are set by the local owner of
+    // the device.
+    LOCAL_OWNER = 0;
+    // The device is enterprise-managed. The policies come from the enterprise
+    // server. See the comment above for backward compatibility.
+    ENTERPRISE_MANAGED = 1;
+    // The device is consumer-managed. The policies currently can only be set
+    // by the local owner of the device.
+    CONSUMER_MANAGED = 2;
+  }
+  optional ManagementMode management_mode = 16;
+
+  // Indicates the state that the device should be in.
+  optional DeviceState device_state = 17;
+
+  // The object source which hosts command queue objects within the
+  // invalidation service. This value is combined with
+  // command_invalidation_name to form the object ID used to
+  // register for invalidations to the command queue.
+  optional int32 command_invalidation_source = 18;
+
+  // The name which uniquely identifies this device’s queue within
+  // the invalidation service object source. This value is combined
+  // with command_invalidation_source to form the object ID used to
+  // register for invalidations to the command queue.
+  optional bytes command_invalidation_name = 19;
+
+  // The free-text location info the admin enters to associate the device
+  // with a location.
+  optional string annotated_location = 20;
+
+  // The free-text asset identifier the admin enters to associate the device
+  // with a user-generated identifier.
+  optional string annotated_asset_id = 21;
+
+  // The unique directory api ID of the device which was generated on the
+  // server-side.
+  optional string directory_api_id = 22;
+}
+
+message PolicyFetchResponse {
+  // Since a single policy request may ask for multiple policies, we
+  // provide separate error code for each individual policy fetch.
+
+  // We will use standard HTTP Status Code as error code.
+  optional int32 error_code = 1;
+
+  // Human readable error message for customer support purpose.
+  optional string error_message = 2;
+
+  // This is a serialized |PolicyData| protobuf (defined above).
+  optional bytes policy_data = 3;
+
+  // Signature of the policy data above.
+  optional bytes policy_data_signature = 4;
+
+  // If the public key has been rotated on the server, the new public
+  // key is sent here. It is already used for |policy_data_signature|
+  // above, whereas |new_public_key_signature| is created using the
+  // old key (so the client can trust the new key). If this is the
+  // first time when the client requests policies (so it doesn't have
+  // on old public key), then |new_public_key_signature| is empty.
+  optional bytes new_public_key = 5;
+  optional bytes new_public_key_signature = 6;
+
+  // If new_public_key is specified, this field contains a signature
+  // of a PolicyPublicKeyAndDomain protobuf, signed using a key only
+  // available to DMServer. The public key portion of this well-known key is
+  // embedded into the Chrome binary. The hash of that embedded key is passed
+  // to DMServer as verification_key_hash field in PolicyFetchRequest. DMServer
+  // will pick a private key on the server which matches the hash (matches
+  // public key on the client). If DMServer is unable to find matching key, it
+  // will return an error instead of policy data.
+  // In case hash was not specified, DMServer will leave verification signature
+  // field empty (legacy behavior).
+  // In addition to the checks between new_public_key
+  // and new_public_key_signature described above, Chrome also verifies
+  // new_public_key with the embedded public key and
+  // new_public_key_verification_signature.
+  optional bytes new_public_key_verification_signature = 7;
+}
+
+// Protobuf used to generate the new_public_key_verification_signature field.
+message PolicyPublicKeyAndDomain {
+  // The public key to sign (taken from the |new_public_key| field in
+  // PolicyFetchResponse).
+  optional bytes new_public_key = 1;
+
+  // The domain associated with this key (should match the domain portion of
+  // the username field of the policy).
+  optional string domain = 2;
+}
+
+// This protobuf defines a single remote command from server to client for
+// execution.
+message RemoteCommand {
+  enum Type {
+    // Simple echo command for testing, will be ignored in production code.
+    COMMAND_ECHO_TEST = -1;
+
+    // Reboot the device.
+    DEVICE_REBOOT = 0;
+
+    // Take a screenshot.
+    DEVICE_SCREENSHOT = 1;
+  }
+
+  // The command type.
+  optional Type type = 1;
+
+  // An opaque unique identifier for the command.
+  optional int64 unique_id = 2;
+
+  // The age of the command (in milliseconds) when it is sent from server to
+  // client, defined as current_server_time - command_generated_time.
+  optional int64 age_of_command = 3;
+
+  // Extra parameters for this command, expected to be a JSON string.
+  optional string payload = 4;
+}
+
+// This protobuf defines the execution result of a single remote command
+// which will be sent back to the server.
+message RemoteCommandResult {
+  enum ResultType {
+    RESULT_IGNORED = 0;  // The command was ignored as obsolete.
+    RESULT_FAILURE = 1;  // The command could not be executed.
+    RESULT_SUCCESS = 2;  // The command was successfully executed.
+  }
+
+  // The result of the command.
+  optional ResultType result = 1;
+
+  // The opaque unique identifier of the command. This value is copied from the
+  // RemoteCommand protobuf that contained the command.
+  optional int64 unique_id = 2;
+
+  // The time at which the command was executed, if the the result is
+  // RESULT_SUCCESS.
+  optional int64 timestamp = 3;
+
+  // Extra information sent to server as result of execution, expected to be a
+  // JSON string.
+  optional string payload = 4;
+}
+
+message DeviceRemoteCommandRequest {
+  // The command ID of the last command received from the server until
+  // now.  Omitted if no commands have been received yet.
+  optional int64 last_command_unique_id = 1;
+
+  // The execution results of previously fetched commands.
+  // The client should send back a command result whenever possible.
+  repeated RemoteCommandResult command_results = 2;
+}
+
+message DeviceRemoteCommandResponse {
+  // The queue of pending commands.
+  repeated RemoteCommand commands = 1;
+}
+
+// Request from device to server for reading policies.
+message DevicePolicyRequest {
+  // The policy fetch request.  If this field exists, the request must
+  // comes from a non-TT client.  The repeated field allows client to
+  // request multiple policies for better performance.
+  repeated PolicyFetchRequest request = 3;
+}
+
+// Response from server to device for reading policies.
+message DevicePolicyResponse {
+  // The policy fetch response.
+  repeated PolicyFetchResponse response = 3;
+}
+
+message TimePeriod {
+  // [timestamp] is milli seconds since Epoch in UTC timezone.
+  optional int64 start_timestamp = 1;
+  optional int64 end_timestamp = 2;
+}
+
+message ActiveTimePeriod {
+  optional TimePeriod time_period = 1;
+
+  // The active duration during the above time period.
+  // The unit is milli-second.
+  optional int32 active_duration = 2;
+}
+
+// This captures launch events for one app/extension or other installments.
+message InstallableLaunch {
+  optional string install_id = 1;
+
+  // Time duration where this report covers. These are required
+  // and the record will be ignored if not set.
+  optional TimePeriod duration = 2;
+
+  // Client will send at most 50 timestamps to DM. All the rest
+  // launch activities will be summed into the total count.
+  // We will distribute the count evenly among the time span when
+  // doing time based aggregation.
+  repeated int64 timestamp = 3;
+  optional int64 total_count = 4;
+}
+
+// Used to report the device location.
+message DeviceLocation {
+  enum ErrorCode {
+    ERROR_CODE_NONE                 = 0;
+    ERROR_CODE_POSITION_UNAVAILABLE = 1;
+  }
+
+  // Latitude in decimal degrees north (WGS84 coordinate frame).
+  optional double latitude = 1;
+
+  // Longitude in decimal degrees west (WGS84 coordinate frame).
+  optional double longitude = 2;
+
+  // Altitude in meters (above WGS84 datum).
+  optional double altitude = 3;
+
+  // Accuracy of horizontal position in meters.
+  optional double accuracy = 4;
+
+  // Accuracy of altitude in meters.
+  optional double altitude_accuracy = 5;
+
+  // Heading in decimal degrees clockwise from true north.
+  optional double heading = 6;
+
+  // Horizontal component of device velocity in meters per second.
+  optional double speed = 7;
+
+  // Time of position measurement in milisecons since Epoch in UTC time.
+  optional int64 timestamp = 8;
+
+  // Error code, see enum above.
+  optional ErrorCode error_code = 9;
+
+  // Human-readable error message.
+  optional string error_message = 10;
+}
+
+// Details about a network interface.
+message NetworkInterface {
+  // Indicates the type of network device.
+  enum NetworkDeviceType {
+    TYPE_ETHERNET = 0;
+    TYPE_WIFI = 1;
+    TYPE_WIMAX = 2;
+    TYPE_BLUETOOTH = 3;
+    TYPE_CELLULAR = 4;
+  }
+
+  // Network device type.
+  optional NetworkDeviceType type = 1;
+
+  // MAC address (if applicable) of the corresponding network device. This is
+  // formatted as an ASCII string with 12 hex digits. Example: A0B1C2D3E4F5.
+  optional string mac_address = 2;
+
+  // MEID (if applicable) of the corresponding network device. Formatted as
+  // ASCII string composed of 14 hex digits. Example: A10000009296F2.
+  optional string meid = 3;
+
+  // IMEI (if applicable) of the corresponding network device. 15-16 decimal
+  // digits encoded as ASCII string. Example: 355402040158759.
+  optional string imei = 4;
+
+  // The device path associated with this network interface.
+  optional string device_path = 5;
+}
+
+
+// Information about configured/visible networks - this is separate from
+// NetworkInterface because a configured network may not be associated with
+// any specific interface, or may be visible across multiple interfaces.
+message NetworkState {
+  // The current state of this network.
+  enum ConnectionState {
+    IDLE = 0;
+    CARRIER = 1;
+    ASSOCIATION = 2;
+    CONFIGURATION = 3;
+    READY = 4;
+    PORTAL = 5;
+    OFFLINE = 6;
+    ONLINE = 7;
+    DISCONNECT = 8;
+    FAILURE = 9;
+    ACTIVATION_FAILURE = 10;
+    UNKNOWN = 11;
+  }
+
+  // For networks associated with a device, the path of the device.
+  optional string device_path = 1;
+
+  // Current state of this connection as reported by shill.
+  optional ConnectionState connection_state = 2;
+
+  // For wireless networks, the signal_strength in dBm.
+  optional int32 signal_strength = 3;
+
+  // The IP address this interface is bound to, if any.
+  optional string ip_address = 4;
+
+  // The gateway IP for this interface, if any.
+  optional string gateway = 5;
+}
+
+// Details about a device user.
+message DeviceUser {
+  // Types of device users which can be reported.
+  enum UserType {
+    // A user managed by the same domain as the device.
+    USER_TYPE_MANAGED = 0;
+
+    // A user not managed by the same domain as the device.
+    USER_TYPE_UNMANAGED = 1;
+  }
+
+  // The type of the user.
+  required UserType type = 1;
+
+  // Email address of the user. Present only if the user type is managed.
+  optional string email = 2;
+}
+
+// Information about a single disk volume.
+message VolumeInfo {
+  optional string volume_id = 1;
+  optional int64 storage_total = 2;
+  optional int64 storage_free = 3;
+}
+
+// Report device level status.
+message DeviceStatusReportRequest {
+  // The OS version reported by the device is a platform version
+  // e.g. 1435.0.2011_12_16_1635.
+  optional string os_version = 1;
+  optional string firmware_version = 2;
+
+  // "Verified", "Dev". Same as verified mode.
+  // If the mode is unknown, this field should not be set.
+  optional string boot_mode = 3;
+
+  // Device active times collection since last report rpc call.
+  // No longer used -- use active_period instead.
+  repeated TimePeriod active_time = 4 [deprecated = true];
+
+  // The browser version string as shown in the About dialog.
+  // e.g. 17.0.963.18.
+  optional string browser_version = 5;
+
+  // A list of periods when the device was active, aggregated by day.
+  repeated ActiveTimePeriod active_period = 6;
+
+  // The device location.
+  optional DeviceLocation device_location = 7;
+
+  // List of network interfaces.
+  repeated NetworkInterface network_interface = 8;
+
+  // List of recent device users, in descending order by last login time.
+  repeated DeviceUser user = 9;
+
+  // Disk space + other info about mounted/connected volumes.
+  repeated VolumeInfo volume_info = 10;
+
+  // List of visible/configured networks
+  repeated NetworkState network_state = 11;
+
+  // Samples of CPU utilization (0-100), sampled once every 120 seconds.
+  repeated int32 cpu_utilization_pct = 12;
+
+  // Free RAM (unreliable due to GC).
+  optional int64 deprecated_system_ram_free = 13 [deprecated = true];
+
+  // Total RAM on the device.
+  optional int64 system_ram_total = 14;
+
+  // Samples of free RAM [in bytes] (unreliable due to GC).
+  repeated int64 system_ram_free = 15;
+}
+
+// Provides status information for an installed app/extension.
+message AppStatus {
+  // ID of the installed app/extension
+  optional string app_id = 1;
+
+  // Currently installed version of the app.
+  optional string extension_version = 2;
+
+  // Self-reported status summary (via chrome.reporting APIs)
+  optional string status = 3;
+
+  // If true, the application is currently in a self-reported error state.
+  optional bool error = 4;
+}
+
+// Report session (a user on one device) level status.
+message SessionStatusReportRequest {
+  // Installed apps for this user on this device.
+  // No longer used -- use installed_apps instead.
+  repeated string installed_app_id = 1 [deprecated = true];
+
+  // Installed extensions for this user on this device.
+  // No longer used -- use installed_extensions instead.
+  repeated string installed_extension_id = 2 [deprecated = true];
+
+  // One stat per app for top 30 apps.
+  repeated InstallableLaunch app_launch_stat = 3;
+
+  // If this is a kiosk session, this is the device local account ID.
+  optional string device_local_account_id = 4;
+
+  // Information about installed apps for this user on this device.
+  repeated AppStatus installed_apps = 5;
+
+  // Information about installed extensions for this user on this device.
+  repeated AppStatus installed_extensions = 6;
+}
+
+// Response from DMServer to update devices' status.
+// It is possible that status report fails but policy request succeed.  In such
+// case, the DeviceStatusReportResponse will contain an error code and the
+// device should re-send status report data in the next policy request.  The
+// device should re-send report data if policy request fails, even if
+// DeviceStatusReportResponse contains no error code.
+message DeviceStatusReportResponse {
+  optional int32 error_code = 1;
+
+  // Human readable error message for customer support purpose.
+  optional string error_message = 2;
+}
+
+// Response from DMServer to update user devices' status.
+// It is possible that status report fails but policy request succeed.  In such
+// case, the SessionStatusReportResponse will contain an error code and the
+// device should re-send status report data in the next policy request.  The
+// device should re-send report data if policy request fails, even if
+// SessionStatusReportResponse contains no error code.
+message SessionStatusReportResponse {
+  optional int32 error_code = 1;
+
+  // Human readable error message for customer support purpose.
+  optional string error_message = 2;
+}
+
+// Request from device to server to determine whether the device should
+// go through enterprise enrollment. Unlike the other requests, this request is
+// not authenticated.
+message DeviceAutoEnrollmentRequest {
+  // SHA-256 hash of the device's serial number, mod |modulus|.
+  // Should always be present.
+  optional int64 remainder = 1;
+
+  // Modulus of the hash used by the client. Should always be present. This
+  // is the number of buckets the client thinks the server has. For now,
+  // it is a power of 2, but due to the strict constraint on how many serial
+  // numbers a bucket can contain, it may become non power of 2. If that
+  // happens, client-side needs to change its assumption.
+  optional int64 modulus = 2;
+}
+
+// Response from server to auto-enrollment detection request.
+message DeviceAutoEnrollmentResponse {
+  // If this field is present, the other fields are ignored and the client
+  // should send a new DeviceAutoEnrollmentRequest with a new |remainder|
+  // computed using this new |modulus|. If this field is empty, the client's
+  // request was accepted.
+  // DMServer guarantees that if the modulus sent by client in
+  // DeviceAutoEnrollmentRequest matches server's expectation, this field
+  // is unset.
+  optional int64 expected_modulus = 1;
+
+  // List of hashes in the client's hash bucket. If the client's hash matches
+  // any in this list, the client device should do enterprise enrollment.
+  // If it matches none, enrollment should be optional.
+  // Each entry has exactly 256 bits (32 bytes).
+  repeated bytes hash = 2;
+}
+
+// Sent by the client to the server. The device management server keeps a
+// mapping of device identifiers to device state. Devices query this table after
+// hard reset in order recover state. This request is keyed just by the opaque
+// server-backed state key; there is no further authentication.
+message DeviceStateRetrievalRequest {
+  // Opaque, client-determined, unpredictable, stable and unique device
+  // identifier to retrieve state for. This field contains 32 bytes of data that
+  // looks essentially random to the server. It may be generated e.g. by running
+  // a concatenation of suitable device identifiers through a cryptographic hash
+  // algorithm such as SHA-256.
+  optional bytes server_backed_state_key = 1;
+}
+
+// Sent by the client to the server when in registered state to update the
+// device-determined device state keys.
+message DeviceStateKeyUpdateRequest {
+  // The client-determined state keys. To the server, these look like 32 bytes
+  // of random data. The client should generate these keys using a deterministic
+  // algorithm that takes stable device identifiers as an input and produces a
+  // key as the output, possibly by running the identifiers through a
+  // cryptographic hash function such as SHA-256.
+  repeated bytes server_backed_state_key = 1;
+}
+
+// Server to client message carrying the device state response. Because the
+// request is not authenticated, the only protection against state extraction
+// from server is the unpredictability of the server-backed state ID. Thus, the
+// response should not contain any sensitive data. If the server doesn't know
+// the requested identifier, it just return a message with restore_mode set to
+// RESTORE_MODE_NONE.
+message DeviceStateRetrievalResponse {
+  // Restorative action to take after device reset.
+  enum RestoreMode {
+    // No state restoration.
+    RESTORE_MODE_NONE = 0;
+    // Enterprise enrollment requested, but user may skip.
+    RESTORE_MODE_REENROLLMENT_REQUESTED = 1;
+    // Enterprise enrollment is enforced and cannot be skipped.
+    RESTORE_MODE_REENROLLMENT_ENFORCED = 2;
+    // The device has been disabled by its owner. The device will show a warning
+    // screen and prevent the user from proceeding further.
+    RESTORE_MODE_DISABLED = 3;
+  };
+  // The server-indicated restore mode.
+  optional RestoreMode restore_mode = 1 [default = RESTORE_MODE_NONE];
+
+  // Primary domain the device is associated with.
+  optional string management_domain = 2;
+
+  // State that is relevant only when the |restore_mode| is
+  // |RESTORE_MODE_DISABLED|.
+  optional DisabledState disabled_state = 3;
+}
+
+// Sent by the client to the server to pair the Host device with the Controller
+// device. The HTTP request contains an end-user OAuth token and only succeeds
+// if both Host and Controller devices belong to the end-user domain.
+message DevicePairingRequest {
+
+  // The device ID of the Host device.
+  optional string host_device_id = 1;
+
+  // The device ID of the Controller device.
+  optional string controller_device_id = 2;
+}
+
+// Response from the server to the device pairing request.
+message DevicePairingResponse {
+
+  // The client should check HTTP status code first. If HTTP status code is not
+  // 200 (e.g. 500 internal error), then it means the pairing fails. If HTTP
+  // status code is 200, then the client should check the status code within the
+  // response.
+  enum StatusCode {
+    SUCCESS = 0;
+
+    // A generic failure code for pairing.
+    FAILED = 1;
+
+    // The Host device cannot be found in the user's domain.
+    HOST_DEVICE_NOT_FOUND = 2;
+
+    // The Controller device cannot be found in the user's domain.
+    CONTROLLER_DEVICE_NOT_FOUND  = 3;
+
+    // The Host device is deprovisioned.
+    HOST_DEVICE_DEPROVISIONED = 4;
+
+    // The Controller device is deprovisioned.
+    CONTROLLER_DEVICE_DEPROVISIONED = 5;
+  }
+
+  optional StatusCode status_code = 1 [default = FAILED];
+}
+
+// Sent by the client to the server to check if the devices are paired. The HTTP
+// request contains controller service account OAuth token as well as the
+// DMToken from the Host device.
+message CheckDevicePairingRequest {
+
+  // The device ID of the Host device.
+  optional string host_device_id = 1;
+
+  // The device ID of the Controller device.
+  optional string controller_device_id = 2;
+}
+
+// Response from the server to the check device pairing request.
+message CheckDevicePairingResponse {
+
+  // The client should check HTTP status code first. If HTTP status code is not
+  // 200 (e.g. 500 internal error), then it means the pairing status is unknown.
+  // If HTTP status code is 200, then the client should check the status code
+  // within the response.
+  enum StatusCode {
+    PAIRED = 0;
+
+    // The Host and Controller devices are not paired.
+    NOT_PAIRED = 1;
+
+    // The Host device cannot be found in the Host device domain.
+    HOST_DEVICE_NOT_FOUND = 2;
+
+    // The Controller device cannot be found in the Host device domain.
+    CONTROLLER_DEVICE_NOT_FOUND  = 3;
+
+    // The Host device is deprovisioned.
+    HOST_DEVICE_DEPROVISIONED = 4;
+
+    // The Controller device is deprovisioned.
+    CONTROLLER_DEVICE_DEPROVISIONED = 5;
+
+    // Invalid controller identity.
+    INVALID_CONTROLLER_DEVICE_IDENTITY = 6;
+  }
+
+  optional StatusCode status_code = 1 [default = NOT_PAIRED];
+}
+
+// Sent by the client to the server to check if the current user is allowed
+// to update attributes (asset id and location).  The HTTP request contains an
+// end-user OAuth token.
+message DeviceAttributeUpdatePermissionRequest {
+}
+
+// Response from the server specifying whether the current user is allowed to
+// update attributes (asset id and location).
+message DeviceAttributeUpdatePermissionResponse {
+  enum ResultType {
+    ATTRIBUTE_UPDATE_DISALLOWED = 0;
+    ATTRIBUTE_UPDATE_ALLOWED = 1;
+  }
+
+  optional ResultType result = 1;
+}
+
+// Sent by the client to the server to update device attributes (asset id and
+// location).  The HTTP request contains an end-user OAuth token.
+message DeviceAttributeUpdateRequest {
+  // The user-generated asset identifier.
+  optional string asset_id = 1;
+
+  // The user input device location.
+  optional string location = 2;
+}
+
+// Response from the server to update device attributes (asset id and location).
+message DeviceAttributeUpdateResponse {
+  enum ResultType {
+    ATTRIBUTE_UPDATE_ERROR = 0;
+    ATTRIBUTE_UPDATE_SUCCESS = 1;
+  }
+
+  optional ResultType result = 1;
+}
+
+// Request from the DMAgent on the device to the DMServer.  This is
+// container for all requests from device to server.  The overall HTTP
+// request MUST be in the following format:
+//
+// * HTTP method is POST
+// * Data mime type is application/x-protobuffer
+// * HTTP parameters are (all required, all case sensitive):
+//   * request: MUST BE one of
+//     * api_authorization
+//     * cert_upload
+//     * check_device_pairing
+//     * device_pairing
+//     * device_state_retrieval
+//     * enterprise_check
+//     * ping
+//     * policy
+//     * register
+//     * status
+//     * unregister
+//     * remote_commands
+//     * attribute_update_permission
+//     * attribute_update
+//
+//   * devicetype: MUST BE "1" for Android or "2" for Chrome OS.
+//   * apptype: MUST BE Android or Chrome.
+//   * deviceid: MUST BE no more than 64-char in [\x21-\x7E].
+//   * agent: MUST BE a string of characters.
+// * HTTP Authorization header MUST be in the following formats:
+//   * For register and ping requests
+//     Authorization: GoogleLogin auth=<auth cookie for Mobile Sync>
+//
+//   * For unregister, policy, status, cert_upload and remote commands requests
+//      Authorization: GoogleDMToken token=<dm token from register>
+//
+//   * The Authorization header isn't used for enterprise_check
+//     request, nor for register requests using OAuth. In the latter case,
+//     the OAuth token is passed in the "oauth" parameter.
+//
+// DeviceManagementRequest should only contain one request which matches the
+// HTTP query parameter - request, as listed below. Other requests within the
+// container will be ignored.
+//   cert_upload: cert_upload_request
+//   check_device_pairing: check_device_pairing_request
+//   device_pairing: device_pairing_request
+//   device_state_retrieval: device_state_retrieval_request
+//   enterprise_check: auto_enrollment_request
+//   ping: policy_request
+//   policy: policy_request
+//   register: register_request
+//   status: device_status_report_request or session_status_report_request
+//   unregister: unregister_request
+//   remote_commands: remote_command_request
+//   attribute_update_permission: device_attribute_update_permission_request
+//   attribute_update: device_attribute_update_request
+//
+message DeviceManagementRequest {
+  // Register request.
+  optional DeviceRegisterRequest register_request = 1;
+
+  // Unregister request.
+  optional DeviceUnregisterRequest unregister_request = 2;
+
+  // Policy request.
+  optional DevicePolicyRequest policy_request = 3;
+
+  // Update status.
+  optional DeviceStatusReportRequest device_status_report_request = 4;
+  optional SessionStatusReportRequest session_status_report_request = 5;
+
+  // Auto-enrollment detection.
+  optional DeviceAutoEnrollmentRequest auto_enrollment_request = 6;
+
+  // EMCert upload (for remote attestation)
+  optional DeviceCertUploadRequest cert_upload_request = 7;
+
+  // Request for OAuth2 authorization codes to access Google services.
+  optional DeviceServiceApiAccessRequest service_api_access_request = 8;
+
+  // Device-state retrieval.
+  optional DeviceStateRetrievalRequest device_state_retrieval_request = 9;
+
+  // Device state key update.
+  optional DeviceStateKeyUpdateRequest device_state_key_update_request = 10;
+
+  // Pair two devices.
+  optional DevicePairingRequest device_pairing_request = 11;
+
+  // Check if two devices are paired.
+  optional CheckDevicePairingRequest check_device_pairing_request = 12;
+
+  // Remote command fetching.
+  optional DeviceRemoteCommandRequest remote_command_request = 13;
+
+  // Check permission for updating device attribute.
+  optional DeviceAttributeUpdatePermissionRequest
+      device_attribute_update_permission_request = 14;
+
+  // Update device attribute.
+  optional DeviceAttributeUpdateRequest device_attribute_update_request
+      = 15;
+}
+
+// Response from server to device.
+//
+// The server uses the following numbers as HTTP status codes
+// to report top-level errors.
+//
+// 200 OK: valid response is returned to client.
+// 400 Bad Request: invalid argument.
+// 401 Unauthorized: invalid auth cookie or DM token.
+// 403 Forbidden: device management is not allowed.
+// 404 Not Found: the request URL is invalid.
+// 410 Device Not Found: the device id is not found.
+// 491 Request Pending: the request is pending approval.
+// 500 Internal Server Error: most likely a bug in DM server.
+// 503 Service Unavailable: most likely a backend error.
+// 901 Device Not Found: the device id is not found.
+// 902 Policy Not Found: the policy is not found.
+message DeviceManagementResponse {
+  // Error message.
+  optional string error_message = 2;
+
+  // Register response
+  optional DeviceRegisterResponse register_response = 3;
+
+  // Unregister response
+  optional DeviceUnregisterResponse unregister_response = 4;
+
+  // Policy response.
+  optional DevicePolicyResponse policy_response = 5;
+
+  // Device status report response.
+  optional DeviceStatusReportResponse device_status_report_response = 6;
+
+  // Session status report response.
+  optional SessionStatusReportResponse session_status_report_response = 7;
+
+  // Auto-enrollment detection response.
+  optional DeviceAutoEnrollmentResponse auto_enrollment_response = 8;
+
+  // EMCert upload response.
+  optional DeviceCertUploadResponse cert_upload_response = 9;
+
+  // Response to OAuth2 authorization code request.
+  optional DeviceServiceApiAccessResponse service_api_access_response = 10;
+
+  // Device-state retrieval.
+  optional DeviceStateRetrievalResponse device_state_retrieval_response = 11;
+
+  // Response to device pairing request.
+  optional DevicePairingResponse device_pairing_response = 12;
+
+  // Response to check device pairing request.
+  optional CheckDevicePairingResponse check_device_pairing_response = 13;
+
+  // Response to remote command request.
+  optional DeviceRemoteCommandResponse remote_command_response = 14;
+
+  // Response to check device attribute update permission.
+  optional DeviceAttributeUpdatePermissionResponse
+      device_attribute_update_permission_response = 15;
+
+  // Response to update device attribute.
+  optional DeviceAttributeUpdateResponse device_attribute_update_response = 16;
+}

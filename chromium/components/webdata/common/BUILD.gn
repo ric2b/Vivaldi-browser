@@ -1,0 +1,52 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+component("common") {
+  output_name = "webdata_common"
+
+  sources = [
+    "web_data_request_manager.cc",
+    "web_data_request_manager.h",
+    "web_data_results.h",
+    "web_data_service_base.cc",
+    "web_data_service_base.h",
+    "web_data_service_consumer.h",
+    "web_database.cc",
+    "web_database.h",
+    "web_database_backend.cc",
+    "web_database_backend.h",
+    "web_database_service.cc",
+    "web_database_service.h",
+    "web_database_table.cc",
+    "web_database_table.h",
+    "webdata_constants.cc",
+    "webdata_constants.h",
+    "webdata_export.h",
+  ]
+
+  defines = [ "WEBDATA_IMPLEMENTATION" ]
+
+  deps = [
+    "//base",
+    "//sql",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "web_database_migration_unittest.cc",
+  ]
+
+  deps = [
+    ":common",
+    "//base",
+    "//components/autofill/core/browser",
+    "//components/password_manager/core/browser",
+    "//components/search_engines",
+    "//components/signin/core/browser",
+    "//sql",
+    "//testing/gtest",
+  ]
+}

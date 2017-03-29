@@ -1,0 +1,11 @@
+include_rules = [
+  "+chrome/browser",
+  "+chrome/common",
+  "+chrome/utility",
+]
+
+specific_include_rules = {
+  '.*test\.cc': [
+    "+chrome/test",
+  ],
+}

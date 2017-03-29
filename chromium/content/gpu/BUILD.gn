@@ -1,0 +1,68 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//content/content.gni")
+
+# See //content/BUILD.gn for how this works.
+group("gpu") {
+  visibility = [ "//content/*" ]
+
+  if (is_component_build) {
+    public_deps = [
+      "//content",
+    ]
+  } else {
+    public_deps = [
+      ":gpu_sources",
+    ]
+  }
+}
+
+source_set("gpu_sources") {
+  visibility = [ "//content/*" ]
+
+  sources = [
+    "gpu_child_thread.cc",
+    "gpu_child_thread.h",
+    "gpu_main.cc",
+    "gpu_process.cc",
+    "gpu_process.h",
+    "gpu_watchdog_thread.cc",
+    "gpu_watchdog_thread.h",
+    "in_process_gpu_thread.cc",
+    "in_process_gpu_thread.h",
+  ]
+
+  configs += [ "//content:content_implementation" ]
+
+  deps = [
+    "//base",
+    "//content:export",
+    "//content/public/child:child_sources",
+    "//mojo/application/public/interfaces",
+    "//skia",
+    "//ui/gl",
+  ]
+
+  if (is_win) {
+    configs += [
+      "//third_party/khronos:khronos_headers",
+      "//third_party/wtl:wtl_includes",
+    ]
+    libs = [ "setupapi.lib" ]
+    deps += [
+      "//third_party/angle:libEGL",
+      "//third_party/angle:libGLESv2",
+    ]
+  }
+
+  if (is_chromeos && current_cpu != "arm") {
+    configs += [ "//third_party/libva:libva_config" ]
+  }
+
+  if (use_x11) {
+    deps += [ "//ui/events/platform/x11" ]
+  }
+}

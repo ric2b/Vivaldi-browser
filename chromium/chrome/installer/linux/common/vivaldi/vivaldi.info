@@ -1,0 +1,30 @@
+# Copyright (c) 2009 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+#
+# This file provides common configuration information for building
+# vivaldi packages for various platforms.
+
+# Base name of the package.
+PACKAGE="vivaldi"
+
+# Filename of the main executable (for generating launcher scripts, etc.)
+PROGNAME=vivaldi
+
+# Base directory for package installation.
+INSTALLDIR=/opt/vivaldi
+
+# Display string for desktop menu/icon.
+MENUNAME="Vivaldi"
+
+# Brief package description.
+SHORTDESC="A new browser for our friends"
+
+# Detailed package description.
+FULLDESC="Vivaldi browser is made for power users in mind by people who love the Web."
+
+# Package maintainer information.
+# TODO(mmoss) Setup a mailbox for this address
+MAINTNAME="Vivaldi Package Composer"
+MAINTMAIL="packager@vivaldi.com"
+PRODUCTURL="https://www.vivaldi.com/"

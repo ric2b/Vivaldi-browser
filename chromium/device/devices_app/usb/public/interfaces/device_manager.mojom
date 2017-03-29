@@ -1,0 +1,48 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module device.usb;
+
+import "device.mojom";
+
+enum OpenDeviceError {
+  // Opening the device succeeded.
+  OK,
+
+  // The device could not be opened because the request GUID is unknown.
+  NOT_FOUND,
+
+  // The operating system denied access to the device.
+  ACCESS_DENIED,
+};
+
+struct DeviceFilter {
+  bool has_vendor_id;
+  uint16 vendor_id;
+
+  bool has_product_id;
+  uint16 product_id;
+
+  bool has_class_code;
+  uint8 class_code;
+
+  bool has_subclass_code;
+  uint8 subclass_code;
+
+  bool has_protocol_code;
+  uint8 protocol_code;
+};
+
+struct EnumerationOptions {
+  array<DeviceFilter> filters;
+};
+
+interface DeviceManager {
+  // Retrieves information about all devices available to the DeviceManager
+  // implementation.
+  GetDevices(EnumerationOptions options) => (array<DeviceInfo> results);
+
+  // Attempts to open a device given its GUID.
+  OpenDevice(string guid, Device& device_request) => (OpenDeviceError error);
+};

@@ -1,0 +1,480 @@
+<h1>Permission Warnings</h1>
+
+
+<!--
+NOTE: When this doc is updated, the online help should also be updated:
+https://support.google.com/chrome_webstore/answer/186213
+
+We should periodically look at
+http://src.chromium.org/viewvc/chrome/trunk/src/chrome/app/generated_resources.grd?view=markup
+to make sure that we're covering all messages. Search for
+IDS_EXTENSION_PROMPT_WARNING
+(e.g. IDS_EXTENSION_PROMPT_WARNING_BROWSING_HISTORY).
+-->
+
+<p>
+To use most chrome.* APIs and extension capabilities,
+your extension must declare its intent in the
+<a href="manifest">manifest</a>,
+often in the "permissions" field.
+Some of these declarations
+result in a warning when
+a user installs your extension.
+</p>
+
+<p>
+When you autoupdate your extension,
+the user might see another warning
+if the extension requests new permissions.
+These new permissions might be new APIs that your extension uses,
+or they might be new websites
+that your extension needs access to.
+</p>
+
+
+<h2 id="examples"> Examples of permission warnings </h2>
+
+<p>
+Here's a typical dialog
+that a user might see when installing an extension:
+</p>
+
+<img src="{{static}}/images/perms-hw1.png"
+  width="490" height="193"
+  alt="Permission warning: 'It can: Read and modify your data on api.flickr.com'"
+  />
+
+<p>
+The warning about access to data on api.flickr.com
+is caused by the following lines
+in the extension's manifest:
+</p>
+
+<pre data-filename="manifest.json">
+"permissions": [
+  <b>"http://api.flickr.com/"</b>
+],
+</pre>
+
+<p class="note">
+<b>Note:</b>
+You don't see permission warnings when
+you load an unpacked extension.
+You get permission warnings only when you install an extension
+from a <code>.crx</code> file.
+</p>
+
+<p>
+If you add a permission to the extension when you autoupdate it,
+the user might see a new permission warning.
+For example,
+assume you add a new site and the "tabs" permission
+to the previous example:
+</p>
+
+<pre data-filename="manifest.json">
+"permissions": [
+  "http://api.flickr.com/",
+  <b>"http://*.flickr.com/",
+  "tabs"</b>
+],
+</pre>
+
+<p>
+When the extension autoupdates,
+the increased permissions
+cause the extension to be disabled
+until the user re-enables it.
+Here's the warning the user sees:
+</p>
+
+<img src="{{static}}/images/perms-hw2-disabled.png"
+  width="332" height="208"
+  alt="Warning text: 'The newest version of the extension Hello World requires more permissions, so it has been disabled. [Re-enable].'"
+  />
+
+<p>
+Clicking the Re-enable button
+brings up the following warning:
+</p>
+
+<img src="{{static}}/images/perms-hw2.png"
+  width="490" height="193"
+  alt="Permission warning: 'It can: Read and modify your data on api.flickr.com; Access your browsing activity'"
+  />
+
+
+<h2 id="warnings"> Warnings and their triggers </h2>
+
+{{^is_apps}}
+<p>
+It can be surprising when adding a permission such as "tabs"
+results in the seemingly unrelated warning
+that the extension can access your browsing activity.
+The reason for the warning is that
+although the <code>chrome.tabs</code> API
+might be used only to open new tabs,
+it can also be used to see the URL that's associated
+with every newly opened tab
+(using their $(ref:tabs.Tab) objects).
+</p>
+{{/is_apps}}
+
+<p>
+The following table lists the warning messages
+that users can see,
+along with the manifest entries
+that trigger them.
+</p>
+
+<p>
+<table>
+  <tr>
+    <th> Warning message </th>
+    <th> Manifest entry that caused it </th>
+    <th> Notes </th>
+  </tr>
+<tr>
+  <td style="font-weight:bold">
+    <!-- IDS_EXTENSION_PROMPT_WARNING_FULL_ACCESS -->
+    Read and modify all your data on your computer and the websites you visit
+  </td>
+  <td>
+    "plugins"
+  </td>
+  <td>
+    The "plugins" permission is required by
+    <a href="npapi">NPAPI plugins</a>.
+  </td>
+</tr>
+
+<tr>
+  <td style="font-weight:bold">
+    <!-- IDS_EXTENSION_PROMPT_WARNING_BOOKMARKS -->
+    Read and modify your bookmarks
+  </td>
+  <td>
+    "bookmarks" permission
+  </td>
+  <td>
+    The "bookmarks" permission is required by the
+    <a href="bookmarks"><code>chrome.bookmarks</code></a> module.
+  </td>
+</tr>
+
+<tr>
+  <td style="font-weight:bold">
+    <!-- IDS_EXTENSION_PROMPT_WARNING_BROWSING_HISTORY -->
+    Read and modify your browsing history
+  </td>
+  <td>
+    <!-- HasEffectiveBrowsingHistoryPermission -->
+     Any of the following:
+    <ul>
+      <li> "history" permission </li>
+      <li> "topSites" permission </li>
+    </ul>
+  </td>
+  <td>
+    <p>
+      The "history" permission is required by
+      <a href="history"><code>chrome.history</code></a>.
+    </p>
+    <p>
+      The "topSites" permission is required by
+      <a href="topSites"><code>chrome.topSites</code></a>.
+    </p>
+  </td>
+</tr>
+
+<tr>
+  <td style="font-weight:bold">
+    <!-- IDS_EXTENSION_PROMPT_WARNING_TABS -->
+    Access your browsing activity
+  </td>
+  <td>
+    <!-- HasEffectiveBrowsingHistoryPermission -->
+    Any of the following:
+    <ul>
+      <li> "tabs" permission </li>
+      <li> "webNavigation" permission </li>
+    </ul>
+  </td>
+  <td>
+    <p>
+      The "tabs" permission is required by the
+      <a href="tabs"><code>chrome.tabs</code></a> and
+      <a href="windows"><code>chrome.windows</code></a> modules.
+    </p>
+    <p>
+      The "webNavigation" permission is required by the
+      <a href="webNavigation"><code>chrome.webNavigation</code></a> module.
+    </p>
+  </td>
+</tr>
+
+<tr>
+  <td style="font-weight:bold">
+    <!-- IDS_EXTENSION_PROMPT_WARNING_CONTENT_SETTINGS -->
+    Manipulate settings that specify whether websites can use features such as cookies, JavaScript, plugins, geolocation, microphone, camera etc.
+  </td>
+  <td>
+    <!-- HasEffectiveBrowsingHistoryPermission -->
+     "contentSettings" permission
+  </td>
+  <td>
+    <p>
+      The "contentSettings" permission is required by
+      <a href="contentSettings"><code>chrome.contentSettings</code></a>.
+    </p>
+  </td>
+</tr>
+
+<tr>
+  <td style="font-weight:bold">
+    <!-- IDS_EXTENSION_PROMPT_WARNING_ALL_HOSTS -->
+    Read and modify all your data on all websites you visit
+  </td>
+  <td>
+    <!-- HasEffectiveAccessToAllHosts() -->
+    Any of the following:
+    <ul>
+      <li> "debugger" permission </li>
+      <li> "pageCapture" permission </li>
+      <li> "proxy" permission </li>
+      <li> A match pattern in the "permissions" field
+        that matches all hosts </li>
+      <li> A&nbsp;"content_scripts" field with a "matches" entry
+        that matches all hosts </li>
+      <li> "devtools_page" </li>
+    </ul>
+  </td>
+  <td>
+    <p>
+      The "debugger" permission is required by the
+      <a href="debugger">debugger</a> module.
+    </p>
+
+    <p>
+      The "proxy" permission is required by the
+      <a href="proxy"><code>chrome.proxy</code></a> module.
+    </p>
+
+    <p>
+      Any of the following URLs match all hosts:
+    </p>
+    <ul>
+      <li> <code>http://*/*</code> </li>
+      <li> <code>https://*/*</code> </li>
+      <li> <code>*://*/*</code> </li>
+      <li> <code>&lt;all_urls&gt;</code> </li>
+    </ul>
+    <strong>Note that you may be able to avoid declaring all host permissions using the <code><a href="activeTab">activeTab</a></code> permission.</strong>
+  </td>
+</tr>
+<tr>
+  <td style="font-weight:bold">
+    <!-- IDS_EXTENSION_PROMPT_WARNING_?_HOST -->
+    <!-- IDS_EXTENSION_PROMPT_WARNING_4_OR_MORE_HOSTS -->
+    Read and modify your data on <em>{list of websites}</em>
+  </td>
+  <td>
+    A match pattern in the "permissions" field
+    that specifies one or more hosts,
+    but not all hosts
+  </td>
+  <td>
+    <p>
+    Up to 3 sites are listed by name.
+    Subdomains aren't treated specially.
+    For example, <code>a.com</code> and <code>b.a.com</code>
+    are listed as different sites.
+    </p>
+
+    <p>
+    On autoupdate,
+    the user sees a permission warning
+    if the extension adds or changes sites.
+    For example, going from <code>a.com,b.com</code>
+    to <code>a.com,b.com,c.com</code>
+    triggers a warning.
+    Going from <code>b.a.com</code>
+    to <code>a.com</code>,
+    or vice versa,
+    also triggers a warning.
+    </p>
+  </td>
+</tr>
+
+<tr>
+  <td style="font-weight:bold">
+    <!-- IDS_EXTENSION_PROMPT_WARNING_MANAGEMENT -->
+    Manage your apps, extensions, and themes
+  </td>
+  <td>
+    "management" permission
+  </td>
+  <td>
+    The "management" permission is required by the
+    <a href="management"><code>chrome.management</code></a> module.
+  </td>
+</tr>
+
+<tr>
+  <td style="font-weight:bold">
+    <!-- IDS_EXTENSION_PROMPT_WARNING_MDNS -->
+    Discover devices on your local network
+  </td>
+  <td>
+    "mdns" permission
+  </td>
+  <td>
+    The "mdns" permission is required by the
+    <a href="mdns"><code>chrome.mdns</code></a> module.
+  </td>
+</tr>
+
+<tr>
+  <td style="font-weight:bold">
+    <!-- IDS_EXTENSION_PROMPT_WARNING_GEOLOCATION -->
+    Detect your physical location
+  </td>
+  <td>
+    "geolocation" permission
+  </td>
+  <td>
+    Allows the extension to use the proposed HTML5
+    <a href="http://dev.w3.org/geo/api/spec-source.html">geolocation API</a>
+    without prompting the user for permission.
+  </td>
+</tr>
+
+<tr>
+  <td style="font-weight:bold">
+    <!-- IDS_EXTENSION_PROMPT_WARNING_CLIPBOARD-->
+    Access data you copy and paste
+  </td>
+  <td>
+    "clipboardRead" permission
+  </td>
+  <td>
+    Allows the extension to use the following editing commands with
+    <code>document.execCommand()</code>:
+    <ul>
+      <li> <code>"copy"</code> </li>
+      <li> <code>"cut"</code> </li>
+    </ul>
+  </td>
+</tr>
+
+<tr>
+  <td style="font-weight:bold">
+    <!-- IDS_EXTENSION_PROMPT_WARNING_PRIVACY-->
+    Manipulate privacy-related settings
+  </td>
+  <td>
+    "privacy" permission
+  </td>
+  <td>
+    The "privacy" permission is required by the
+    <a href="privacy"><code>chrome.privacy</code></a> module.
+  </td>
+</tr>
+
+<tr>
+  <td style="font-weight:bold">
+    <!-- IDS_EXTENSION_PROMPT_WARNING_SIGNED_IN_DEVICES-->
+    Access the list of your signed-in devices
+  </td>
+  <td>
+    "signedInDevices" permission
+  </td>
+  <td>
+    The "signedInDevices" permission is required by the
+    <a href="signedInDevices"><code>chrome.signedInDevices</code></a>
+    module.
+  </td>
+</tr>
+
+<tr>
+  <td style="font-weight:bold">
+    <!-- IDS_EXTENSION_PROMPT_WARNING_TTS_ENGINE-->
+    Access all text spoken using synthesized speech
+  </td>
+  <td>
+    "ttsEngine" permission
+  </td>
+  <td>
+    The "ttsEngine" permission is required by the
+    <a href="ttsEngine"><code>chrome.ttsEngine</code></a> module.
+  </td>
+</tr>
+</table>
+</p>
+
+
+<h2 id="nowarning"> Permissions that don't cause warnings </h2>
+
+<p>
+The following permissions don't result in a warning:
+</p>
+
+<ul>
+  <li>"activeTab"</li>
+{{?is_apps}}
+  <li>"app.window.alwaysOnTop"</li>
+  <li>"app.window.fullscreen"</li>
+  <li>"app.window.fullscreen.overrideEsc"</li>
+  <li>"app.window.shape"</li>
+{{/is_apps}}
+  <li>"browsingData"</li>
+  <li>"chrome://favicon/"</li>
+  <li>"clipboardWrite"</li>
+  <li>"contextMenus"</li>
+  <li>"cookies"</li>
+  <li>"experimental"</li>
+  <li>"idle"</li>
+  <li>"notifications"</li>
+{{?is_apps}}
+  <li>"pointerLock"</li>
+{{/is_apps}}
+  <li>"storage"</li>
+  <li>"unlimitedStorage"</li>
+  <li>"webRequest"</li>
+  <li>"webRequestBlocking"</li>
+</ul>
+
+<h2 id="test"> Testing permission warnings </h2>
+
+<p>
+If you'd like to see exactly which warnings your users will get,
+<a href="packaging">package your extension</a>
+into a <code>.crx</code> file,
+and install it.
+</p>
+
+<p>
+To see the warnings users will get when your extension is autoupdated,
+you can go to a little more trouble
+and set up an autoupdate server.
+To do this, first create an update manifest
+and point to it from your extension,
+using the "update_url" key
+(see <a href="autoupdate">Autoupdating</a>).
+Next, <a href="packaging">package the extension</a>
+into a new <code>.crx</code> file,
+and install the app from this <code>.crx</code> file.
+Now, change the extension's manifest to contain the new permissions,
+and <a href="packaging#update">repackage the extension</a>.
+Finally, update the extension
+(and all other extensions that have outstanding updates)
+by clicking the <b>chrome://extensions</b> page's
+<b>Update extensions now</b> button.
+</p>
+
+<h2 id="api">API</h2>
+
+<p>
+You can get a list of permission warnings for any manifest with
+$(ref:management.getPermissionWarningsByManifest).
+</p>

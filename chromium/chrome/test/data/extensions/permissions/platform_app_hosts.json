@@ -1,0 +1,10 @@
+{
+  "name": "Platform app hosts",
+  "version": "1.0",
+  "app": {
+    "background": {
+      "scripts": ["doesnt_exist.js"]
+    }
+  },
+  "permissions": ["http://google.com/"]
+}

@@ -1,0 +1,10 @@
+include_rules = [
+  "-sync",
+  "+sync/api",
+  "+sync/base",
+  "+sync/internal_api/public",
+  "+sync/protocol",
+
+  # TODO(tim): Remove. Bug 131130
+  "+sync/util/cryptographer.h"
+]

@@ -1,0 +1,212 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//build/config/ui.gni")
+import("//content/renderer/renderer.gni")
+import("//media/media_options.gni")
+
+source_set("renderer") {
+  # Only the public target should depend on this. All other targets (even
+  # internal content ones) should depend on the public one.
+  visibility = [ "//content/public/renderer:renderer_sources" ]
+
+  sources = rebase_path(content_renderer_gypi_values.private_renderer_sources,
+                        ".",
+                        "//content")
+
+  configs += [
+    "//content:content_implementation",
+    "//build/config/compiler:no_size_t_to_int_warning",
+  ]
+
+  deps = [
+    # TODO(GYP) bug 376846 remove this. This should be inherited from //net but
+    # those don't cross component boundaries.
+    "//crypto:platform",
+    "//base/allocator",
+    "//cc",
+    "//cc/blink",
+    "//components/scheduler:scheduler",
+    "//content:resources",
+    "//content/common:mojo_bindings",
+    "//content/public/child:child_sources",
+    "//content/public/common:common_sources",
+    "//content/public/common:mojo_bindings",
+    "//device/battery:mojo_bindings",
+    "//device/vibration:mojo_bindings",
+    "//gin",
+    "//gpu",
+    "//gpu/command_buffer/client:gles2_interface",
+    "//jingle:jingle_glue",
+    "//media",
+    "//media/blink",
+    "//mojo/application/public/interfaces",
+    "//mojo/environment:chromium",
+    "//mojo/common:url_type_converters",
+    "//mojo/converters/geometry",
+    "//net",
+    "//skia",
+    "//skia/public",
+    "//storage/common",
+    "//third_party/icu",
+    "//third_party/libjingle",
+    "//third_party/mojo/src/mojo/edk/js",
+    "//third_party/mojo/src/mojo/public/cpp/bindings",
+    "//third_party/mojo/src/mojo/public/js",
+    "//third_party/npapi",
+    "//third_party/WebKit/public:blink",
+    "//third_party/widevine/cdm:version_h",
+    "//ui/accessibility",
+    "//ui/base",
+    "//ui/events:events_base",
+    "//ui/events:dom_keycode_converter",
+    "//ui/gl",
+    "//ui/native_theme",
+    "//ui/surface",
+    "//v8",
+  ]
+
+  if (is_mac) {
+    sources -= [
+      "webscrollbarbehavior_impl_gtkoraura.cc",
+      "webscrollbarbehavior_impl_gtkoraura.h",
+    ]
+    sources += [
+      "external_popup_menu.cc",
+      "external_popup_menu.h",
+    ]
+  }
+
+  if (is_android) {
+    sources -= [ "media/audio_decoder.cc" ]
+    sources += [
+      "external_popup_menu.cc",
+      "external_popup_menu.h",
+    ]
+
+    # Add back the Linux file which Android shares.
+    set_sources_assignment_filter([])
+    sources += [ "render_view_linux.cc" ]
+
+    deps += [
+      "//third_party/android_tools:cpu_features",
+      "//third_party/libphonenumber",
+    ]
+  } else {
+    sources -= [
+      "java/gin_java_bridge_dispatcher.cc",
+      "java/gin_java_bridge_dispatcher.h",
+      "java/gin_java_bridge_object.cc",
+      "java/gin_java_bridge_object.h",
+      "java/gin_java_bridge_value_converter.cc",
+      "java/gin_java_bridge_value_converter.h",
+      "java/gin_java_function_invocation_helper.cc",
+      "java/gin_java_function_invocation_helper.h",
+    ]
+  }
+
+  # TODO(jrg): remove the OS=="android" section?
+  # http://crbug.com/113172
+  # Understand better how media_stream_ is tied into Chromium.
+  if (!enable_webrtc && is_android) {
+    sources -= [
+      "media/media_stream_audio_level_calculator.cc",
+      "media/media_stream_audio_level_calculator.h",
+      "media/media_stream_center.h",
+      "media/media_stream_constraints_util.cc",
+      "media/media_stream_constraints_util.h",
+      "media/media_stream_dispatcher.h",
+      "media/media_stream_dispatcher_eventhandler.h",
+      "media/media_stream_track.cc",
+      "media/media_stream_track.h",
+    ]
+  }
+
+  if (enable_webrtc) {
+    sources += rebase_path(
+            content_renderer_gypi_values.private_renderer_webrtc_sources,
+            ".",
+            "//content")
+    deps += [
+      "//crypto",
+      "//third_party/libyuv",
+      "//third_party/webrtc/modules/audio_device",
+      "//third_party/webrtc/modules/audio_processing",
+      "//third_party/libjingle:libjingle_webrtc",
+      "//third_party/libjingle:libpeerconnection",
+      "//third_party/libjingle:libstunprober",
+    ]
+  } else {
+    sources += [
+      "media/webrtc_logging.h",
+      "media/webrtc_logging_noop.cc",
+    ]
+  }
+
+  if (enable_plugins) {
+    sources += rebase_path(
+            content_renderer_gypi_values.private_renderer_plugin_sources,
+            ".",
+            "//content")
+    deps += [
+      "//ppapi/host",
+      "//ppapi/proxy",
+      "//ppapi/shared_impl",
+      "//third_party/libvpx",
+      "//third_party/libyuv",
+    ]
+  } else {
+    # These files are in the WebRTC list, but also require plugins.
+    if (enable_webrtc) {
+      sources -= [
+        "media/webrtc/video_destination_handler.cc",
+        "media/webrtc/video_destination_handler.h",
+      ]
+    }
+  }
+
+  if (enable_plugins && enable_webrtc) {
+    sources += rebase_path(
+            content_renderer_gypi_values.private_renderer_plugin_webrtc_sources,
+            ".",
+            "//content")
+  }
+
+  if (!enable_pepper_cdms) {
+    sources -= [
+      "media/crypto/pepper_cdm_wrapper.h",
+      "media/crypto/pepper_cdm_wrapper_impl.cc",
+      "media/crypto/pepper_cdm_wrapper_impl.h",
+      "media/crypto/ppapi_decryptor.cc",
+      "media/crypto/ppapi_decryptor.h",
+    ]
+  }
+
+  if (enable_print_preview) {
+    deps += [ "//printing" ]
+  }
+
+  if (enable_browser_cdms) {
+    sources += [
+      "media/crypto/proxy_media_keys.cc",
+      "media/crypto/proxy_media_keys.h",
+      "media/crypto/renderer_cdm_manager.cc",
+      "media/crypto/renderer_cdm_manager.h",
+    ]
+  }
+
+  if (enable_mojo_media != "none") {
+    deps += [ "//media/mojo/services:proxy" ]
+  }
+
+  if (enable_webvr) {
+    sources += [
+      "vr/vr_dispatcher.cc",
+      "vr/vr_dispatcher.h",
+      "vr/vr_type_converters.cc",
+      "vr/vr_type_converters.h",
+    ]
+  }
+}

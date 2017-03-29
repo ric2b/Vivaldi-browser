@@ -1,0 +1,7 @@
+include_rules = [
+  "+breakpad",
+  "+google_update",
+  "+rlz",
+  "+third_party/bspatch",
+  "+third_party/lzma_sdk",
+]

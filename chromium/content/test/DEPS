@@ -1,0 +1,25 @@
+include_rules = [
+  # Allow inclusion of specific components that we depend on. We may only
+  # depend on components which we share with the mojo html_viewer.
+  "+components/scheduler/renderer",
+  "+components/scheduler/test",
+
+  "+cc/blink",
+  "+chromeos/audio", # For WebRTC tests.
+  # Testing utilities can access anything in content/
+  "+content",
+  "+device/bluetooth", # For WebBluetooth tests
+  # For loading V8's initial snapshot from external files.
+  "+gin/v8_initializer.h",
+  "+media/audio", # For AudioParameters in WebRTC tests.
+  "+media/base",  # For ChannelLayout in WebRTC tests.
+  "+ui/base/resource/data_pack.h",
+  "+ui/base/resource/resource_bundle.h",
+  "!v8/include/v8.h",
+]
+
+specific_include_rules = {
+  "layouttest_support.cc": [
+    "+components/test_runner",
+  ],
+}

@@ -1,0 +1,49 @@
+include_rules = [
+  "+gin/public",
+  "+gin/v8_initializer.h",
+  "+v8/include",
+
+  # For chromeos build config
+  "+chromeos/dbus",
+  "+device/bluetooth",  # BluetoothAdapterFactory::Shutdown.
+
+  # The content_shell is the canonical sample embedder, so it only uses
+  # content's public API.
+  "+content/app/strings/grit",  # For generated headers
+  "+content/public",
+
+  # The content_shell is an embedder so it must work with resource bundles.
+  "+ui/base/l10n",
+  "+ui/base/resource",
+
+  # Shell resources
+  "+grit/shell_resources.h",
+
+  # The content_shell for aura must work with the views and aura
+  "+ui/aura",
+  "+ui/views",
+
+  "+components/crash",
+  "+components/devtools_discovery",
+  "+components/devtools_http_handler",
+
+  # For enabling media related features.
+  "+media/base/media_switches.h",
+
+  # For media::RemoveProprietaryMediaTypesAndCodecsForTests.
+  "+media/base/mime_util.h",
+]
+
+specific_include_rules = {
+  "shell_views\.cc": [
+    "+ui/wm/test"
+  ],
+  "content_browser_tests_android\.cc": [
+    "+media/base"
+  ],
+  # Test hook.
+  "shell_mojo_test_utils_android\.cc": [
+    "+content/browser/mojo",
+    "+content/common/mojo",
+  ],
+}

@@ -1,0 +1,50 @@
+// Copyright (c) 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "chrome/browser/signin/account_tracker_service_factory.h"
+
+#include "base/memory/scoped_ptr.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/chrome_signin_client_factory.h"
+#include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "components/pref_registry/pref_registry_syncable.h"
+#include "components/signin/core/browser/account_tracker_service.h"
+#include "components/signin/core/common/signin_pref_names.h"
+
+AccountTrackerServiceFactory::AccountTrackerServiceFactory()
+    : BrowserContextKeyedServiceFactory(
+        "AccountTrackerServiceFactory",
+        BrowserContextDependencyManager::GetInstance()) {
+  DependsOn(ChromeSigninClientFactory::GetInstance());
+}
+
+AccountTrackerServiceFactory::~AccountTrackerServiceFactory() {
+}
+
+// static
+AccountTrackerService*
+AccountTrackerServiceFactory::GetForProfile(Profile* profile) {
+  return static_cast<AccountTrackerService*>(
+      GetInstance()->GetServiceForBrowserContext(profile, true));
+}
+
+// static
+AccountTrackerServiceFactory* AccountTrackerServiceFactory::GetInstance() {
+  return Singleton<AccountTrackerServiceFactory>::get();
+}
+
+void AccountTrackerServiceFactory::RegisterProfilePrefs(
+    user_prefs::PrefRegistrySyncable* registry) {
+  registry->RegisterListPref(AccountTrackerService::kAccountInfoPref);
+  registry->RegisterIntegerPref(prefs::kAccountIdMigrationState,
+                                AccountTrackerService::MIGRATION_NOT_STARTED);
+}
+
+KeyedService* AccountTrackerServiceFactory::BuildServiceInstanceFor(
+    content::BrowserContext* context) const {
+  Profile* profile = static_cast<Profile*>(context);
+  AccountTrackerService* service = new AccountTrackerService();
+  service->Initialize(ChromeSigninClientFactory::GetForProfile(profile));
+  return service;
+}

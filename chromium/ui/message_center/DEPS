@@ -1,0 +1,15 @@
+include_rules = [
+  "+skia/ext",
+  "+third_party/skia",
+  "+ui/accessibility",
+  "+ui/aura",
+  "+ui/base",
+  "+ui/compositor",
+  "+ui/events",
+  "+ui/gfx",
+  "+ui/native_theme",
+  "+ui/resources/grit/ui_resources.h",
+  "+ui/strings/grit/ui_strings.h",
+  "+ui/test",
+  "+ui/views",
+]

@@ -1,0 +1,7 @@
+estade@chromium.org
+isherman@chromium.org
+
+# Owners for password autofill/generation only.
+# TODO(gcasto): Change to per-file ownership after http://crbug.com/235756
+# is fixed.
+gcasto@chromium.org

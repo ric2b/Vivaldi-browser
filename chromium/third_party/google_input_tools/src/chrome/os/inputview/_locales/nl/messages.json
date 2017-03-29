@@ -1,0 +1,3337 @@
+{
+  "add_to_dictionary": {
+    "message": "Toevoegen aan woordenboek"
+  },
+  "add_to_personal_dictionary": {
+    "message": "Toevoegen aan persoonlijk woordenboek"
+  },
+  "add_word_to_dictionary": {
+    "message": "$1 toevoegen aan woordenboek",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "advanced": {
+    "message": "Geavanceerd"
+  },
+  "alt": {
+    "message": "Alt"
+  },
+  "altgr": {
+    "message": "Alt Gr"
+  },
+  "always_auto_correct": {
+    "message": "Agressief"
+  },
+  "am_phonetic_arm_settings_page": {
+    "message": "Pagina met instellingen voor Armeens fonetisch toetsenbord"
+  },
+  "appnamejpkeyboard": {
+    "message": "Japanse invoer van Google (voor Japans toetsenbord)"
+  },
+  "appnameuskeyboard": {
+    "message": "Japanse invoer van Google (voor Amerikaans toetsenbord)"
+  },
+  "auto_correction_level": {
+    "message": "Automatische correctie"
+  },
+  "backspace": {
+    "message": "Backspace"
+  },
+  "basic": {
+    "message": "Basisinstellingen"
+  },
+  "be_fra_settings_page": {
+    "message": "Pagina met instellingen voor Belgisch toetsenbord (Frans)"
+  },
+  "be_ger_settings_page": {
+    "message": "Pagina met instellingen voor Belgisch toetsenbord (Duits)"
+  },
+  "be_nld_settings_page": {
+    "message": "Pagina met instellingen voor Belgisch toetsenbord (Nederlands)"
+  },
+  "bg_bul_settings_page": {
+    "message": "Pagina met instellingen voor Bulgaars toetsenbord"
+  },
+  "bg_phonetic_bul_settings_page": {
+    "message": "Pagina met instellingen voor Bulgaars fonetisch toetsenbord"
+  },
+  "br_por_settings_page": {
+    "message": "Pagina met instellingen voor Braziliaans toetsenbord (Braziliaans-Portugees)"
+  },
+  "by_bel_settings_page": {
+    "message": "Pagina met instellingen voor Wit-Russisch toetsenbord"
+  },
+  "ca_eng_eng_settings_page": {
+    "message": "Pagina met instellingen voor Canadees-Engels toetsenbord (Engels)"
+  },
+  "ca_fra_settings_page": {
+    "message": "Pagina met instellingen voor Canadees-Frans toetsenbord (Frans)"
+  },
+  "ca_multix_fra_settings_page": {
+    "message": "Pagina met instellingen voor Canadees meertalig toetsenbord (Frans)"
+  },
+  "capital": {
+    "message": "hoofdletter"
+  },
+  "capslock": {
+    "message": "Caps Lock"
+  },
+  "ch_fr_fra_settings_page": {
+    "message": "Pagina met instellingen voor Zwitsers-Frans toetsenbord (Frans)"
+  },
+  "ch_ger_settings_page": {
+    "message": "Pagina met instellingen voor Zwitsers toetsenbord (Duits)"
+  },
+  "chos_inputtool_description": {
+    "message": "Met Google Transcript voor Chrome OS kun je in Chrome OS in de gewenste taal typen."
+  },
+  "chos_inputtool_title": {
+    "message": "Google Transcript"
+  },
+  "compositionmodedirect": {
+    "message": "Directe invoer"
+  },
+  "compositionmodefullascii": {
+    "message": "Latijn (verbreed)"
+  },
+  "compositionmodefullkatakana": {
+    "message": "Katakana"
+  },
+  "compositionmodehalfascii": {
+    "message": "Latijn"
+  },
+  "compositionmodehalfkatakana": {
+    "message": "Katakana op halve breedte"
+  },
+  "compositionmodehiragana": {
+    "message": "Hiragana"
+  },
+  "configbasicstitle": {
+    "message": "Basisinstellingen"
+  },
+  "configclearhistory": {
+    "message": "Personalisatiegegevens wissen..."
+  },
+  "configclearhistorycancelbutton": {
+    "message": "Annuleren"
+  },
+  "configclearhistoryconversionhistory": {
+    "message": "Conversiegeschiedenis"
+  },
+  "configclearhistorymessage": {
+    "message": "Verwijder de volgende items:"
+  },
+  "configclearhistoryokbutton": {
+    "message": "Personalisatiegegevens wissen"
+  },
+  "configclearhistorysuggestionhistory": {
+    "message": "Suggestiegeschiedenis"
+  },
+  "configclearhistorytitle": {
+    "message": "Personalisatiegegevens wissen"
+  },
+  "configcreditsdescription": {
+    "message": "Copyright \u00a9 2014 Google Inc. Alle rechten voorbehouden."
+  },
+  "configdialogcancel": {
+    "message": "Annuleren"
+  },
+  "configdialogok": {
+    "message": "OK"
+  },
+  "configdictionarytoolbutton": {
+    "message": "Gebruikerswoordenboek beheren..."
+  },
+  "configdictionarytooldescription": {
+    "message": "Voeg je eigen woorden toe aan het gebruikerswoordenboek om de conversiekandidaten aan te passen."
+  },
+  "configdictionarytooltitle": {
+    "message": "Gebruikerswoordenboeken"
+  },
+  "configincognitomode": {
+    "message": "Gepersonaliseerde conversies en suggesties en gebruikerswoordenboek uitschakelen"
+  },
+  "configinputassistancetitle": {
+    "message": "Invoerondersteuning"
+  },
+  "configosscreditsdescription": {
+    "message": "Deze software is mogelijk gemaakt door <a href=\"./credits_nl.html\">open-sourcesoftware</a>."
+  },
+  "configpreeditmethod": {
+    "message": "Invoermodus:"
+  },
+  "configpreeditmethodkana": {
+    "message": "Kana"
+  },
+  "configpreeditmethodromaji": {
+    "message": "Romaji"
+  },
+  "configprivacytitle": {
+    "message": "Privacy"
+  },
+  "configpunctuationmethod": {
+    "message": "Stijl van interpunctie:"
+  },
+  "configselectionshortcut": {
+    "message": "Sneltoets voor selectie:"
+  },
+  "configselectionshortcutno": {
+    "message": "Geen sneltoets"
+  },
+  "configsessionkeymap": {
+    "message": "Stijl van toetsenindeling:"
+  },
+  "configsessionkeymapatok": {
+    "message": "ATOK"
+  },
+  "configsessionkeymapchromeos": {
+    "message": "Chrome OS"
+  },
+  "configsessionkeymapcustom": {
+    "message": "Aangepaste toetsenbordindeling"
+  },
+  "configsessionkeymapkotoeri": {
+    "message": "Kotoeri"
+  },
+  "configsessionkeymapmsime": {
+    "message": "MS-IME"
+  },
+  "configsettingstitle": {
+    "message": "Japanse invoerinstellingen"
+  },
+  "configshiftkeymodeswitch": {
+    "message": "Moduswijziging via Shift-toets:"
+  },
+  "configshiftkeymodeswitchalphanumeric": {
+    "message": "Alfanumeriek"
+  },
+  "configshiftkeymodeswitchkatakana": {
+    "message": "Katakana"
+  },
+  "configshiftkeymodeswitchoff": {
+    "message": "Uit"
+  },
+  "configspacecharacterform": {
+    "message": "Stijl van spatie-invoer:"
+  },
+  "configspacecharacterformfollow": {
+    "message": "Invoermodus volgen"
+  },
+  "configspacecharacterformfull": {
+    "message": "Volledige breedte"
+  },
+  "configspacecharacterformhalf": {
+    "message": "Halve breedte"
+  },
+  "configsuggestionssize": {
+    "message": "Aantal suggesties:"
+  },
+  "configsuggesttitle": {
+    "message": "Voorstellen"
+  },
+  "configsymbolmethod": {
+    "message": "Stijl van symbolen:"
+  },
+  "configuploadusagestats": {
+    "message": "Automatisch gebruiksstatistieken en crashrapporten naar Google verzenden"
+  },
+  "configuseautoimeturnoff": {
+    "message": "Automatisch schakelen naar halve breedte"
+  },
+  "configusedictionarysuggest": {
+    "message": "Systeemwoordenboek gebruiken"
+  },
+  "configusehistorysuggest": {
+    "message": "Invoergeschiedenis gebruiken"
+  },
+  "ctrl": {
+    "message": "Ctrl"
+  },
+  "current_keyboard_prefix": {
+    "message": "huidig geselecteerd toetsenbord "
+  },
+  "current_lang": {
+    "message": "Invoertaal is Chinees"
+  },
+  "current_punc": {
+    "message": "Interpunctiebreedte: volledig (vol)"
+  },
+  "current_sbc": {
+    "message": "Karakterbreedte: volledig (vol)"
+  },
+  "cz_cze_settings_page": {
+    "message": "Pagina met instellingen voor Tsjechisch toetsenbord"
+  },
+  "cz_qwerty_cze_settings_page": {
+    "message": "Pagina met instellingen voor Tsjechisch QWERTY-toetsenbord"
+  },
+  "d83c_dc04": {
+    "message": "Mahjongtegel"
+  },
+  "d83c_dccf": {
+    "message": "jokerkaart"
+  },
+  "d83c_dd70": {
+    "message": "bloedgroep A"
+  },
+  "d83c_dd71": {
+    "message": "bloedgroep B"
+  },
+  "d83c_dd7e": {
+    "message": "bloedgroep O"
+  },
+  "d83c_dd7f": {
+    "message": "parkeerplaats"
+  },
+  "d83c_dd8e": {
+    "message": "bloedgroep AB"
+  },
+  "d83c_dd91": {
+    "message": "CL-teken"
+  },
+  "d83c_dd92": {
+    "message": "cool-teken"
+  },
+  "d83c_dd93": {
+    "message": "free-teken"
+  },
+  "d83c_dd94": {
+    "message": "ID-teken"
+  },
+  "d83c_dd95": {
+    "message": "Nieuw-teken"
+  },
+  "d83c_dd96": {
+    "message": "NG-teken"
+  },
+  "d83c_dd97": {
+    "message": "OK-teken"
+  },
+  "d83c_dd98": {
+    "message": "SOS-teken"
+  },
+  "d83c_dd99": {
+    "message": "UP!-teken"
+  },
+  "d83c_dd9a": {
+    "message": "VS-teken"
+  },
+  "d83c_de01": {
+    "message": "Japans katakana koko"
+  },
+  "d83c_de02": {
+    "message": "Japans 'service'"
+  },
+  "d83c_de1a": {
+    "message": "Japans 'gratis'"
+  },
+  "d83c_de2f": {
+    "message": "Japans 'gereserveerd'"
+  },
+  "d83c_de32": {
+    "message": "Japans 'verboden'"
+  },
+  "d83c_de33": {
+    "message": "Chinees 'ruimte beschikbaar'"
+  },
+  "d83c_de34": {
+    "message": "Chinees 'pas'"
+  },
+  "d83c_de35": {
+    "message": "Chinees 'vol'"
+  },
+  "d83c_de36": {
+    "message": "Japans 'kosten'"
+  },
+  "d83c_de37": {
+    "message": "Japans 'maandelijks'"
+  },
+  "d83c_de38": {
+    "message": "Chinees 'toepassing'"
+  },
+  "d83c_de39": {
+    "message": "Japans 'korting'"
+  },
+  "d83c_de3a": {
+    "message": "Chinees 'in bedirjf'"
+  },
+  "d83c_de50": {
+    "message": "Japans 'voordeel'"
+  },
+  "d83c_de51": {
+    "message": "Chinees 'goedgekeurd'"
+  },
+  "d83c_df00": {
+    "message": "cycloon"
+  },
+  "d83c_df01": {
+    "message": "mistig"
+  },
+  "d83c_df02": {
+    "message": "paraplu"
+  },
+  "d83c_df03": {
+    "message": "sterren in de nacht"
+  },
+  "d83c_df04": {
+    "message": "zonsopgang in de bergen"
+  },
+  "d83c_df05": {
+    "message": "zonsopgang"
+  },
+  "d83c_df06": {
+    "message": "schemerstad"
+  },
+  "d83c_df07": {
+    "message": "zonsondergang"
+  },
+  "d83c_df08": {
+    "message": "regenboog"
+  },
+  "d83c_df09": {
+    "message": "brug bij nacht"
+  },
+  "d83c_df0a": {
+    "message": "golf"
+  },
+  "d83c_df0b": {
+    "message": "vulkaan"
+  },
+  "d83c_df0c": {
+    "message": "melkweg"
+  },
+  "d83c_df0d": {
+    "message": "weerldbol met Europa en Afrika"
+  },
+  "d83c_df0e": {
+    "message": "wereldbol met Noord- en Zuid-Amerika"
+  },
+  "d83c_df0f": {
+    "message": "wereldbol met Australi\u00eb en Azi\u00eb"
+  },
+  "d83c_df10": {
+    "message": "wereldbol met meridianen"
+  },
+  "d83c_df11": {
+    "message": "nieuwe maan"
+  },
+  "d83c_df12": {
+    "message": "wassende maansikkel"
+  },
+  "d83c_df13": {
+    "message": "maan eerste kwartier"
+  },
+  "d83c_df14": {
+    "message": "wassende maan"
+  },
+  "d83c_df15": {
+    "message": "volle maan"
+  },
+  "d83c_df16": {
+    "message": "afnemende maan"
+  },
+  "d83c_df17": {
+    "message": "maan laatste kwartier"
+  },
+  "d83c_df18": {
+    "message": "afnemende maansikkel"
+  },
+  "d83c_df19": {
+    "message": "maansikkel"
+  },
+  "d83c_df1a": {
+    "message": "nieuwe maan met gezicht"
+  },
+  "d83c_df1b": {
+    "message": "eerste kwartier met gezicht"
+  },
+  "d83c_df1c": {
+    "message": "laatste kwartier met gezicht"
+  },
+  "d83c_df1d": {
+    "message": "volle maan met gezicht"
+  },
+  "d83c_df1e": {
+    "message": "zon met gezicht"
+  },
+  "d83c_df1f": {
+    "message": "schitterende ster"
+  },
+  "d83c_df20": {
+    "message": "vallende ster"
+  },
+  "d83c_df30": {
+    "message": "kastanje"
+  },
+  "d83c_df31": {
+    "message": "zaailing"
+  },
+  "d83c_df32": {
+    "message": "naaldboom"
+  },
+  "d83c_df33": {
+    "message": "loofboom"
+  },
+  "d83c_df34": {
+    "message": "palmboom"
+  },
+  "d83c_df35": {
+    "message": "cactus"
+  },
+  "d83c_df37": {
+    "message": "tulp"
+  },
+  "d83c_df38": {
+    "message": "kersenbloesem"
+  },
+  "d83c_df39": {
+    "message": "roos"
+  },
+  "d83c_df3a": {
+    "message": "hibiscus"
+  },
+  "d83c_df3b": {
+    "message": "zonnebloem"
+  },
+  "d83c_df3c": {
+    "message": "bloesem"
+  },
+  "d83c_df3d": {
+    "message": "ma\u00efs"
+  },
+  "d83c_df3e": {
+    "message": "rijstplant"
+  },
+  "d83c_df3f": {
+    "message": "kruid"
+  },
+  "d83c_df40": {
+    "message": "klavertje vier"
+  },
+  "d83c_df41": {
+    "message": "esdoornblad"
+  },
+  "d83c_df42": {
+    "message": "vallende bladeren"
+  },
+  "d83c_df43": {
+    "message": "blad in de wind"
+  },
+  "d83c_df44": {
+    "message": "paddenstoel"
+  },
+  "d83c_df45": {
+    "message": "tomaat"
+  },
+  "d83c_df46": {
+    "message": "aubergine"
+  },
+  "d83c_df47": {
+    "message": "druiven"
+  },
+  "d83c_df48": {
+    "message": "meloen"
+  },
+  "d83c_df49": {
+    "message": "watermeloen"
+  },
+  "d83c_df4a": {
+    "message": "mandarijn"
+  },
+  "d83c_df4b": {
+    "message": "citroen"
+  },
+  "d83c_df4c": {
+    "message": "banaan"
+  },
+  "d83c_df4d": {
+    "message": "ananas"
+  },
+  "d83c_df4e": {
+    "message": "rode appel"
+  },
+  "d83c_df4f": {
+    "message": "groene appel"
+  },
+  "d83c_df50": {
+    "message": "peer"
+  },
+  "d83c_df51": {
+    "message": "perzik"
+  },
+  "d83c_df52": {
+    "message": "kers"
+  },
+  "d83c_df53": {
+    "message": "aardbei"
+  },
+  "d83c_df54": {
+    "message": "hamburger"
+  },
+  "d83c_df55": {
+    "message": "pizzapunt"
+  },
+  "d83c_df56": {
+    "message": "vlees"
+  },
+  "d83c_df57": {
+    "message": "kippenpoot"
+  },
+  "d83c_df58": {
+    "message": "rijstwafel"
+  },
+  "d83c_df59": {
+    "message": "rijstbal"
+  },
+  "d83c_df5a": {
+    "message": "gekookte rijst"
+  },
+  "d83c_df5b": {
+    "message": "curry met rijst"
+  },
+  "d83c_df5c": {
+    "message": "noedelsoep"
+  },
+  "d83c_df5d": {
+    "message": "spaghetti"
+  },
+  "d83c_df5e": {
+    "message": "brood"
+  },
+  "d83c_df5f": {
+    "message": "frietjes"
+  },
+  "d83c_df60": {
+    "message": "geroosterde zoete aardappel"
+  },
+  "d83c_df61": {
+    "message": "mochi"
+  },
+  "d83c_df62": {
+    "message": "oden"
+  },
+  "d83c_df63": {
+    "message": "sushi"
+  },
+  "d83c_df64": {
+    "message": "gefrituurde garnaal"
+  },
+  "d83c_df65": {
+    "message": "viskoekje"
+  },
+  "d83c_df66": {
+    "message": "softijs"
+  },
+  "d83c_df67": {
+    "message": "ijscoupe"
+  },
+  "d83c_df68": {
+    "message": "ijsje"
+  },
+  "d83c_df69": {
+    "message": "donut"
+  },
+  "d83c_df6a": {
+    "message": "koekje"
+  },
+  "d83c_df6b": {
+    "message": "chocola"
+  },
+  "d83c_df6c": {
+    "message": "snoep"
+  },
+  "d83c_df6d": {
+    "message": "lolly"
+  },
+  "d83c_df6e": {
+    "message": "vla"
+  },
+  "d83c_df6f": {
+    "message": "pot honing"
+  },
+  "d83c_df70": {
+    "message": "gebak"
+  },
+  "d83c_df71": {
+    "message": "bento"
+  },
+  "d83c_df72": {
+    "message": "stoofschotel"
+  },
+  "d83c_df73": {
+    "message": "koekenpan"
+  },
+  "d83c_df74": {
+    "message": "mes en vork"
+  },
+  "d83c_df75": {
+    "message": "theekopje"
+  },
+  "d83c_df76": {
+    "message": "sake"
+  },
+  "d83c_df77": {
+    "message": "wijn"
+  },
+  "d83c_df78": {
+    "message": "cocktail"
+  },
+  "d83c_df79": {
+    "message": "tropisch drankje"
+  },
+  "d83c_df7a": {
+    "message": "bier"
+  },
+  "d83c_df7b": {
+    "message": "bierglazen"
+  },
+  "d83c_df7c": {
+    "message": "fles voor baby"
+  },
+  "d83c_df80": {
+    "message": "strik"
+  },
+  "d83c_df81": {
+    "message": "cadeau"
+  },
+  "d83c_df82": {
+    "message": "verjaardagstaart"
+  },
+  "d83c_df83": {
+    "message": "uitgesneden pompoen"
+  },
+  "d83c_df84": {
+    "message": "kerstboom"
+  },
+  "d83c_df85": {
+    "message": "Kerstman"
+  },
+  "d83c_df86": {
+    "message": "vuurwerk"
+  },
+  "d83c_df87": {
+    "message": "siervuurwerk"
+  },
+  "d83c_df88": {
+    "message": "ballon"
+  },
+  "d83c_df89": {
+    "message": "confettikanon"
+  },
+  "d83c_df8a": {
+    "message": "confetti"
+  },
+  "d83c_df8b": {
+    "message": "boom met papierreepjes"
+  },
+  "d83c_df8c": {
+    "message": "kruislingse vlaggen"
+  },
+  "d83c_df8d": {
+    "message": "dennendecoratie"
+  },
+  "d83c_df8e": {
+    "message": "poppen"
+  },
+  "d83c_df8f": {
+    "message": "vissenvlag"
+  },
+  "d83c_df90": {
+    "message": "windklok"
+  },
+  "d83c_df91": {
+    "message": "naar de maan kijken"
+  },
+  "d83c_df92": {
+    "message": "schooltas"
+  },
+  "d83c_df93": {
+    "message": "afstudeerhoed"
+  },
+  "d83c_dfa0": {
+    "message": "draaimolen"
+  },
+  "d83c_dfa1": {
+    "message": "reuzenrad"
+  },
+  "d83c_dfa2": {
+    "message": "achtbaan"
+  },
+  "d83c_dfa3": {
+    "message": "vissen"
+  },
+  "d83c_dfa4": {
+    "message": "microfoon"
+  },
+  "d83c_dfa5": {
+    "message": "filmcamera"
+  },
+  "d83c_dfa6": {
+    "message": "film"
+  },
+  "d83c_dfa7": {
+    "message": "hoofdtelefoon"
+  },
+  "d83c_dfa8": {
+    "message": "schilderspalet"
+  },
+  "d83c_dfa9": {
+    "message": "hoge hoed"
+  },
+  "d83c_dfaa": {
+    "message": "circustent"
+  },
+  "d83c_dfab": {
+    "message": "kaartje"
+  },
+  "d83c_dfac": {
+    "message": "klapper"
+  },
+  "d83c_dfad": {
+    "message": "theatermaskers"
+  },
+  "d83c_dfae": {
+    "message": "videogame"
+  },
+  "d83c_dfaf": {
+    "message": "roos"
+  },
+  "d83c_dfb0": {
+    "message": "gokautomaat"
+  },
+  "d83c_dfb1": {
+    "message": "biljart"
+  },
+  "d83c_dfb2": {
+    "message": "dobbelsteen"
+  },
+  "d83c_dfb3": {
+    "message": "bowlen"
+  },
+  "d83c_dfb4": {
+    "message": "speelkaart"
+  },
+  "d83c_dfb5": {
+    "message": "muzieknoot"
+  },
+  "d83c_dfb6": {
+    "message": "muzieknoten"
+  },
+  "d83c_dfb7": {
+    "message": "saxofoon"
+  },
+  "d83c_dfb8": {
+    "message": "gitaar"
+  },
+  "d83c_dfb9": {
+    "message": "piano"
+  },
+  "d83c_dfba": {
+    "message": "trompet"
+  },
+  "d83c_dfbb": {
+    "message": "viool"
+  },
+  "d83c_dfbc": {
+    "message": "muziekbalk"
+  },
+  "d83c_dfbd": {
+    "message": "hardloopshirt"
+  },
+  "d83c_dfbe": {
+    "message": "tennis"
+  },
+  "d83c_dfbf": {
+    "message": "ski's en stokken"
+  },
+  "d83c_dfc0": {
+    "message": "basketbal"
+  },
+  "d83c_dfc1": {
+    "message": "geblokte vlag"
+  },
+  "d83c_dfc2": {
+    "message": "snowboarder"
+  },
+  "d83c_dfc3": {
+    "message": "hardloper"
+  },
+  "d83c_dfc4": {
+    "message": "surfen"
+  },
+  "d83c_dfc6": {
+    "message": "trofee"
+  },
+  "d83c_dfc7": {
+    "message": "paardenrennen"
+  },
+  "d83c_dfc8": {
+    "message": "American football"
+  },
+  "d83c_dfc9": {
+    "message": "voetbal"
+  },
+  "d83c_dfca": {
+    "message": "zwemmer"
+  },
+  "d83c_dfe0": {
+    "message": "huis"
+  },
+  "d83c_dfe1": {
+    "message": "thuis"
+  },
+  "d83c_dfe2": {
+    "message": "kantoorgebouw"
+  },
+  "d83c_dfe3": {
+    "message": "Japans postkantoor"
+  },
+  "d83c_dfe4": {
+    "message": "Europees postkantoor"
+  },
+  "d83c_dfe5": {
+    "message": "ziekenhuis"
+  },
+  "d83c_dfe6": {
+    "message": "bank"
+  },
+  "d83c_dfe7": {
+    "message": "pinautomaat"
+  },
+  "d83c_dfe8": {
+    "message": "hotel"
+  },
+  "d83c_dfe9": {
+    "message": "romantisch hotel"
+  },
+  "d83c_dfea": {
+    "message": "supermarkt"
+  },
+  "d83c_dfeb": {
+    "message": "school"
+  },
+  "d83c_dfec": {
+    "message": "warenhuis"
+  },
+  "d83c_dfed": {
+    "message": "fabriek"
+  },
+  "d83c_dfee": {
+    "message": "rode lantaarn"
+  },
+  "d83c_dfef": {
+    "message": "Japans kasteel"
+  },
+  "d83c_dff0": {
+    "message": "Europees kasteel"
+  },
+  "d83d_dc00": {
+    "message": "rat"
+  },
+  "d83d_dc01": {
+    "message": "muis"
+  },
+  "d83d_dc02": {
+    "message": "os"
+  },
+  "d83d_dc03": {
+    "message": "waterbuffel"
+  },
+  "d83d_dc04": {
+    "message": "koe"
+  },
+  "d83d_dc06": {
+    "message": "luipaard"
+  },
+  "d83d_dc07": {
+    "message": "konijn"
+  },
+  "d83d_dc08": {
+    "message": "kat"
+  },
+  "d83d_dc09": {
+    "message": "draak"
+  },
+  "d83d_dc0a": {
+    "message": "krokodil"
+  },
+  "d83d_dc0b": {
+    "message": "walvis"
+  },
+  "d83d_dc0c": {
+    "message": "slak"
+  },
+  "d83d_dc0d": {
+    "message": "slang"
+  },
+  "d83d_dc0e": {
+    "message": "paard"
+  },
+  "d83d_dc0f": {
+    "message": "ram"
+  },
+  "d83d_dc10": {
+    "message": "geit"
+  },
+  "d83d_dc11": {
+    "message": "schaap"
+  },
+  "d83d_dc12": {
+    "message": "aapje"
+  },
+  "d83d_dc13": {
+    "message": "haan"
+  },
+  "d83d_dc14": {
+    "message": "kip"
+  },
+  "d83d_dc15": {
+    "message": "hond"
+  },
+  "d83d_dc16": {
+    "message": "varken"
+  },
+  "d83d_dc17": {
+    "message": "zwijn"
+  },
+  "d83d_dc18": {
+    "message": "olifant"
+  },
+  "d83d_dc19": {
+    "message": "octopus"
+  },
+  "d83d_dc1a": {
+    "message": "schelp"
+  },
+  "d83d_dc1b": {
+    "message": "rups"
+  },
+  "d83d_dc1c": {
+    "message": "mier"
+  },
+  "d83d_dc1d": {
+    "message": "honingbij"
+  },
+  "d83d_dc1e": {
+    "message": "lieveheersbeestje"
+  },
+  "d83d_dc1f": {
+    "message": "vis"
+  },
+  "d83d_dc20": {
+    "message": "tropische vis"
+  },
+  "d83d_dc21": {
+    "message": "kogelvis"
+  },
+  "d83d_dc22": {
+    "message": "schildpad"
+  },
+  "d83d_dc23": {
+    "message": "kuiken uit het ei"
+  },
+  "d83d_dc24": {
+    "message": "babykuikentje"
+  },
+  "d83d_dc25": {
+    "message": "kuiken"
+  },
+  "d83d_dc26": {
+    "message": "vogel"
+  },
+  "d83d_dc27": {
+    "message": "pingu\u00efn"
+  },
+  "d83d_dc28": {
+    "message": "koala"
+  },
+  "d83d_dc29": {
+    "message": "poedel"
+  },
+  "d83d_dc2a": {
+    "message": "dromedaris"
+  },
+  "d83d_dc2b": {
+    "message": "kameel"
+  },
+  "d83d_dc2c": {
+    "message": "dolfijn"
+  },
+  "d83d_dc2d": {
+    "message": "muizengezicht"
+  },
+  "d83d_dc2e": {
+    "message": "koeiengezicht"
+  },
+  "d83d_dc2f": {
+    "message": "tijgergezicht"
+  },
+  "d83d_dc30": {
+    "message": "konijnengezicht"
+  },
+  "d83d_dc31": {
+    "message": "kattengezicht"
+  },
+  "d83d_dc32": {
+    "message": "drakenkop"
+  },
+  "d83d_dc33": {
+    "message": "walvis die water spuit"
+  },
+  "d83d_dc34": {
+    "message": "paardengezicht"
+  },
+  "d83d_dc35": {
+    "message": "apengezicht"
+  },
+  "d83d_dc36": {
+    "message": "hondengezicht"
+  },
+  "d83d_dc37": {
+    "message": "varkensgezicht"
+  },
+  "d83d_dc38": {
+    "message": "kikkergezicht"
+  },
+  "d83d_dc39": {
+    "message": "hamstergezicht"
+  },
+  "d83d_dc3a": {
+    "message": "wolvengezicht"
+  },
+  "d83d_dc3b": {
+    "message": "berengezicht"
+  },
+  "d83d_dc3c": {
+    "message": "pandagezicht"
+  },
+  "d83d_dc3d": {
+    "message": "varkenssnuit"
+  },
+  "d83d_dc3e": {
+    "message": "pootje"
+  },
+  "d83d_dc40": {
+    "message": "ogen"
+  },
+  "d83d_dc42": {
+    "message": "oor"
+  },
+  "d83d_dc43": {
+    "message": "neus"
+  },
+  "d83d_dc44": {
+    "message": "mond"
+  },
+  "d83d_dc45": {
+    "message": "tong"
+  },
+  "d83d_dc46": {
+    "message": "vinger omhoog"
+  },
+  "d83d_dc47": {
+    "message": "vinger omlaag"
+  },
+  "d83d_dc48": {
+    "message": "naar links wijzen"
+  },
+  "d83d_dc49": {
+    "message": "naar rechts wijzen"
+  },
+  "d83d_dc4a": {
+    "message": "samengebalde vuist"
+  },
+  "d83d_dc4b": {
+    "message": "zwaaien"
+  },
+  "d83d_dc4c": {
+    "message": "OK-handteken"
+  },
+  "d83d_dc4d": {
+    "message": "duim omhoog"
+  },
+  "d83d_dc4e": {
+    "message": "duim naar beneden"
+  },
+  "d83d_dc4f": {
+    "message": "handen klappen"
+  },
+  "d83d_dc50": {
+    "message": "open handen"
+  },
+  "d83d_dc51": {
+    "message": "kroon"
+  },
+  "d83d_dc52": {
+    "message": "dameshoed"
+  },
+  "d83d_dc53": {
+    "message": "bril"
+  },
+  "d83d_dc54": {
+    "message": "stropdas"
+  },
+  "d83d_dc55": {
+    "message": "T-shirt"
+  },
+  "d83d_dc56": {
+    "message": "broek"
+  },
+  "d83d_dc57": {
+    "message": "jurk"
+  },
+  "d83d_dc58": {
+    "message": "kimono"
+  },
+  "d83d_dc59": {
+    "message": "bikini"
+  },
+  "d83d_dc5a": {
+    "message": "dameskleding"
+  },
+  "d83d_dc5b": {
+    "message": "knip"
+  },
+  "d83d_dc5c": {
+    "message": "handtas"
+  },
+  "d83d_dc5d": {
+    "message": "portemonnee"
+  },
+  "d83d_dc5e": {
+    "message": "herenschoen"
+  },
+  "d83d_dc5f": {
+    "message": "sportschoen"
+  },
+  "d83d_dc60": {
+    "message": "hoge hak"
+  },
+  "d83d_dc61": {
+    "message": "damessandaal"
+  },
+  "d83d_dc62": {
+    "message": "dameslaars"
+  },
+  "d83d_dc63": {
+    "message": "voetafdrukken"
+  },
+  "d83d_dc64": {
+    "message": "silhouet"
+  },
+  "d83d_dc65": {
+    "message": "silhouetten"
+  },
+  "d83d_dc66": {
+    "message": "jongetje"
+  },
+  "d83d_dc67": {
+    "message": "meisje"
+  },
+  "d83d_dc68": {
+    "message": "man"
+  },
+  "d83d_dc69": {
+    "message": "vrouw"
+  },
+  "d83d_dc6a": {
+    "message": "gezin"
+  },
+  "d83d_dc6b": {
+    "message": "man en vrouw"
+  },
+  "d83d_dc6c": {
+    "message": "twee mannen"
+  },
+  "d83d_dc6d": {
+    "message": "twee vrouwen"
+  },
+  "d83d_dc6e": {
+    "message": "politieagent"
+  },
+  "d83d_dc6f": {
+    "message": "konijnenmeisje"
+  },
+  "d83d_dc70": {
+    "message": "bruid"
+  },
+  "d83d_dc71": {
+    "message": "blond persoon"
+  },
+  "d83d_dc72": {
+    "message": "man met gua pi mao"
+  },
+  "d83d_dc73": {
+    "message": "man met tulband"
+  },
+  "d83d_dc74": {
+    "message": "oude man"
+  },
+  "d83d_dc75": {
+    "message": "oude vrouw"
+  },
+  "d83d_dc76": {
+    "message": "baby"
+  },
+  "d83d_dc77": {
+    "message": "bouwvakker"
+  },
+  "d83d_dc78": {
+    "message": "prinses"
+  },
+  "d83d_dc79": {
+    "message": "monster"
+  },
+  "d83d_dc7a": {
+    "message": "aardmannetje"
+  },
+  "d83d_dc7b": {
+    "message": "spook"
+  },
+  "d83d_dc7c": {
+    "message": "babyengeltje"
+  },
+  "d83d_dc7d": {
+    "message": "alien"
+  },
+  "d83d_dc7e": {
+    "message": "monsterlijke alien"
+  },
+  "d83d_dc7f": {
+    "message": "duiveltje"
+  },
+  "d83d_dc80": {
+    "message": "doodshoofd"
+  },
+  "d83d_dc81": {
+    "message": "informatiebalie"
+  },
+  "d83d_dc82": {
+    "message": "wachter"
+  },
+  "d83d_dc83": {
+    "message": "danser"
+  },
+  "d83d_dc84": {
+    "message": "lippenstift"
+  },
+  "d83d_dc85": {
+    "message": "nagelverzorging"
+  },
+  "d83d_dc86": {
+    "message": "gezichtsmassage"
+  },
+  "d83d_dc87": {
+    "message": "kapper"
+  },
+  "d83d_dc88": {
+    "message": "kapperszaak"
+  },
+  "d83d_dc89": {
+    "message": "schot"
+  },
+  "d83d_dc8a": {
+    "message": "pil"
+  },
+  "d83d_dc8b": {
+    "message": "lipafdruk"
+  },
+  "d83d_dc8c": {
+    "message": "liefdesbrief"
+  },
+  "d83d_dc8d": {
+    "message": "ring"
+  },
+  "d83d_dc8e": {
+    "message": "juweel"
+  },
+  "d83d_dc8f": {
+    "message": "kusje"
+  },
+  "d83d_dc90": {
+    "message": "boeket"
+  },
+  "d83d_dc91": {
+    "message": "stel"
+  },
+  "d83d_dc92": {
+    "message": "trouwkapel"
+  },
+  "d83d_dc93": {
+    "message": "kloppend hart"
+  },
+  "d83d_dc94": {
+    "message": "gebroken hart"
+  },
+  "d83d_dc95": {
+    "message": "twee hartjes"
+  },
+  "d83d_dc96": {
+    "message": "glinsterend hart"
+  },
+  "d83d_dc97": {
+    "message": "groeiend hart"
+  },
+  "d83d_dc98": {
+    "message": "pijl door hart"
+  },
+  "d83d_dc99": {
+    "message": "blauw hart"
+  },
+  "d83d_dc9a": {
+    "message": "groen hart"
+  },
+  "d83d_dc9b": {
+    "message": "geel hart"
+  },
+  "d83d_dc9c": {
+    "message": "paars hart"
+  },
+  "d83d_dc9d": {
+    "message": "hart met lint"
+  },
+  "d83d_dc9e": {
+    "message": "draaiende hartjes"
+  },
+  "d83d_dc9f": {
+    "message": "hart in kader"
+  },
+  "d83d_dca0": {
+    "message": "bloemblaadje"
+  },
+  "d83d_dca1": {
+    "message": "gloeilamp"
+  },
+  "d83d_dca2": {
+    "message": "woede"
+  },
+  "d83d_dca3": {
+    "message": "bom"
+  },
+  "d83d_dca4": {
+    "message": "slapen"
+  },
+  "d83d_dca5": {
+    "message": "explosie"
+  },
+  "d83d_dca6": {
+    "message": "veel zweten"
+  },
+  "d83d_dca7": {
+    "message": "druppel"
+  },
+  "d83d_dca8": {
+    "message": "snel rennen"
+  },
+  "d83d_dca9": {
+    "message": "drol"
+  },
+  "d83d_dcaa": {
+    "message": "spierbal"
+  },
+  "d83d_dcab": {
+    "message": "duizelig"
+  },
+  "d83d_dcac": {
+    "message": "tekstballonnetje"
+  },
+  "d83d_dcad": {
+    "message": "gedachtenballonnetje"
+  },
+  "d83d_dcae": {
+    "message": "witte bloem"
+  },
+  "d83d_dcaf": {
+    "message": "100 punten"
+  },
+  "d83d_dcb0": {
+    "message": "zak met geld"
+  },
+  "d83d_dcb1": {
+    "message": "valutahandel"
+  },
+  "d83d_dcb2": {
+    "message": "dollarteken"
+  },
+  "d83d_dcb3": {
+    "message": "creditcard"
+  },
+  "d83d_dcb4": {
+    "message": "yenbiljet"
+  },
+  "d83d_dcb5": {
+    "message": "dollarbiljet"
+  },
+  "d83d_dcb6": {
+    "message": "eurobiljet"
+  },
+  "d83d_dcb7": {
+    "message": "pondbljet"
+  },
+  "d83d_dcb8": {
+    "message": "fladderend geld"
+  },
+  "d83d_dcb9": {
+    "message": "stijgende koers"
+  },
+  "d83d_dcba": {
+    "message": "stoel"
+  },
+  "d83d_dcbb": {
+    "message": "Pc"
+  },
+  "d83d_dcbc": {
+    "message": "aktetas"
+  },
+  "d83d_dcbd": {
+    "message": "minidisk"
+  },
+  "d83d_dcbe": {
+    "message": "floppydisk"
+  },
+  "d83d_dcbf": {
+    "message": "blu-ray"
+  },
+  "d83d_dcc0": {
+    "message": "dvd"
+  },
+  "d83d_dcc1": {
+    "message": "bestandsmap"
+  },
+  "d83d_dcc2": {
+    "message": "open bestandsmap"
+  },
+  "d83d_dcc3": {
+    "message": "document"
+  },
+  "d83d_dcc4": {
+    "message": "document"
+  },
+  "d83d_dcc5": {
+    "message": "kalender"
+  },
+  "d83d_dcc6": {
+    "message": "scheurkalender"
+  },
+  "d83d_dcc7": {
+    "message": "kaartenbak"
+  },
+  "d83d_dcc8": {
+    "message": "stijgende trend"
+  },
+  "d83d_dcc9": {
+    "message": "dalende trend"
+  },
+  "d83d_dcca": {
+    "message": "staafdiagram"
+  },
+  "d83d_dccb": {
+    "message": "klembord"
+  },
+  "d83d_dccc": {
+    "message": "punaise"
+  },
+  "d83d_dccd": {
+    "message": "punaise met bolletje"
+  },
+  "d83d_dcce": {
+    "message": "paperclip"
+  },
+  "d83d_dccf": {
+    "message": "liniaal"
+  },
+  "d83d_dcd0": {
+    "message": "driehoekige liniaal"
+  },
+  "d83d_dcd1": {
+    "message": "bladwijzers"
+  },
+  "d83d_dcd2": {
+    "message": "map"
+  },
+  "d83d_dcd3": {
+    "message": "notitieblok"
+  },
+  "d83d_dcd4": {
+    "message": "notitieboekje met naamplaat"
+  },
+  "d83d_dcd5": {
+    "message": "gesloten boek"
+  },
+  "d83d_dcd6": {
+    "message": "open boek"
+  },
+  "d83d_dcd7": {
+    "message": "groen boek"
+  },
+  "d83d_dcd8": {
+    "message": "boek"
+  },
+  "d83d_dcd9": {
+    "message": "oranje boek"
+  },
+  "d83d_dcda": {
+    "message": "boeken"
+  },
+  "d83d_dcdb": {
+    "message": "naambordje"
+  },
+  "d83d_dcdc": {
+    "message": "rol perkament"
+  },
+  "d83d_dcdd": {
+    "message": "memo"
+  },
+  "d83d_dcde": {
+    "message": "telefoon"
+  },
+  "d83d_dcdf": {
+    "message": "pieper"
+  },
+  "d83d_dce0": {
+    "message": "fax"
+  },
+  "d83d_dce1": {
+    "message": "schotelantenne"
+  },
+  "d83d_dce2": {
+    "message": "luidspreker"
+  },
+  "d83d_dce3": {
+    "message": "megafoon"
+  },
+  "d83d_dce4": {
+    "message": "verzonden e-mails"
+  },
+  "d83d_dce5": {
+    "message": "ontvangen e-mails"
+  },
+  "d83d_dce6": {
+    "message": "cadeautje"
+  },
+  "d83d_dce7": {
+    "message": "e-mail"
+  },
+  "d83d_dce8": {
+    "message": "inkomende e-mail"
+  },
+  "d83d_dce9": {
+    "message": "uitgaande e-mail"
+  },
+  "d83d_dcea": {
+    "message": "geen post"
+  },
+  "d83d_dceb": {
+    "message": "post"
+  },
+  "d83d_dcec": {
+    "message": "open postbus met post"
+  },
+  "d83d_dced": {
+    "message": "open lege postbus"
+  },
+  "d83d_dcee": {
+    "message": "brievenbus"
+  },
+  "d83d_dcef": {
+    "message": "posthoorn"
+  },
+  "d83d_dcf0": {
+    "message": "krant"
+  },
+  "d83d_dcf1": {
+    "message": "mobiele telefoon"
+  },
+  "d83d_dcf2": {
+    "message": "mobiele telefoon met pijl"
+  },
+  "d83d_dcf3": {
+    "message": "trilstand"
+  },
+  "d83d_dcf4": {
+    "message": "telefoon uit"
+  },
+  "d83d_dcf5": {
+    "message": "geen mobiele telefoon"
+  },
+  "d83d_dcf6": {
+    "message": "mobiele ontvangst"
+  },
+  "d83d_dcf7": {
+    "message": "camera"
+  },
+  "d83d_dcf9": {
+    "message": "videocamera"
+  },
+  "d83d_dcfa": {
+    "message": "tv"
+  },
+  "d83d_dcfb": {
+    "message": "radio"
+  },
+  "d83d_dcfc": {
+    "message": "videoband"
+  },
+  "d83d_dd00": {
+    "message": "gekruiste pijlen"
+  },
+  "d83d_dd01": {
+    "message": "pijlen met de klok mee"
+  },
+  "d83d_dd02": {
+    "message": "pijlen met de klok mee"
+  },
+  "d83d_dd03": {
+    "message": "herladen"
+  },
+  "d83d_dd04": {
+    "message": "pijlen tegen de klok in"
+  },
+  "d83d_dd05": {
+    "message": "lage helderheid"
+  },
+  "d83d_dd06": {
+    "message": "hoge helderheid"
+  },
+  "d83d_dd07": {
+    "message": "stilte gewenst"
+  },
+  "d83d_dd08": {
+    "message": "luidsprekers"
+  },
+  "d83d_dd09": {
+    "message": "luidspreker met laag volume"
+  },
+  "d83d_dd0a": {
+    "message": "luidspreker met hoog volume"
+  },
+  "d83d_dd0b": {
+    "message": "batterij"
+  },
+  "d83d_dd0c": {
+    "message": "stekker"
+  },
+  "d83d_dd0d": {
+    "message": "loep links"
+  },
+  "d83d_dd0e": {
+    "message": "loep rechts"
+  },
+  "d83d_dd0f": {
+    "message": "hangslot met vulpen"
+  },
+  "d83d_dd10": {
+    "message": "hangslot met sleutel"
+  },
+  "d83d_dd11": {
+    "message": "sleutel"
+  },
+  "d83d_dd12": {
+    "message": "hangslot"
+  },
+  "d83d_dd13": {
+    "message": "open hangslot"
+  },
+  "d83d_dd14": {
+    "message": "bel"
+  },
+  "d83d_dd15": {
+    "message": "geen bel"
+  },
+  "d83d_dd16": {
+    "message": "bladwijzer"
+  },
+  "d83d_dd17": {
+    "message": "verbinding"
+  },
+  "d83d_dd18": {
+    "message": "radioknop"
+  },
+  "d83d_dd19": {
+    "message": "terug"
+  },
+  "d83d_dd1a": {
+    "message": "end-teken"
+  },
+  "d83d_dd1b": {
+    "message": "ON-teken"
+  },
+  "d83d_dd1c": {
+    "message": "Soon-teken"
+  },
+  "d83d_dd1d": {
+    "message": "Top-teken"
+  },
+  "d83d_dd1e": {
+    "message": "Niemand onder de 18"
+  },
+  "d83d_dd20": {
+    "message": "hoofdletters"
+  },
+  "d83d_dd21": {
+    "message": "kleine letters"
+  },
+  "d83d_dd22": {
+    "message": "getallen"
+  },
+  "d83d_dd23": {
+    "message": "symbolen"
+  },
+  "d83d_dd24": {
+    "message": "Latijnse alfabet"
+  },
+  "d83d_dd25": {
+    "message": "vuur"
+  },
+  "d83d_dd26": {
+    "message": "zaklamp"
+  },
+  "d83d_dd27": {
+    "message": "moersleutel"
+  },
+  "d83d_dd28": {
+    "message": "hamer"
+  },
+  "d83d_dd29": {
+    "message": "moer en bout"
+  },
+  "d83d_dd2a": {
+    "message": "keukenmes"
+  },
+  "d83d_dd2b": {
+    "message": "revolver"
+  },
+  "d83d_dd2c": {
+    "message": "microscoop"
+  },
+  "d83d_dd2d": {
+    "message": "telescoop"
+  },
+  "d83d_dd2e": {
+    "message": "glazen bol"
+  },
+  "d83d_dd2f": {
+    "message": "zespuntige ster"
+  },
+  "d83d_dd30": {
+    "message": "groen en geel schild"
+  },
+  "d83d_dd31": {
+    "message": "drietand"
+  },
+  "d83d_dd32": {
+    "message": "zwart vierkant met rand"
+  },
+  "d83d_dd33": {
+    "message": "wit vierkant met rand"
+  },
+  "d83d_dd34": {
+    "message": "grote rode cirkel"
+  },
+  "d83d_dd35": {
+    "message": "grote blauwe cirkel"
+  },
+  "d83d_dd36": {
+    "message": "grote oranje ruit"
+  },
+  "d83d_dd37": {
+    "message": "grote blauwe ruit"
+  },
+  "d83d_dd38": {
+    "message": "kleine oranje ruit"
+  },
+  "d83d_dd39": {
+    "message": "kleine blauwe ruit"
+  },
+  "d83d_dd3a": {
+    "message": "rode driehoek omhoog"
+  },
+  "d83d_dd3b": {
+    "message": "rode driehoek omlaag"
+  },
+  "d83d_dd3c": {
+    "message": "driehoek omhoog"
+  },
+  "d83d_dd3d": {
+    "message": "driehoek omlaag"
+  },
+  "d83d_dd50": {
+    "message": "1 uur"
+  },
+  "d83d_dd51": {
+    "message": "2 uur"
+  },
+  "d83d_dd52": {
+    "message": "3 uur"
+  },
+  "d83d_dd53": {
+    "message": "4 uur"
+  },
+  "d83d_dd54": {
+    "message": "5 uur"
+  },
+  "d83d_dd55": {
+    "message": "6 uur"
+  },
+  "d83d_dd56": {
+    "message": "7 uur"
+  },
+  "d83d_dd57": {
+    "message": "8 uur"
+  },
+  "d83d_dd58": {
+    "message": "9 uur"
+  },
+  "d83d_dd59": {
+    "message": "10 uur"
+  },
+  "d83d_dd5a": {
+    "message": "11 uur"
+  },
+  "d83d_dd5b": {
+    "message": "12 uur"
+  },
+  "d83d_dd5c": {
+    "message": "half 2"
+  },
+  "d83d_dd5d": {
+    "message": "half 3"
+  },
+  "d83d_dd5e": {
+    "message": "half 4"
+  },
+  "d83d_dd5f": {
+    "message": "half 5"
+  },
+  "d83d_dd60": {
+    "message": "half 6"
+  },
+  "d83d_dd61": {
+    "message": "half 7"
+  },
+  "d83d_dd62": {
+    "message": "half 8"
+  },
+  "d83d_dd63": {
+    "message": "half 9"
+  },
+  "d83d_dd64": {
+    "message": "half 10"
+  },
+  "d83d_dd65": {
+    "message": "half 11"
+  },
+  "d83d_dd66": {
+    "message": "half 12"
+  },
+  "d83d_dd67": {
+    "message": "half 1"
+  },
+  "d83d_ddfb": {
+    "message": "Fuji-berg"
+  },
+  "d83d_ddfc": {
+    "message": "Tokio Tower"
+  },
+  "d83d_ddfd": {
+    "message": "Vrijheidsbeeld"
+  },
+  "d83d_ddfe": {
+    "message": "kaart van Japan"
+  },
+  "d83d_ddff": {
+    "message": "Moyai-beeld"
+  },
+  "d83d_de00": {
+    "message": "grijns"
+  },
+  "d83d_de01": {
+    "message": " breed glimlachen"
+  },
+  "d83d_de02": {
+    "message": "tranen van geluk"
+  },
+  "d83d_de03": {
+    "message": "blij met open mond"
+  },
+  "d83d_de04": {
+    "message": "brede glimlach met vrolijke ogen"
+  },
+  "d83d_de05": {
+    "message": "opgelucht glimlachen"
+  },
+  "d83d_de06": {
+    "message": " hilarisch"
+  },
+  "d83d_de07": {
+    "message": "glimlachend engeltje"
+  },
+  "d83d_de08": {
+    "message": "duivels glimlachje"
+  },
+  "d83d_de09": {
+    "message": "knipoog"
+  },
+  "d83d_de0a": {
+    "message": "glimlachen"
+  },
+  "d83d_de0b": {
+    "message": "heerlijk"
+  },
+  "d83d_de0c": {
+    "message": "opgelucht"
+  },
+  "d83d_de0d": {
+    "message": "hoteldebotel"
+  },
+  "d83d_de0e": {
+    "message": "stoer"
+  },
+  "d83d_de0f": {
+    "message": "grijns"
+  },
+  "d83d_de10": {
+    "message": "totaal neutraal"
+  },
+  "d83d_de11": {
+    "message": "emotieloos"
+  },
+  "d83d_de12": {
+    "message": "ontevreden"
+  },
+  "d83d_de13": {
+    "message": "domper"
+  },
+  "d83d_de14": {
+    "message": "somber"
+  },
+  "d83d_de15": {
+    "message": "verward"
+  },
+  "d83d_de16": {
+    "message": "verward"
+  },
+  "d83d_de17": {
+    "message": "kus"
+  },
+  "d83d_de18": {
+    "message": "kusje"
+  },
+  "d83d_de19": {
+    "message": "kus en glimlach"
+  },
+  "d83d_de1a": {
+    "message": "zoen"
+  },
+  "d83d_de1b": {
+    "message": "tong naar buiten"
+  },
+  "d83d_de1c": {
+    "message": "tong en knipoog"
+  },
+  "d83d_de1d": {
+    "message": "bah"
+  },
+  "d83d_de1e": {
+    "message": "teleurgesteld"
+  },
+  "d83d_de1f": {
+    "message": "bezorgd"
+  },
+  "d83d_de20": {
+    "message": "boos"
+  },
+  "d83d_de21": {
+    "message": "boos"
+  },
+  "d83d_de22": {
+    "message": "huilen"
+  },
+  "d83d_de23": {
+    "message": "verpest"
+  },
+  "d83d_de24": {
+    "message": "briesen"
+  },
+  "d83d_de25": {
+    "message": "oef!"
+  },
+  "d83d_de26": {
+    "message": "frons"
+  },
+  "d83d_de27": {
+    "message": "gekweld"
+  },
+  "d83d_de28": {
+    "message": "bang"
+  },
+  "d83d_de29": {
+    "message": "moe"
+  },
+  "d83d_de2a": {
+    "message": "slaperig"
+  },
+  "d83d_de2b": {
+    "message": "moe"
+  },
+  "d83d_de2c": {
+    "message": "grimas"
+  },
+  "d83d_de2d": {
+    "message": "tranen met tuiten"
+  },
+  "d83d_de2e": {
+    "message": "verbaasd"
+  },
+  "d83d_de2f": {
+    "message": "geschrokken"
+  },
+  "d83d_de30": {
+    "message": "bijna te laat"
+  },
+  "d83d_de31": {
+    "message": "bang"
+  },
+  "d83d_de32": {
+    "message": "verbaasd"
+  },
+  "d83d_de33": {
+    "message": "schaamrood"
+  },
+  "d83d_de34": {
+    "message": "slapen"
+  },
+  "d83d_de35": {
+    "message": "duizelig"
+  },
+  "d83d_de36": {
+    "message": "mondloos gezicht"
+  },
+  "d83d_de37": {
+    "message": "gezicht met masker"
+  },
+  "d83d_de38": {
+    "message": "grijnzende kat"
+  },
+  "d83d_de39": {
+    "message": "kat met tranen van geluk"
+  },
+  "d83d_de3a": {
+    "message": "lachende kat"
+  },
+  "d83d_de3b": {
+    "message": "glimlachende kat"
+  },
+  "d83d_de3c": {
+    "message": "duivelse kat"
+  },
+  "d83d_de3d": {
+    "message": "kat die kus geeft"
+  },
+  "d83d_de3e": {
+    "message": "ontevreden kat"
+  },
+  "d83d_de3f": {
+    "message": "huilende kat"
+  },
+  "d83d_de40": {
+    "message": "gesloopte kat"
+  },
+  "d83d_de45": {
+    "message": "slecht idee"
+  },
+  "d83d_de46": {
+    "message": "OK-teken"
+  },
+  "d83d_de47": {
+    "message": "het spijt me"
+  },
+  "d83d_de48": {
+    "message": "ik zie niets"
+  },
+  "d83d_de49": {
+    "message": "ik hoor niets"
+  },
+  "d83d_de4a": {
+    "message": "ik zeg niets"
+  },
+  "d83d_de4b": {
+    "message": "blij persoon"
+  },
+  "d83d_de4c": {
+    "message": "hoera"
+  },
+  "d83d_de4d": {
+    "message": "fronsend persoon"
+  },
+  "d83d_de4e": {
+    "message": "pruilmond"
+  },
+  "d83d_de4f": {
+    "message": "bidden"
+  },
+  "d83d_de80": {
+    "message": "raket"
+  },
+  "d83d_de81": {
+    "message": "helikopter"
+  },
+  "d83d_de82": {
+    "message": "stoomlocomotief"
+  },
+  "d83d_de83": {
+    "message": "trein"
+  },
+  "d83d_de84": {
+    "message": "hogesnelheidstrein"
+  },
+  "d83d_de85": {
+    "message": "hogesnelheidssprinter"
+  },
+  "d83d_de86": {
+    "message": "trein"
+  },
+  "d83d_de87": {
+    "message": "metro"
+  },
+  "d83d_de88": {
+    "message": "lightrail"
+  },
+  "d83d_de89": {
+    "message": "treinstation"
+  },
+  "d83d_de8a": {
+    "message": "tram"
+  },
+  "d83d_de8b": {
+    "message": "tramwagon"
+  },
+  "d83d_de8c": {
+    "message": "bus"
+  },
+  "d83d_de8d": {
+    "message": "bus van voren"
+  },
+  "d83d_de8e": {
+    "message": "trolleybus"
+  },
+  "d83d_de8f": {
+    "message": "bushalte"
+  },
+  "d83d_de90": {
+    "message": "busje"
+  },
+  "d83d_de91": {
+    "message": "ambulance"
+  },
+  "d83d_de92": {
+    "message": "brandweerwagen"
+  },
+  "d83d_de93": {
+    "message": "politie-auto"
+  },
+  "d83d_de94": {
+    "message": "politie-auto van voren"
+  },
+  "d83d_de95": {
+    "message": "Taxi"
+  },
+  "d83d_de96": {
+    "message": "taxi van voren"
+  },
+  "d83d_de97": {
+    "message": "personenauto"
+  },
+  "d83d_de98": {
+    "message": "auto van voren"
+  },
+  "d83d_de99": {
+    "message": "auto"
+  },
+  "d83d_de9a": {
+    "message": "bestelwagen"
+  },
+  "d83d_de9b": {
+    "message": "vrachtwagen"
+  },
+  "d83d_de9c": {
+    "message": "trekker"
+  },
+  "d83d_de9d": {
+    "message": "monorail"
+  },
+  "d83d_de9e": {
+    "message": "trein in de bergen"
+  },
+  "d83d_de9f": {
+    "message": "hangende trein"
+  },
+  "d83d_dea0": {
+    "message": "kabelbaan in de bergen"
+  },
+  "d83d_dea1": {
+    "message": "kabelbaan"
+  },
+  "d83d_dea2": {
+    "message": "schip"
+  },
+  "d83d_dea3": {
+    "message": "roeiboot"
+  },
+  "d83d_dea4": {
+    "message": "speedboot"
+  },
+  "d83d_dea5": {
+    "message": "horizontaal verkeerslicht"
+  },
+  "d83d_dea6": {
+    "message": "verticaal verkeerslicht"
+  },
+  "d83d_dea7": {
+    "message": "in aanbouw"
+  },
+  "d83d_dea8": {
+    "message": "zwaailicht"
+  },
+  "d83d_dea9": {
+    "message": "rode driehoekvlag"
+  },
+  "d83d_deaa": {
+    "message": "deur"
+  },
+  "d83d_deab": {
+    "message": "Geen toegang"
+  },
+  "d83d_deac": {
+    "message": "rookteken"
+  },
+  "d83d_dead": {
+    "message": "niet roken"
+  },
+  "d83d_deae": {
+    "message": "afvalbakbordje"
+  },
+  "d83d_deaf": {
+    "message": "geen afval laten liggen"
+  },
+  "d83d_deb0": {
+    "message": "drinkwaterteken"
+  },
+  "d83d_deb1": {
+    "message": "niet-drinkbaar water"
+  },
+  "d83d_deb2": {
+    "message": "fiets"
+  },
+  "d83d_deb3": {
+    "message": "geen fiets"
+  },
+  "d83d_deb4": {
+    "message": "fietser"
+  },
+  "d83d_deb5": {
+    "message": "fietser in de bergen"
+  },
+  "d83d_deb6": {
+    "message": "voetganger"
+  },
+  "d83d_deb7": {
+    "message": "geen voetgangers"
+  },
+  "d83d_deb8": {
+    "message": "overstekende kinderen"
+  },
+  "d83d_deb9": {
+    "message": "man-teken"
+  },
+  "d83d_deba": {
+    "message": "vrouw-teken"
+  },
+  "d83d_debb": {
+    "message": "toilettenbordje"
+  },
+  "d83d_debc": {
+    "message": "baby-teken"
+  },
+  "d83d_debd": {
+    "message": "toilet"
+  },
+  "d83d_debe": {
+    "message": "wc"
+  },
+  "d83d_debf": {
+    "message": "douche"
+  },
+  "d83d_dec0": {
+    "message": "bad"
+  },
+  "d83d_dec1": {
+    "message": "badkuip"
+  },
+  "d83d_dec2": {
+    "message": "paspoortcontrole"
+  },
+  "d83d_dec3": {
+    "message": "douane"
+  },
+  "d83d_dec4": {
+    "message": "bagageband"
+  },
+  "d83d_dec5": {
+    "message": "bagagedepot"
+  },
+  "de_ger_settings_page": {
+    "message": "Pagina met instellingen voor Duits toetsenbord"
+  },
+  "de_neo_ger_settings_page": {
+    "message": "Pagina met instellingen voor Duits neo 2 toetsenbord"
+  },
+  "dictionarytoolcategorytitle": {
+    "message": "Categorie"
+  },
+  "dictionarytoolcommentnewinput": {
+    "message": "Reactie"
+  },
+  "dictionarytoolcommenttitle": {
+    "message": "Reactie"
+  },
+  "dictionarytooldeletedictionaryconfirm": {
+    "message": "Wil je [object Object] verwijderen?"
+  },
+  "dictionarytooldeletedictionarytitle": {
+    "message": "Woordenboek verwijderen"
+  },
+  "dictionarytooldictionarylisttitle": {
+    "message": "Woordenboeken"
+  },
+  "dictionarytooldictionaryname": {
+    "message": "Naam woordenboek"
+  },
+  "dictionarytooldonebutton": {
+    "message": "Klaar"
+  },
+  "dictionarytoolexportbutton": {
+    "message": "Exporteren"
+  },
+  "dictionarytoolimportbutton": {
+    "message": "Importeren..."
+  },
+  "dictionarytoolmenutitle": {
+    "message": "Woordenboekbeheer"
+  },
+  "dictionarytoolnewdictionarynameplaceholder": {
+    "message": "Nieuw woordenboek"
+  },
+  "dictionarytoolpagetitle": {
+    "message": "Gebruikerswoordenboeken"
+  },
+  "dictionarytoolreadingnewinput": {
+    "message": "Nieuwe lezing"
+  },
+  "dictionarytoolreadingtitle": {
+    "message": "Lezing"
+  },
+  "dictionarytoolstatuserrordictionarynamecontainsinvalidcharacter": {
+    "message": "De naam bevat ongeldige tekens."
+  },
+  "dictionarytoolstatuserrordictionarynameduplicated": {
+    "message": "De naam bestaat al."
+  },
+  "dictionarytoolstatuserrordictionarynameempty": {
+    "message": "Typ een naam voor het woordenboek."
+  },
+  "dictionarytoolstatuserrordictionarynametoolong": {
+    "message": "De naam is te lang."
+  },
+  "dictionarytoolstatuserrordictionarysizelimitexceeded": {
+    "message": "Kan niet meer woordenboeken maken."
+  },
+  "dictionarytoolstatuserroremptyfile": {
+    "message": "Het bestand is leeg."
+  },
+  "dictionarytoolstatuserrorentrysizelimitexceeded": {
+    "message": "Kan niet meer vermeldingen in dit woordenboek maken."
+  },
+  "dictionarytoolstatuserrorfilenotfound": {
+    "message": "Kan het bestand niet openen."
+  },
+  "dictionarytoolstatuserrorfilesizelimitexceeded": {
+    "message": "De gegevensgrootte overschrijdt de maximale bestandsgrootte."
+  },
+  "dictionarytoolstatuserrorgeneral": {
+    "message": "De bewerking is mislukt."
+  },
+  "dictionarytoolstatuserrorimportinvalidentries": {
+    "message": "Sommige woorden kunnen niet worden ge\u00efmporteerd."
+  },
+  "dictionarytoolstatuserrorimporttoomanywords": {
+    "message": "De importbron bevat te veel woorden."
+  },
+  "dictionarytoolstatuserrorinvalidfileformat": {
+    "message": "Kan het bestand niet lezen."
+  },
+  "dictionarytoolstatuserrornoundohistory": {
+    "message": "Niet meer bewerkingen om ongedaan te maken."
+  },
+  "dictionarytoolstatuserrorreadingcontainsinvalidcharacter": {
+    "message": "De lezing bevat ongeldige tekens. Je kunt ASCII-tekens, Hiragana, de uitspraakmarkering (\u309b), semi-uitspraakmarkering (\u309c), de midden-punt (\u30fb), de aangehouden-uitspraakmarkering (\u30fc), de Japanse komma (\u3001), de Japanse punt (\u3002), Japanse haakjes (\u300c\u300d\u300e\u300f) en het Japanse golvende streepje (\u301c) in de lezing gebruiken."
+  },
+  "dictionarytoolstatuserrorreadingempty": {
+    "message": "Typ de lezing."
+  },
+  "dictionarytoolstatuserrorreadingtoolong": {
+    "message": "De lezing is te lang."
+  },
+  "dictionarytoolstatuserrortitleaddentry": {
+    "message": "Fout bij toevoegen van vermelding"
+  },
+  "dictionarytoolstatuserrortitlecreatedictionary": {
+    "message": "Fout bij maken van woordenboek"
+  },
+  "dictionarytoolstatuserrortitledeletedictionary": {
+    "message": "Fout bij verwijderen van woordenboek"
+  },
+  "dictionarytoolstatuserrortitledeleteentry": {
+    "message": "Fout bij verwijderen van vermelding"
+  },
+  "dictionarytoolstatuserrortitleeditentry": {
+    "message": "Fout bij bewerken van vermelding"
+  },
+  "dictionarytoolstatuserrortitleimportdata": {
+    "message": "Fout bij importeren"
+  },
+  "dictionarytoolstatuserrortitlerenamedictionary": {
+    "message": "Fout bij wijzigen van naam van woordenboek"
+  },
+  "dictionarytoolstatuserrorwordcontainsinvalidcharacter": {
+    "message": "Het woord bevat ongeldige tekens."
+  },
+  "dictionarytoolstatuserrorwordempty": {
+    "message": "Typ het woord."
+  },
+  "dictionarytoolstatuserrorwordtoolong": {
+    "message": "Het woord is te lang."
+  },
+  "dictionarytoolwordnewinput": {
+    "message": "Nieuw woord"
+  },
+  "dictionarytoolwordtitle": {
+    "message": "Woord"
+  },
+  "dismiss_menu": {
+    "message": "Toetsenbordmenu verwijderen"
+  },
+  "dk_dan_settings_page": {
+    "message": "Pagina met instellingen voor Deens toetsenbord"
+  },
+  "double_space_period": {
+    "message": "Twee keer spatie om punt te typen"
+  },
+  "down_arrow": {
+    "message": "pijl-omlaag"
+  },
+  "ee_est_settings_page": {
+    "message": "Pagina met instellingen voor Estlands toetsenbord"
+  },
+  "emoji_tab_emoticon": {
+    "message": "Emojicategorie: emoticon"
+  },
+  "emoji_tab_face": {
+    "message": "Emojicategorie: gezicht"
+  },
+  "emoji_tab_hot": {
+    "message": "Emojicategorie: populair"
+  },
+  "emoji_tab_nature": {
+    "message": "Emojicategorie: natuur"
+  },
+  "emoji_tab_object": {
+    "message": "Emojicategorie: object"
+  },
+  "emoji_tab_place": {
+    "message": "Emojicategorie: plaats"
+  },
+  "emoji_tab_recent": {
+    "message": "Emojicategorie: recent"
+  },
+  "emoji_tab_symbol": {
+    "message": "Emojicategorie: symbool"
+  },
+  "enable_capitalization": {
+    "message": "Automatisch hoofdlettergebruik"
+  },
+  "enable_completion": {
+    "message": "Aanvulling inschakelen"
+  },
+  "enable_prediction": {
+    "message": "Voorspelling voor volgend woord inschakelen"
+  },
+  "enter": {
+    "message": "Enter"
+  },
+  "es_cat_cat_settings_page": {
+    "message": "Pagina met instellingen voor Catalaans toetsenbord"
+  },
+  "es_spa_settings_page": {
+    "message": "Pagina met instellingen voor Spaans toetsenbord"
+  },
+  "expand": {
+    "message": "Uitvouwen"
+  },
+  "expand_candidates": {
+    "message": "kandidatenlijst uitvouwen"
+  },
+  "fi_fin_settings_page": {
+    "message": "Pagina met instellingen voor Fins toetsenbord"
+  },
+  "footer_emoji_button": {
+    "message": "overschakelen naar emoji"
+  },
+  "footer_handwriting_button": {
+    "message": "overschakelen naar handschrift"
+  },
+  "footer_settings_button": {
+    "message": "instellingen voor invoermethode openen"
+  },
+  "fr_fra_settings_page": {
+    "message": "Pagina met instellingen voor Frans toetsenbord"
+  },
+  "fuzzy_pinyin": {
+    "message": "Fuzzy-pinyinmethode inschakelen"
+  },
+  "gb_dvorak_eng_settings_page": {
+    "message": "Pagina met instellingen voor Brits Dvorak-toetsenbord (Engels)"
+  },
+  "gb_extd_eng_settings_page": {
+    "message": "Pagina met instellingen voor Brits toetsenbord (Engels)"
+  },
+  "ge_geo_settings_page": {
+    "message": "Pagina met instellingen voor Georgisch toetsenbord"
+  },
+  "globe": {
+    "message": "schakelen naar vorig toetsenbord"
+  },
+  "got_it": {
+    "message": "Ik snap het"
+  },
+  "gr_gre_settings_page": {
+    "message": "Pagina met instellingen voor Grieks toetsenbord"
+  },
+  "handwriting_back": {
+    "message": "Terug"
+  },
+  "handwriting_netowrk_error": {
+    "message": "Je kunt geen handschrift gebruiken omdat het netwerk niet beschikbaar is."
+  },
+  "handwriting_privacy_info": {
+    "message": "Je invoer wordt naar servers van Google verzonden om de tekst te herkennen."
+  },
+  "hide_keyboard": {
+    "message": "toetsenbord verbergen"
+  },
+  "hr_scr_settings_page": {
+    "message": "Pagina met instellingen voor Kroatisch toetsenbord"
+  },
+  "hu_hun_settings_page": {
+    "message": "Pagina met instellingen voor Hongaars toetsenbord"
+  },
+  "ie_ga_settings_page": {
+    "message": "Pagina met instellingen voor Iers toetsenbord"
+  },
+  "ignore_correction": {
+    "message": "Correctie negeren voor"
+  },
+  "ignore_correction_short": {
+    "message": "Correctie negeren"
+  },
+  "il_heb_settings_page": {
+    "message": "Pagina met instellingen voor Hebreeuws toetsenbord"
+  },
+  "init_lang": {
+    "message": "Standaard invoertaal is Chinees"
+  },
+  "init_punc": {
+    "message": "Standaard interpunctiebreedte is 'volledig'"
+  },
+  "init_sbc": {
+    "message": "Standaard karakterbreedte is 'volledig'"
+  },
+  "input_hangul": {
+    "message": "Modus voor hangul"
+  },
+  "input_hanja": {
+    "message": "Modus voor hanja"
+  },
+  "inputmethod_array": {
+    "message": "Array-invoermethode"
+  },
+  "inputmethod_cangjie": {
+    "message": "Cangjie-invoermethode"
+  },
+  "inputmethod_dayi": {
+    "message": "Dayi-invoermethode"
+  },
+  "inputmethod_hangul": {
+    "message": "Koreaanse invoermethode"
+  },
+  "inputmethod_pinyin": {
+    "message": "Pinyin-invoermethode"
+  },
+  "inputmethod_quick": {
+    "message": "Snelle invoermethode"
+  },
+  "inputmethod_traditional_pinyin": {
+    "message": "Pinyin-invoermethode voor traditioneel Chinees"
+  },
+  "inputmethod_wubi": {
+    "message": "Wubi-invoermethode"
+  },
+  "inputmethod_zhuyin": {
+    "message": "Zhuyin-invoermethode"
+  },
+  "is_ice_settings_page": {
+    "message": "Pagina met instellingen voor IJslands toetsenbord"
+  },
+  "it_ita_settings_page": {
+    "message": "Pagina met instellingen voor Italiaans toetsenbord"
+  },
+  "jp_jpn_settings_page": {
+    "message": "Pagina met instellingen voor Japans toetsenbord"
+  },
+  "keyboard_arabic": {
+    "message": "Arabisch toetsenbord"
+  },
+  "keyboard_armenian_phonetic": {
+    "message": "Armeens fonetisch toetsenbord"
+  },
+  "keyboard_belarusian": {
+    "message": "Wit-Russisch toetsenbord"
+  },
+  "keyboard_belgian": {
+    "message": "Belgisch toetsenbord"
+  },
+  "keyboard_bengali_phonetic": {
+    "message": "Bengaals toetsenbord (fonetisch)"
+  },
+  "keyboard_brazilian": {
+    "message": "Braziliaans toetsenbord"
+  },
+  "keyboard_bulgarian": {
+    "message": "Bulgaars toetsenbord"
+  },
+  "keyboard_bulgarian_phonetic": {
+    "message": "Bulgaars fonetisch toetsenbord"
+  },
+  "keyboard_canadian_english": {
+    "message": "Canadees-Engels toetsenbord"
+  },
+  "keyboard_canadian_french": {
+    "message": "Canadees-Frans toetsenbord"
+  },
+  "keyboard_canadian_multilingual": {
+    "message": "Canadees meertalig toetsenbord"
+  },
+  "keyboard_catalan": {
+    "message": "Catalaans toetsenbord"
+  },
+  "keyboard_croatian": {
+    "message": "Kroatisch toetsenbord"
+  },
+  "keyboard_czech": {
+    "message": "Tsjechisch toetsenbord"
+  },
+  "keyboard_czech_qwerty": {
+    "message": "Tsjechisch QWERTY-toetsenbord"
+  },
+  "keyboard_danish": {
+    "message": "Deens toetsenbord"
+  },
+  "keyboard_devanagari_phonetic": {
+    "message": "Devanagari toetsenbord (fonetisch)"
+  },
+  "keyboard_estonian": {
+    "message": "Estlands toetsenbord"
+  },
+  "keyboard_ethiopic": {
+    "message": "Ethiopisch toetsenbord"
+  },
+  "keyboard_finnish": {
+    "message": "Fins toetsenbord"
+  },
+  "keyboard_french": {
+    "message": "Frans toetsenbord"
+  },
+  "keyboard_georgian": {
+    "message": "Georgisch toetsenbord"
+  },
+  "keyboard_german": {
+    "message": "Duits toetsenbord"
+  },
+  "keyboard_german_neo_2": {
+    "message": "Duits neo 2 toetsenbord"
+  },
+  "keyboard_greek": {
+    "message": "Grieks toetsenbord"
+  },
+  "keyboard_gujarati_phonetic": {
+    "message": "Gujarati toetsenbord (fonetisch)"
+  },
+  "keyboard_hebrew": {
+    "message": "Hebreeuws toetsenbord"
+  },
+  "keyboard_hungarian": {
+    "message": "Hongaars toetsenbord"
+  },
+  "keyboard_icelandic": {
+    "message": "IJslands toetsenbord"
+  },
+  "keyboard_inscript": {
+    "message": "Toetsenbord (InScript)"
+  },
+  "keyboard_irish": {
+    "message": "Iers toetsenbord"
+  },
+  "keyboard_italian": {
+    "message": "Italiaans toetsenbord"
+  },
+  "keyboard_itrans": {
+    "message": "Toetsenbord (itrans)"
+  },
+  "keyboard_japanese": {
+    "message": "Japans toetsenbord"
+  },
+  "keyboard_kannada_phonetic": {
+    "message": "Kannada toetsenbord (fonetisch)"
+  },
+  "keyboard_kedmanee": {
+    "message": "Toetsenbord (Kedmanee)"
+  },
+  "keyboard_khmer": {
+    "message": "Khmer toetsenbord"
+  },
+  "keyboard_lao": {
+    "message": "Laotiaans toetsenbord"
+  },
+  "keyboard_latin_american": {
+    "message": "Latijns-Amerikaans toetsenbord"
+  },
+  "keyboard_latvian": {
+    "message": "Lets toetsenbord"
+  },
+  "keyboard_lithuanian": {
+    "message": "Litouws toetsenbord"
+  },
+  "keyboard_malayalam_phonetic": {
+    "message": "Malayalam toetsenbord (fonetisch)"
+  },
+  "keyboard_maltese": {
+    "message": "Maltees toetsenbord"
+  },
+  "keyboard_mongolian": {
+    "message": "Mongools toetsenbord"
+  },
+  "keyboard_myanmar": {
+    "message": "Myanmar MM3-toetsenbord"
+  },
+  "keyboard_myanmar_myansan": {
+    "message": "Myanmar MyanSan-toetsenbord"
+  },
+  "keyboard_nepali_inscript": {
+    "message": "Nepalees toetsenbord (InScript)"
+  },
+  "keyboard_nepali_phonetic": {
+    "message": "Nepalees toetsenbord (fonetisch)"
+  },
+  "keyboard_netherlands": {
+    "message": "Nederlands toetsenbord"
+  },
+  "keyboard_none": {
+    "message": "Toetsenbord"
+  },
+  "keyboard_norwegian": {
+    "message": "Noors toetsenbord"
+  },
+  "keyboard_pattachote": {
+    "message": "Toetsenbord (Pattachote)"
+  },
+  "keyboard_persian": {
+    "message": "Perzisch toetsenbord"
+  },
+  "keyboard_phonetic": {
+    "message": "Toetsenbord (fonetisch)"
+  },
+  "keyboard_polish": {
+    "message": "Pools toetsenbord"
+  },
+  "keyboard_portuguese": {
+    "message": "Portugees toetsenbord"
+  },
+  "keyboard_romanian": {
+    "message": "Roemeens toetsenbord"
+  },
+  "keyboard_romanian_standard": {
+    "message": "Standaardtoetsenbord voor Roemeens"
+  },
+  "keyboard_russian": {
+    "message": "Russisch toetsenbord"
+  },
+  "keyboard_russian_phonetic": {
+    "message": "Russisch fonetisch toetsenbord"
+  },
+  "keyboard_russian_phonetic_aatseel": {
+    "message": "Russisch fonetisch toetsenbord (AATSEEL)"
+  },
+  "keyboard_russian_phonetic_yazhert": {
+    "message": "Russisch fonetisch toetsenbord (YaZHert)"
+  },
+  "keyboard_serbian": {
+    "message": "Servisch toetsenbord"
+  },
+  "keyboard_sinhala": {
+    "message": "Singalees toetsenbord"
+  },
+  "keyboard_slovakian": {
+    "message": "Slowaaks toetsenbord"
+  },
+  "keyboard_slovenian": {
+    "message": "Sloveens toetsenbord"
+  },
+  "keyboard_soranikurdish_ar": {
+    "message": "Op Arabisch gebaseerd toetsenbord voor Soran\u00ee"
+  },
+  "keyboard_soranikurdish_en": {
+    "message": "Op Engels gebaseerd toetsenbord voor Soran\u00ee"
+  },
+  "keyboard_spanish": {
+    "message": "Spaans toetsenbord"
+  },
+  "keyboard_swedish": {
+    "message": "Zweeds toetsenbord"
+  },
+  "keyboard_swiss": {
+    "message": "Zwitsers toetsenbord"
+  },
+  "keyboard_swiss_french": {
+    "message": "Zwitsers-Frans toetsenbord"
+  },
+  "keyboard_tamil99": {
+    "message": "Toetsenbord (Tamil99)"
+  },
+  "keyboard_tamil_inscript": {
+    "message": "Tamil toetsenbord (InScript)"
+  },
+  "keyboard_tamil_itrans": {
+    "message": "Tamil toetsenbord (itrans)"
+  },
+  "keyboard_tamil_phonetic": {
+    "message": "Tamil toetsenbord (fonetisch)"
+  },
+  "keyboard_tamil_tamil99": {
+    "message": "Tamil toetsenbord (Tamil99)"
+  },
+  "keyboard_tamil_typewriter": {
+    "message": "Tamil toetsenbord (Typewriter)"
+  },
+  "keyboard_tcvn": {
+    "message": "Toetsenbord (TCVN)"
+  },
+  "keyboard_telex": {
+    "message": "Toetsenbord (Telex)"
+  },
+  "keyboard_telugu_phonetic": {
+    "message": "Telugu toetsenbord (fonetisch)"
+  },
+  "keyboard_thai_kedmanee": {
+    "message": "Thais toetsenbord (Kedmanee)"
+  },
+  "keyboard_thai_pattachote": {
+    "message": "Thais toetsenbord (Pattachote)"
+  },
+  "keyboard_thai_tis": {
+    "message": "Thais toetsenbord (TIS 820-2531)"
+  },
+  "keyboard_tis": {
+    "message": "Toetsenbord (TIS 820-2531)"
+  },
+  "keyboard_turkish": {
+    "message": "Turks toetsenbord"
+  },
+  "keyboard_typewriter": {
+    "message": "Toetsenbord (Typemachine)"
+  },
+  "keyboard_uk": {
+    "message": "Brits toetsenbord"
+  },
+  "keyboard_uk_dvorak": {
+    "message": "Brits Dvorak-toetsenbord"
+  },
+  "keyboard_ukrainian": {
+    "message": "Oekra\u00efens toetsenbord"
+  },
+  "keyboard_us": {
+    "message": "Amerikaans toetsenbord"
+  },
+  "keyboard_us_colemak": {
+    "message": "Amerikaans Colemak-toetsenbord"
+  },
+  "keyboard_us_dvorak": {
+    "message": "Amerikaans Dvorak-toetsenbord"
+  },
+  "keyboard_us_extended": {
+    "message": "Uitgebreid Amerikaans toetsenbord"
+  },
+  "keyboard_us_international": {
+    "message": "Amerikaans toetsenbord (internationaal)"
+  },
+  "keyboard_vietnamese_tcvn": {
+    "message": "Vietnamees toetsenbord (TCVN)"
+  },
+  "keyboard_vietnamese_telex": {
+    "message": "Vietnamees toetsenbord (Telex)"
+  },
+  "keyboard_vietnamese_viqr": {
+    "message": "Vietnamees toetsenbord (VIQR)"
+  },
+  "keyboard_vietnamese_vni": {
+    "message": "Vietnamees toetsenbord (VNI)"
+  },
+  "keyboard_viqr": {
+    "message": "Toetsenbord (VIQR)"
+  },
+  "keyboard_vni": {
+    "message": "Toetsenbord (VNI)"
+  },
+  "korean_hanja_display": {
+    "message": "Modus voor hanja-kandidaten"
+  },
+  "korean_keyboard_layout": {
+    "message": "Koreaanse toetsenbordindeling"
+  },
+  "korean_settings_page": {
+    "message": "Pagina met instellingen voor Koreaanse invoermethode"
+  },
+  "korean_syllable_input": {
+    "message": "Voer \u00e9\u00e9n lettergreep per keer in"
+  },
+  "latam_spa_settings_page": {
+    "message": "Pagina met instellingen voor Latijns-Amerikaans toetsenbord (Spaans)"
+  },
+  "latin_settings_page": {
+    "message": "Instellingen"
+  },
+  "left_arrow": {
+    "message": "pijl-links"
+  },
+  "lt_lit_settings_page": {
+    "message": "Pagina met instellingen voor Litouws toetsenbord"
+  },
+  "lv_apostrophe_lav_settings_page": {
+    "message": "Pagina met instellingen voor Lets toetsenbord (Lets)"
+  },
+  "menu_key": {
+    "message": "toetsenbordmenu openen"
+  },
+  "mn_mon_settings_page": {
+    "message": "Pagina met instellingen voor Mongools toetsenbord"
+  },
+  "move_page_key_above": {
+    "message": "Gebruik de toetsen - en = om door een kandidatenlijst te bladeren"
+  },
+  "move_page_key_below": {
+    "message": "Gebruik de toetsen , en . om door een kandidatenlijst te bladeren"
+  },
+  "never_auto_correct": {
+    "message": "Uit"
+  },
+  "no_nob_settings_page": {
+    "message": "Pagina met instellingen voor Noors toetsenbord"
+  },
+  "pause": {
+    "message": "Onderbreken"
+  },
+  "physical_auto_correction_level": {
+    "message": "Automatische correctie"
+  },
+  "physical_enable_capitalization": {
+    "message": "Automatisch hoofdlettergebruik"
+  },
+  "physical_keyboard": {
+    "message": "Fysiek toetsenbord"
+  },
+  "pinyin_settings_page": {
+    "message": "Pagina met instellingen voor Pinyin"
+  },
+  "pl_pol_settings_page": {
+    "message": "Pagina met instellingen voor Pools toetsenbord"
+  },
+  "pt_por_settings_page": {
+    "message": "Pagina met instellingen voor Portugees toetsenbord"
+  },
+  "right_arrow": {
+    "message": "pijl-rechts"
+  },
+  "ro_rum_settings_page": {
+    "message": "Pagina met instellingen voor Roemeens toetsenbord"
+  },
+  "rs_srp_settings_page": {
+    "message": "Pagina met instellingen voor Servisch toetsenbord"
+  },
+  "ru_phonetic_rus_settings_page": {
+    "message": "Pagina met instellingen voor Russisch fonetisch toetsenbord"
+  },
+  "ru_rus_settings_page": {
+    "message": "Pagina met instellingen voor Russisch toetsenbord"
+  },
+  "se_swe_settings_page": {
+    "message": "Pagina met instellingen voor Zweeds toetsenbord"
+  },
+  "settings": {
+    "message": "Instellingen"
+  },
+  "shift": {
+    "message": "Shift"
+  },
+  "shift_lock": {
+    "message": "Shift vergrendeld"
+  },
+  "show_candidate_mode": {
+    "message": "Vertraging voor dropdown-menu met suggesties"
+  },
+  "show_candidates_1000": {
+    "message": "Dropdown-menu met suggesties weergeven na 1 s"
+  },
+  "show_candidates_2000": {
+    "message": "Dropdown-menu met suggesties weergeven na 2 s"
+  },
+  "show_candidates_500": {
+    "message": "Dropdown-menu met suggesties weergeven na 500 ms"
+  },
+  "show_candidates_5000": {
+    "message": "Dropdown-menu met suggesties weergeven na 5 s"
+  },
+  "show_candidates_backspace": {
+    "message": "Dropdown-menu met suggesties weergeven met Backspace"
+  },
+  "show_hangul_candidate": {
+    "message": "Kandidaten weergeven in Hangul-modus"
+  },
+  "shrink_candidates": {
+    "message": "kandidatenlijst verkleinen"
+  },
+  "si_slv_settings_page": {
+    "message": "Pagina met instellingen voor Sloveens toetsenbord"
+  },
+  "sk_slo_settings_page": {
+    "message": "Pagina met instellingen voor Slowaaks toetsenbord"
+  },
+  "smiley": {
+    "message": "smiley"
+  },
+  "sometimes_auto_correct": {
+    "message": "Bescheiden"
+  },
+  "sound_on_keypress": {
+    "message": "Geluid bij druk op een toets"
+  },
+  "space": {
+    "message": "spatiebalk"
+  },
+  "switch_to": {
+    "message": "overschakelen naar "
+  },
+  "switch_to_compact_layout": {
+    "message": "Overschakelen naar compacte indeling"
+  },
+  "switch_to_full_layout": {
+    "message": "Overschakelen naar volledige indeling"
+  },
+  "switch_to_keyboard_prefix": {
+    "message": "overschakelen naar "
+  },
+  "switched_to": {
+    "message": "overgeschakeld naar "
+  },
+  "tab": {
+    "message": "Tab"
+  },
+  "touch_keyboard": {
+    "message": "Schermtoetsenbord"
+  },
+  "tr_tur_settings_page": {
+    "message": "Pagina met instellingen voor Turks toetsenbord"
+  },
+  "transliteration_am": {
+    "message": "Transliteratie (salam \u2192 \u1230\u120b\u121d)"
+  },
+  "transliteration_ar": {
+    "message": "Transliteratie (marhaban \u2190 \u0645\u0631\u062d\u0628\u0627)"
+  },
+  "transliteration_be": {
+    "message": "Transliteratie (pryvitannie \u2192 \u043f\u0440\u044b\u0432\u0456\u0442\u0430\u043d\u043d\u0435)"
+  },
+  "transliteration_bg": {
+    "message": "Transliteratie (zdrasti \u2192 \u0437\u0434\u0440\u0430\u0441\u0442\u0438)"
+  },
+  "transliteration_bn": {
+    "message": "Transliteratie (namaskar \u2192 \u09a8\u09ae\u09b8\u09cd\u0995\u09be\u09b0)"
+  },
+  "transliteration_el": {
+    "message": "Transliteratie (geia \u2192 \u03b3\u03b5\u03b9\u03b1)"
+  },
+  "transliteration_fa": {
+    "message": "Transliteratie (salam \u2190 \u0633\u0644\u0627\u0645)"
+  },
+  "transliteration_gu": {
+    "message": "Transliteratie (namaste \u2192 \u0aa8\u0aae\u0ab8\u0acd\u0aa4\u0ac7)"
+  },
+  "transliteration_he": {
+    "message": "Transliteratie (shalom \u2190 \u05e9\u05dc\u05d5\u05dd)"
+  },
+  "transliteration_hi": {
+    "message": "Transliteratie (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_kn": {
+    "message": "Transliteratie (namaskaram \u2192 \u0ca8\u0cae\u0cb8\u0ccd\u0c95\u0cbe\u0cb0)"
+  },
+  "transliteration_ml": {
+    "message": "Transliteratie (namaskar \u2192 \u0d28\u0d2e\u0d38\u0d4d\u0d15\u0d3e\u0d30\u0d02)"
+  },
+  "transliteration_mr": {
+    "message": "Transliteratie (namaste \u2192 \u0928\u092e\u0938\u094d\u0915\u093e\u0930)"
+  },
+  "transliteration_ne": {
+    "message": "Transliteratie (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_or": {
+    "message": "Transliteratie (mausam \u2192 \u0b28\u0b2e\u0b38\u0b4d\u0b24\u0b47)"
+  },
+  "transliteration_pa": {
+    "message": "Transliteratie (mausam \u2192 \u0a2e\u0a4c\u0a38\u0a2e)"
+  },
+  "transliteration_ru": {
+    "message": "Transliteratie (privet \u2192 \u043f\u0440\u0438\u0432\u0435\u0442)"
+  },
+  "transliteration_sa": {
+    "message": "Transliteratie (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_si": {
+    "message": "Transliteratie (halo \u2192 \u0dc4\u0dbd\u0ddd)"
+  },
+  "transliteration_sr": {
+    "message": "Transliteratie (zdravo \u2192 \u0437\u0434\u0440\u0430\u0432\u043e)"
+  },
+  "transliteration_ta": {
+    "message": "Transliteratie (vanakkam \u2192 \u0bb5\u0ba3\u0b95\u0bcd\u0b95\u0bae\u0bcd)"
+  },
+  "transliteration_te": {
+    "message": "Transliteratie (emandi \u2192 \u0c0f\u0c2e\u0c02\u0c21\u0c40)"
+  },
+  "transliteration_ti": {
+    "message": "Transliteratie (selam \u2192 \u1230\u120b\u121d)"
+  },
+  "transliteration_uk": {
+    "message": "Transliteratie (pryvit \u2192 \u043f\u0440\u0438\u0432\u0456\u0442)"
+  },
+  "transliteration_ur": {
+    "message": "Transliteratie (salam \u2190 \u0633\u0644\u0627\u0645)"
+  },
+  "transliteration_vi": {
+    "message": "Transliteratie (chao \u2192 ch\u00e0o)"
+  },
+  "ua_ukr_settings_page": {
+    "message": "Pagina met instellingen voor Oekra\u00efens toetsenbord"
+  },
+  "up_arrow": {
+    "message": "pijl-omhoog"
+  },
+  "us_altgr_intl_eng_settings_page": {
+    "message": "Pagina met instellingen voor uitgebreid Amerikaans toetsenbord (Engels)"
+  },
+  "us_colemak_eng_settings_page": {
+    "message": "Pagina met instellingen voor Amerikaans Colemak-toetsenbord (Engels)"
+  },
+  "us_dvorak_eng_settings_page": {
+    "message": "Pagina met instellingen voor Amerikaans Dvorak-toetsenbord (Engels)"
+  },
+  "us_eng_settings_page": {
+    "message": "Pagina met instellingen voor Amerikaans toetsenbord (Engels)"
+  },
+  "us_fil_settings_page": {
+    "message": "Pagina met instellingen voor Amerikaans toetsenbord (Filipijns)"
+  },
+  "us_ind_settings_page": {
+    "message": "Pagina met instellingen voor Amerikaans toetsenbord (Indonesisch)"
+  },
+  "us_intl_eng_settings_page": {
+    "message": "Pagina met instellingen voor Amerikaans toetsenbord (internationaal) (Engels)"
+  },
+  "us_intl_nld_settings_page": {
+    "message": "Pagina met instellingen voor Amerikaans toetsenbord (internationaal) (Nederlands)"
+  },
+  "us_intl_por_settings_page": {
+    "message": "Pagina met instellingen voor Amerikaans toetsenbord (internationaal) (Braziliaans-Portugees)"
+  },
+  "us_msa_settings_page": {
+    "message": "Pagina met instellingen voor Amerikaans toetsenbord (Maleis)"
+  },
+  "user_dict": {
+    "message": "Persoonlijk woordenboek inschakelen"
+  },
+  "user_dict_add": {
+    "message": "Toevoegen"
+  },
+  "user_dict_clear": {
+    "message": "Alles wissen"
+  },
+  "user_dict_manage": {
+    "message": "Persoonlijk woordenboek beheren\u2026"
+  },
+  "user_dict_new_word": {
+    "message": "Nieuw woord"
+  },
+  "user_dict_remove": {
+    "message": "Selectie verwijderen"
+  },
+  "user_dict_reset": {
+    "message": "Alle woordenboekvermeldingen opnieuw instellen"
+  },
+  "user_dict_save": {
+    "message": "Opslaan"
+  },
+  "user_dict_sync": {
+    "message": "Persoonlijk woordenboek synchroniseren"
+  },
+  "user_dict_title": {
+    "message": "Persoonlijk woordenboek"
+  },
+  "voice": {
+    "message": "Spraak"
+  },
+  "voice_privacy_info": {
+    "message": "Je gesproken invoer wordt naar servers van Google verzonden om de tekst te herkennen."
+  },
+  "voice_turn_off": {
+    "message": "tool voor spraakinvoer uitschakelen"
+  },
+  "voice_turn_on": {
+    "message": "tool voor spraakinvoer inschakelen"
+  },
+  "wait": {
+    "message": "Wachten"
+  },
+  "zhuyin_keyboard_layout": {
+    "message": "Toetsenbordtype"
+  },
+  "zhuyin_page_size": {
+    "message": "Aantal kandidaten dat per pagina wordt weergegeven"
+  },
+  "zhuyin_select_keys": {
+    "message": "Selectietoetsen"
+  },
+  "zhuyin_settings_page": {
+    "message": "Pagina met instellingen voor Zhuyin"
+  }
+}

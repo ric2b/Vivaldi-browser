@@ -1,0 +1,4 @@
+include_rules = [
+  "+components/service_tab_launcher",
+  "+content/public/android/java",
+]

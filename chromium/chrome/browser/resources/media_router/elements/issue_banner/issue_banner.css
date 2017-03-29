@@ -1,0 +1,57 @@
+/* Copyright 2015 The Chromium Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file. */
+
+.action {
+  /* TODO(apacible): Update to use Chromium paper color. */
+  background-color: rgb(82, 147, 242);
+  color: white;
+}
+
+#blocking-issue-buttons {
+  display: flex;
+}
+
+#blocking-issue-header {
+  display: flex;
+  overflow: hidden;
+  padding-top: 10px;
+}
+
+#blocking-issue-message {
+  -webkit-padding-start: 8px;
+  color: rgb(125, 125, 125);
+  line-height: 1.125em;
+  vertical-align: middle;
+}
+
+#blocking-issue-title {
+  -webkit-padding-start: 8px;
+  font-weight: bold;
+  line-height: 1.125em;
+  vertical-align: top;
+}
+
+.issue-action {
+  color: black;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+#non-blocking-issue {
+  -webkit-padding-start: 12px;
+  background-color: rgb(249, 236, 191);
+  line-height: 1.25em;
+  padding-bottom: 6px;
+  padding-top: 6px;
+}
+
+#sad-face {
+  -webkit-margin-start: 20px;
+  background-image: -webkit-image-set(
+    url(../icon/sad-face.png) 1x,
+    url(../icon/sad-face2x.png) 2x);
+  background-repeat: no-repeat;
+  height: 32px;
+  width: 32px;
+}

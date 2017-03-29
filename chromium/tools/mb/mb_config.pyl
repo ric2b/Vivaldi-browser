@@ -1,0 +1,241 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+{
+  # This is the list of configs that you can pass to mb; each config
+  # represents a particular combination of GYP_DEFINES/gn args that
+  # we must support. A given config *may* be platform-specific but
+  # is not necessarily so (i.e., we might have mac, win, and linux
+  # bots all using the 'gn_release_bot' config).
+  'configs': {
+    'android_gn_release_bot': ['android', 'gn', 'release_bot'],
+    'android_gn_debug_bot': ['android', 'gn', 'debug_bot'],
+    'android_gn_release_trybot': ['android', 'gn', 'release_trybot'],
+    'android_gyp_debug_bot': ['android', 'gyp', 'debug_bot'],
+    'android_gyp_release_trybot': ['android', 'gyp', 'release_trybot'],
+    'chromeos_gn_debug_bot': ['chromeos', 'gn', 'debug_bot'],
+    'chromeos_gn_release_bot': ['chromeos', 'gn', 'release_bot'],
+    'chromeos_gn_release_trybot': ['chromeos', 'gn', 'release_trybot'],
+    'dev_gn_debug': ['gn', 'debug', 'shared', 'full_symbols'],
+    'dev_gyp_debug': ['gyp', 'debug', 'shared', 'full_symbols'],
+    'dev_gn_release': ['gn', 'release', 'shared'],
+    'dev_gyp_release': ['gyp', 'release', 'shared'],
+    'gn_linux_upload': ['gn_linux_upload'],
+    'gn_release_bot': ['gn', 'release_bot'],
+    'gn_release_bot_x86': ['gn', 'release_bot', 'x86'],
+    'gn_release_trybot': ['gn', 'release_trybot'],
+    'gn_release_trybot_x86': ['gn', 'release_trybot', 'x86'],
+    'gn_debug_bot': ['gn', 'debug_bot'],
+    'gn_debug_bot_x86': ['gn', 'debug_bot', 'x86'],
+    'gn_debug_static_bot': ['gn', 'debug_static_bot'],
+    'gn_debug_static_bot_x86': ['gn', 'debug_static_bot', 'x86'],
+    'gyp_release_bot': ['gyp', 'release_bot'],
+    # clang/win doesn't work with goma yet, so this can't use debug_bot:
+    'win_clang_debug_bot':
+        ['gn', 'clang', 'debug', 'shared', 'minimal_symbols'],
+  },
+  
+  # This is a list of configs that do not actually exist on any bot
+  # but are used so commonly by devs that we must support them.
+  'common_dev_configs': [
+    'dev_gn_debug',
+    'dev_gn_release',
+    'dev_gyp_debug',
+    'dev_gyp_release',
+  ],
+  
+  # This is a list of configs that some private (not publicly accessible)
+  # bot somewhere uses and that we must support. Ideally we should actually
+  # have a bot for each of these on the public waterfall. Each config should
+  # at least have a contact listed.
+  'private_configs': [
+  ],
+
+  # This is a list of configs that are not commonly used by that we should
+  # make some effort to support, but if it breaks that is not the end of
+  # the world. Each config should have a contact listed, and we expect the
+  # contact to be on the hook for fixing the config.
+  'unsupported_configs': [
+  ],
+  
+  # This is a dict mapping a given 'mixin' name to a dict of settings that
+  # mb should use. See //tools/mb/docs/user_guide.md for more information.
+  'mixins': {
+    'android': {
+      'gn_args': 'target_os="android"',
+      'gyp_defines': 'OS=android',
+    },
+
+    'chromeos': {
+      'gn_args': 'target_os="chromeos"',
+      'gyp_defines': 'chromeos=1',
+    },
+
+    'clang': {
+      'gn_args': 'is_clang=true',
+      'gyp_defines': 'clang=1',
+    },
+
+    'dcheck_always_on': {
+      'gn_args': 'dcheck_always_on=true',
+      'gyp_defines': 'dcheck_always_on=1',
+    },
+
+    'debug': {
+      'gn_args': 'is_debug=true',
+      'gyp_config': 'Debug',
+    },
+
+    'debug_bot': {'mixins': ['debug', 'shared', 'minimal_symbols', 'goma']},
+
+    'debug_static_bot': {
+      'mixins': ['debug', 'static', 'minimal_symbols', 'goma']
+    },
+
+    'full_symbols': {
+      'gn_args': 'symbol_level=2',
+      'gyp_defines': 'fastbuild=0',
+    },
+
+    'gn_linux_upload': {
+      'type': 'gn',
+
+      # We don't want to require a runtime dependency on glib in the
+      # GN binary; ideally we could just turn glib off, but that doesn't
+      # actually work, so we need to pretend to be doing an ozone build
+      # in order for the flag to actually take effect.
+      'gn_args': 'use_ozone=true use_glib=false',
+    },
+
+    'gn': {'type': 'gn'},
+
+    'goma': {
+      'gn_args': 'use_goma=true goma_dir="$(goma_dir)"',
+      'gyp_defines': 'goma=1 gomadir=$(goma_dir)',
+    },
+
+    'gyp': {'type': 'gyp'},
+
+    'minimal_symbols': {
+      'gn_args': 'symbol_level=1',
+      'gyp_defines': 'fastbuild=1',
+    },
+
+    'release': {
+      'gn_args': 'is_debug=false',
+      'gyp_config': 'Release',
+    },
+
+    'release_bot': {
+      'mixins': ['release', 'static', 'minimal_symbols', 'goma'],
+    },
+
+    'release_trybot': {
+      'mixins': ['release_bot', 'dcheck_always_on']
+    },
+
+    'shared': {
+      'gn_args': 'is_component_build=true',
+      'gyp_defines': 'component=shared_library',
+    },
+
+    'static': {
+      'gn_args': 'is_component_build=false',
+      'gyp_defines': 'component=static_library',
+    },
+
+    'x86': {
+      'gn_args': 'target_cpu="x86"',
+      'gyp_args': 'target_arch=ia32',
+    },
+  },
+
+
+  # This is a map of buildbot master names -> buildbot builder names ->
+  # config names (where each config name is a key in the 'configs' dict,
+  # above). mb uses this dict to look up which config to use for a given bot.
+  # TODO(dpranke): add in remaining bots on the waterfalls.
+  'masters': {
+    'chromium.chromiumos': {
+      'Linux ChromiumOS GN': 'chromeos_gn_release_bot',
+      'Linux ChromiumOS GN (dbg)': 'chromeos_gn_debug_bot',
+    },
+    'chromium.linux': {
+      'Android GN': 'android_gn_release_bot',
+      'Android GN (dbg)': 'android_gn_debug_bot',
+      'Linux Builder': 'gyp_release_bot',
+      'Linux GN': 'gn_release_bot',
+      'Linux GN Clobber': 'gn_release_bot',
+      'Linux GN (dbg)': 'gn_debug_bot',
+      'Linux Tests': 'gyp_release_bot',
+    },
+    'chromium.mac': {
+      'Mac GN': 'gn_release_bot',
+      'Mac GN (dbg)': 'gn_debug_static_bot',
+    },
+    'chromium.win': {
+      'Win x64 GN': 'gn_release_bot',
+      'Win x64 GN (dbg)': 'gn_debug_bot',
+      'Win8 Aura': 'gn_release_bot_x86',
+      'Win8 GN': 'gn_release_bot_x86',
+      'Win8 GN (dbg)': 'gn_debug_bot_x86',
+    },
+    'chromium.webkit': {
+      'Android GN': 'android_gn_release_bot',
+      'Android GN (dbg)': 'android_gn_debug_bot',
+      'Linux GN': 'gn_release_bot',
+      'Linux GN (dbg)': 'gn_debug_bot'
+    },
+    'chromium.fyi': {
+      'CrWinClang64(dbg)': 'win_clang_debug_bot',
+    },
+    'chromium.webrtc.fyi': {
+      'Android GN': 'android_gn_release_bot',
+      'Android GN (dbg)': 'android_gn_debug_bot',
+      'Linux GN': 'gn_release_bot',
+      'Linux GN (dbg)': 'gn_debug_bot',
+      'Mac GN': 'gn_release_bot',
+      'Mac GN (dbg)': 'gn_debug_static_bot',
+      'Win GN': 'gn_release_bot_x86',
+      'Win GN (dbg)': 'gn_debug_static_bot_x86',
+    },
+    'client.v8.fyi': {
+      'V8 Linux GN': 'gn_release_bot',
+      'V8 Android GN (dbg)': 'android_gn_debug_bot',
+    },
+    'tryserver.blink': {
+      'android_blink_compile_dbg': 'android_gyp_debug_bot',
+      'android_blink_compile_rel': 'android_gyp_release_trybot',
+      'android_chromium_gn_compile_rel': 'android_gn_release_bot',
+      'linux_chromium_gn_rel': 'gn_release_bot',
+    },
+    'tryserver.chromium.linux': {
+      'android_chromium_gn_compile_dbg': 'android_gn_debug_bot',
+      'android_chromium_gn_compile_rel': 'android_gn_release_trybot',
+      'linux_chromium_gn_chromeos_rel': 'chromeos_gn_release_trybot',
+      'linux_chromium_gn_chromeos_dbg': 'chromeos_gn_debug_bot',
+      'linux_chromium_gn_dbg': 'gn_debug_bot',
+      'linux_chromium_gn_rel': 'gn_release_trybot',
+      'linux_chromium_gn_upload': 'gn_linux_upload',
+    },
+    'tryserver.chromium.mac': {
+      'mac_chromium_gn_dbg': 'gn_debug_static_bot',
+      'mac_chromium_gn_rel': 'gn_release_trybot',
+      'mac_chromium_gn_upload': 'gn_release_bot',
+    },
+    'tryserver.chromium.win': {
+      'win_chromium_gn_x64_dbg': 'gn_debug_static_bot',
+      'win_chromium_gn_x64_rel': 'gn_release_trybot',
+      'win8_chromium_ng': 'gn_release_trybot_x86',
+      'win8_chromium_gn_dbg': 'gn_debug_static_bot_x86',
+      'win8_chromium_gn_rel': 'gn_release_trybot_x86',
+      'win8_chromium_gn_upload': 'gn_release_bot',
+      'win_clang_x64_dbg': 'win_clang_debug_bot',
+    },
+    'tryserver.v8': {
+      'v8_linux_chromium_gn_rel': 'gn_release_trybot',
+      'v8_android_chromium_gn_dbg': 'android_gn_debug_bot',
+    },
+  },
+}

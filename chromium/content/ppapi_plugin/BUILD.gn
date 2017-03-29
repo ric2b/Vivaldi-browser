@@ -1,0 +1,51 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+group("ppapi_plugin") {
+  visibility = [ "//content/*" ]
+
+  if (is_component_build) {
+    public_deps = [
+      "//content",
+    ]
+  } else {
+    public_deps = [
+      ":ppapi_plugin_sources",
+    ]
+  }
+}
+
+source_set("ppapi_plugin_sources") {
+  visibility = [ "//content/*" ]
+
+  sources = [
+    "broker_process_dispatcher.cc",
+    "broker_process_dispatcher.h",
+    "plugin_process_dispatcher.cc",
+    "plugin_process_dispatcher.h",
+    "ppapi_blink_platform_impl.cc",
+    "ppapi_blink_platform_impl.h",
+    "ppapi_broker_main.cc",
+    "ppapi_plugin_main.cc",
+    "ppapi_thread.cc",
+    "ppapi_thread.h",
+  ]
+
+  configs += [ "//content:content_implementation" ]
+
+  deps = [
+    "//base",
+    "//content:export",
+    "//content/public/child:child_sources",
+    "//content/public/common:common_sources",
+    "//mojo/application/public/interfaces",
+    "//ppapi/proxy:ipc",
+    "//skia",
+    "//third_party/icu",
+    "//third_party/WebKit/public:blink",
+    "//ui/base",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+  ]
+}

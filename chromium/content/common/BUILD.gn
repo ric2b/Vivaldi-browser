@@ -1,0 +1,511 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//build/config/ui.gni")
+import("//content/common/common.gni")
+import("//third_party/mojo/src/mojo/public/tools/bindings/mojom.gni")
+
+if (is_chromeos && current_cpu != "arm") {
+  action("libva_generate_stubs") {
+    extra_header = "gpu/media/va_stub_header.fragment"
+
+    script = "../../tools/generate_stubs/generate_stubs.py"
+    sources = [
+      "gpu/media/va.sigs",
+    ]
+    inputs = [
+      extra_header,
+    ]
+    if (use_x11) {
+      sources += [ "gpu/media/va_x11.sigs" ]
+    }
+    if (use_ozone) {
+      sources += [ "gpu/media/va_drm.sigs" ]
+    }
+    stubs_filename_root = "va_stubs"
+
+    outputs = [
+      "$target_gen_dir/gpu/media/$stubs_filename_root.cc",
+      "$target_gen_dir/gpu/media/$stubs_filename_root.h",
+    ]
+    args = [
+      "-i",
+      rebase_path("$target_gen_dir/gpu/media", root_build_dir),
+      "-o",
+      rebase_path("$target_gen_dir/gpu/media", root_build_dir),
+      "-t",
+      "posix_stubs",
+      "-e",
+      rebase_path(extra_header, root_build_dir),
+      "-s",
+      stubs_filename_root,
+      "-p",
+      "content/common/gpu/media",
+    ]
+
+    args += rebase_path(sources, root_build_dir)
+  }
+}
+
+if (is_chromeos && use_v4lplugin) {
+  action("libv4l2_generate_stubs") {
+    extra_header = "gpu/media/v4l2_stub_header.fragment"
+
+    script = "../../tools/generate_stubs/generate_stubs.py"
+    sources = [
+      "gpu/media/v4l2.sig",
+    ]
+    inputs = [
+      extra_header,
+    ]
+    stubs_filename_root = "v4l2_stubs"
+
+    outputs = [
+      "$target_gen_dir/gpu/media/$stubs_filename_root.cc",
+      "$target_gen_dir/gpu/media/$stubs_filename_root.h",
+    ]
+    args = [
+      "-i",
+      rebase_path("$target_gen_dir/gpu/media", root_build_dir),
+      "-o",
+      rebase_path("$target_gen_dir/gpu/media", root_build_dir),
+      "-t",
+      "posix_stubs",
+      "-e",
+      rebase_path(extra_header, root_build_dir),
+      "-s",
+      stubs_filename_root,
+      "-p",
+      "content/common/gpu/media",
+    ]
+
+    args += rebase_path(sources, root_build_dir)
+  }
+}
+
+if (is_mac) {
+  action("libvt_generate_stubs") {
+    extra_header = "gpu/media/vt_stubs_header.fragment"
+
+    script = "../../tools/generate_stubs/generate_stubs.py"
+    sources = [
+      "gpu/media/vt.sig",
+    ]
+    inputs = [
+      extra_header,
+    ]
+    stubs_filename_root = "vt_stubs"
+
+    outputs = [
+      "$target_gen_dir/gpu/media/$stubs_filename_root.cc",
+      "$target_gen_dir/gpu/media/$stubs_filename_root.h",
+    ]
+    args = [
+      "-i",
+      rebase_path("$target_gen_dir/gpu/media", root_build_dir),
+      "-o",
+      rebase_path("$target_gen_dir/gpu/media", root_build_dir),
+      "-t",
+      "posix_stubs",
+      "-e",
+      rebase_path(extra_header, root_build_dir),
+      "-s",
+      stubs_filename_root,
+      "-p",
+      "content/common/gpu/media",
+    ]
+
+    args += rebase_path(sources, root_build_dir)
+  }
+}
+
+source_set("common") {
+  # Only the public target should depend on this. All other targets (even
+  # internal content ones) should depend on the public one.
+  visibility = [ "//content/public/common:common_sources" ]
+
+  sources = rebase_path(content_common_gypi_values.private_common_sources,
+                        ".",
+                        "//content")
+
+  configs += [
+    "//content:content_implementation",
+    "//build/config/compiler:no_size_t_to_int_warning",
+  ]
+
+  public_deps = [
+    "//gpu/command_buffer/common",
+    "//third_party/WebKit/public:blink_headers",
+  ]
+  deps = [
+    "//base",
+    "//build/util:webkit_version",
+    "//components/tracing",
+    "//components/tracing:startup_tracing",
+    "//gpu/command_buffer/client:gles2_interface",
+    "//gpu/command_buffer/common:gles2_utils",
+    "//net",
+    "//skia",
+    "//third_party/icu",
+    "//ui/accessibility",
+    "//ui/base",
+    "//ui/base/ime",
+    "//ui/events/ipc",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/gfx/ipc",
+    "//ui/shell_dialogs",
+    "//url",
+    "//third_party/libjingle",
+  ]
+
+  if (!is_ios) {
+    deps += [
+      "//cc",
+      "//ipc",
+      "//ipc/mojo",
+
+      # TODO: the dependency on gl_in_process_context should be decoupled from
+      # content and moved to android_webview. See crbug.com/365797.
+      "//gpu/blink",
+      "//gpu/command_buffer/client:gl_in_process_context",
+      "//gpu/command_buffer/client:gles2_c_lib",
+      "//gpu/command_buffer/client:gles2_cmd_helper",
+      "//gpu/command_buffer/client:gles2_implementation",
+      "//gpu/command_buffer/service",
+      "//gpu/ipc",
+      "//gpu/skia_bindings",
+      "//media",
+      "//media/midi",
+      "//media:shared_memory_support",
+      "//mojo/application/public/interfaces",
+      "//mojo/environment:chromium",
+      "//sandbox",
+      "//storage/common",
+      "//third_party/WebKit/public:blink",
+      "//third_party/mojo/src/mojo/edk/system",
+      "//ui/gl",
+    ]
+  }
+
+  defines = []
+  include_dirs = []
+  libs = []
+  ldflags = []
+
+  if (is_android && use_seccomp_bpf) {
+    set_sources_assignment_filter([])
+    sources += [
+      "sandbox_linux/sandbox_bpf_base_policy_linux.cc",
+      "sandbox_linux/sandbox_bpf_base_policy_linux.h",
+    ]
+    set_sources_assignment_filter(sources_assignment_filter)
+  }
+
+  if (is_mac) {
+    sources += [
+                 "gpu/client/gpu_memory_buffer_impl_io_surface.cc",
+                 "gpu/client/gpu_memory_buffer_impl_io_surface.h",
+                 "gpu/gpu_memory_buffer_factory_io_surface.cc",
+                 "gpu/gpu_memory_buffer_factory_io_surface.h",
+                 "gpu/media/vt.h",
+                 "gpu/media/vt_video_decode_accelerator.cc",
+                 "gpu/media/vt_video_decode_accelerator.h",
+               ] + get_target_outputs(":libvt_generate_stubs")
+
+    sources -= [ "plugin_list_posix.cc" ]
+
+    deps += [
+      ":libvt_generate_stubs",
+      "//content/app/resources",
+      "//content:resources",
+      "//third_party/WebKit/public:image_resources",
+      "//third_party/WebKit/public:resources",
+      "//ui/accelerated_widget_mac",
+    ]
+    libs += [
+      "IOSurface.framework",
+      "OpenGL.framework",
+      "QuartzCore.framework",
+    ]
+  }
+
+  if (is_android) {
+    sources += [
+      "gpu/client/gpu_memory_buffer_impl_surface_texture.cc",
+      "gpu/client/gpu_memory_buffer_impl_surface_texture.h",
+      "gpu/gpu_memory_buffer_factory_surface_texture.cc",
+      "gpu/gpu_memory_buffer_factory_surface_texture.h",
+    ]
+
+    deps += [
+      "//content/public/android:jni",
+      "//content/public/android:common_aidl",
+    ]
+
+    libs += [ "android" ]
+  }
+
+  if (is_debug && !is_component_build) {
+    # Content depends on the PPAPI message logging stuff; if this isn't here,
+    # some unit test binaries won't compile. This only worked in release mode
+    # because logging is disabled there.
+    deps += [ "//ppapi/proxy:ipc_sources" ]
+  }
+
+  if (is_ios) {
+    sources -= [ "user_agent.cc" ]
+    assert(false, "Need to add lots of conditions here")
+  }
+
+  if (use_ozone) {
+    deps += [
+      "//ui/ozone:ozone",
+      "//ui/ozone:ozone_base",
+      "//ui/ozone/gpu",
+    ]
+  } else {
+    sources -= [
+      "cursors/webcursor_ozone.cc",
+      "font_list_ozone.cc",
+      "gpu/client/gpu_memory_buffer_impl_ozone_native_buffer.cc",
+      "gpu/client/gpu_memory_buffer_impl_ozone_native_buffer.h",
+      "gpu/gpu_memory_buffer_factory_ozone_native_buffer.cc",
+      "gpu/gpu_memory_buffer_factory_ozone_native_buffer.h",
+    ]
+  }
+
+  if (!use_aura) {
+    sources -= [ "cursors/webcursor_aura.cc" ]
+  }
+
+  if (!use_aura || !use_x11) {
+    sources -= [ "cursors/webcursor_aurax11.cc" ]
+  }
+
+  if (use_pango) {
+    configs += [ "//build/config/linux:pangocairo" ]
+    if (use_ozone) {
+      # If we're using pango, never use this ozone file (it was removed in all
+      # non-ozone cases above).
+      sources -= [ "font_list_ozone.cc" ]
+    }
+  } else {
+    sources -= [ "font_list_pango.cc" ]
+  }
+
+  if (use_x11) {
+    configs += [
+      "//build/config/linux:xcomposite",
+      "//third_party/khronos:khronos_headers",
+    ]
+
+    if (current_cpu != "arm" || !is_chromeos) {
+      sources += [ "gpu/x_util.h" ]
+    }
+  }
+
+  if (enable_plugins) {
+    deps += [ "//ppapi/shared_impl" ]
+  } else {
+    sources -= [
+      "pepper_file_util.cc",
+      "pepper_file_util.h",
+      "pepper_messages.h",
+      "pepper_plugin_list.cc",
+      "pepper_plugin_list.h",
+      "pepper_renderer_instance_data.cc",
+      "pepper_renderer_instance_data.h",
+      "plugin_list.cc",
+      "plugin_list.h",
+      "plugin_list_posix.cc",
+      "sandbox_util.cc",
+    ]
+  }
+
+  if (is_android) {
+    sources += [
+      "gpu/media/android_video_decode_accelerator.cc",
+      "gpu/media/android_video_decode_accelerator.h",
+    ]
+
+    if (enable_webrtc) {
+      deps += [ "//third_party/libyuv" ]
+    }
+  }
+
+  if (is_chromeos) {
+    sources += [
+      "gpu/media/accelerated_video_decoder.h",
+      "gpu/media/h264_decoder.cc",
+      "gpu/media/h264_decoder.h",
+      "gpu/media/h264_dpb.cc",
+      "gpu/media/h264_dpb.h",
+      "gpu/media/vp8_decoder.cc",
+      "gpu/media/vp8_decoder.h",
+      "gpu/media/vp8_picture.cc",
+      "gpu/media/vp8_picture.h",
+    ]
+    if (use_v4lplugin) {
+      defines += [ "USE_LIBV4L2" ]
+      sources += get_target_outputs(":libv4l2_generate_stubs")
+      deps += [ ":libv4l2_generate_stubs" ]
+    }
+    if (use_v4l2_codec) {
+      defines += [ "USE_V4L2_CODEC" ]
+      sources += [
+        "gpu/media/generic_v4l2_device.cc",
+        "gpu/media/generic_v4l2_device.h",
+        "gpu/media/v4l2_device.cc",
+        "gpu/media/v4l2_device.h",
+        "gpu/media/v4l2_image_processor.cc",
+        "gpu/media/v4l2_image_processor.h",
+        "gpu/media/v4l2_jpeg_decode_accelerator.cc",
+        "gpu/media/v4l2_jpeg_decode_accelerator.h",
+        "gpu/media/v4l2_slice_video_decode_accelerator.cc",
+        "gpu/media/v4l2_slice_video_decode_accelerator.h",
+        "gpu/media/v4l2_video_decode_accelerator.cc",
+        "gpu/media/v4l2_video_decode_accelerator.h",
+        "gpu/media/v4l2_video_encode_accelerator.cc",
+        "gpu/media/v4l2_video_encode_accelerator.h",
+      ]
+      libs = [
+        "EGL",
+        "GLESv2",
+      ]
+    }
+    if (current_cpu == "arm") {
+      sources += [
+        "gpu/media/tegra_v4l2_device.cc",
+        "gpu/media/tegra_v4l2_device.h",
+      ]
+    }
+    if (current_cpu != "arm") {
+      sources += [
+                   "gpu/media/va_surface.h",
+                   "gpu/media/vaapi_jpeg_decode_accelerator.cc",
+                   "gpu/media/vaapi_jpeg_decode_accelerator.h",
+                   "gpu/media/vaapi_jpeg_decoder.cc",
+                   "gpu/media/vaapi_jpeg_decoder.h",
+                   "gpu/media/vaapi_picture.cc",
+                   "gpu/media/vaapi_picture.h",
+                   "gpu/media/vaapi_video_decode_accelerator.cc",
+                   "gpu/media/vaapi_video_decode_accelerator.h",
+                   "gpu/media/vaapi_video_encode_accelerator.cc",
+                   "gpu/media/vaapi_video_encode_accelerator.h",
+                   "gpu/media/vaapi_wrapper.cc",
+                   "gpu/media/vaapi_wrapper.h",
+                 ] + get_target_outputs(":libva_generate_stubs")
+      configs += [
+        "//third_party/libva:libva_config",
+        "//third_party/libyuv:libyuv_config",
+      ]
+      deps += [
+        ":libva_generate_stubs",
+        "//media",
+        "//third_party/libyuv",
+      ]
+      if (use_x11) {
+        sources += [
+          "gpu/media/vaapi_tfp_picture.cc",
+          "gpu/media/vaapi_tfp_picture.h",
+        ]
+      }
+      if (use_ozone) {
+        sources += [
+          "gpu/media/vaapi_drm_picture.cc",
+          "gpu/media/vaapi_drm_picture.h",
+        ]
+      }
+    }
+  }
+
+  if (is_win) {
+    sources += [
+      "gpu/media/dxva_video_decode_accelerator.cc",
+      "gpu/media/dxva_video_decode_accelerator.h",
+    ]
+    configs += [ "//third_party/khronos:khronos_headers" ]
+    deps += [ "//ui/gl" ]
+    libs += [
+      "d3d9.lib",
+      "d3d11.lib",
+      "dxva2.lib",
+      "strmiids.lib",
+      "mf.lib",
+      "mfplat.lib",
+      "mfuuid.lib",
+    ]
+    ldflags += [
+      "/DELAYLOAD:d3d9.dll",
+      "/DELAYLOAD:d3d11.dll",
+      "/DELAYLOAD:dxva2.dll",
+      "/DELAYLOAD:mf.dll",
+      "/DELAYLOAD:mfplat.dll",
+    ]
+
+    # TODO(GYP): extract_xinput action.
+  }
+
+  if (!is_win || !use_aura) {
+    sources -= [ "cursors/webcursor_aurawin.cc" ]
+  }
+
+  if (use_seccomp_bpf) {
+    defines += [ "USE_SECCOMP_BPF" ]
+  } else {
+    if (is_linux) {
+      sources -= [
+        "sandbox_linux/bpf_cros_arm_gpu_policy_linux.cc",
+        "sandbox_linux/bpf_cros_arm_gpu_policy_linux.h",
+        "sandbox_linux/bpf_gpu_policy_linux.cc",
+        "sandbox_linux/bpf_gpu_policy_linux.h",
+        "sandbox_linux/bpf_ppapi_policy_linux.cc",
+        "sandbox_linux/bpf_ppapi_policy_linux.h",
+        "sandbox_linux/bpf_renderer_policy_linux.cc",
+        "sandbox_linux/bpf_renderer_policy_linux.h",
+        "sandbox_linux/bpf_utility_policy_linux.cc",
+        "sandbox_linux/bpf_utility_policy_linux.h",
+        "sandbox_linux/sandbox_bpf_base_policy_linux.cc",
+        "sandbox_linux/sandbox_bpf_base_policy_linux.h",
+      ]
+    }
+    if (is_android) {
+      sources -= [
+        "sandbox_linux/android/sandbox_bpf_base_policy_android.cc",
+        "sandbox_linux/android/sandbox_bpf_base_policy_android.h",
+      ]
+    }
+  }
+
+  if (is_win && current_cpu == "x64") {
+    # TODO(jschuh): Remove this after crbug.com/173851 gets fixed.
+    cflags = [ "/bigobj" ]
+  }
+}
+
+mojom("mojo_bindings") {
+  sources = [
+    "application_setup.mojom",
+    "background_sync_service.mojom",
+    "geolocation_service.mojom",
+    "image_downloader/image_downloader.mojom",
+    "permission_service.mojom",
+    "presentation/presentation_service.mojom",
+    "process_control.mojom",
+    "render_frame_setup.mojom",
+    "service_port_service.mojom",
+    "vr_service.mojom",
+  ]
+
+  import_dirs = [ "//mojo/services" ]
+
+  deps = [
+    "//content/public/common:mojo_bindings",
+    "//mojo/application/public/interfaces",
+    "//skia/public/interfaces",
+    "//ui/mojo/geometry:interfaces",
+  ]
+}

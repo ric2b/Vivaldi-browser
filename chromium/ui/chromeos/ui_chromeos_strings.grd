@@ -1,0 +1,583 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<grit base_dir="." latest_public_release="0" current_release="1"
+      source_lang_id="en" enc_check="möl">
+  <outputs>
+    <output filename="grit/ui_chromeos_strings.h" type="rc_header">
+      <emit emit_type='prepend'></emit>
+    </output>
+    <output filename="ui_chromeos_strings_am.pak" type="data_package" lang="am" />
+    <output filename="ui_chromeos_strings_ar.pak" type="data_package" lang="ar" />
+    <if expr="use_third_party_translations">
+      <output filename="ui_chromeos_strings_ast.pak" type="data_package" lang="ast" />
+    </if>
+    <output filename="ui_chromeos_strings_bg.pak" type="data_package" lang="bg" />
+    <output filename="ui_chromeos_strings_bn.pak" type="data_package" lang="bn" />
+    <if expr="use_third_party_translations">
+      <output filename="ui_chromeos_strings_bs.pak" type="data_package" lang="bs" />
+    </if>
+    <output filename="ui_chromeos_strings_ca.pak" type="data_package" lang="ca" />
+    <if expr="use_third_party_translations">
+      <output filename="ui_chromeos_strings_ca@valencia.pak" type="data_package" lang="ca@valencia" />
+    </if>
+    <output filename="ui_chromeos_strings_cs.pak" type="data_package" lang="cs" />
+    <output filename="ui_chromeos_strings_da.pak" type="data_package" lang="da" />
+    <output filename="ui_chromeos_strings_de.pak" type="data_package" lang="de" />
+    <output filename="ui_chromeos_strings_el.pak" type="data_package" lang="el" />
+    <if expr="use_third_party_translations">
+      <output filename="ui_chromeos_strings_en-AU.pak" type="data_package" lang="en-AU" />
+    </if>
+    <output filename="ui_chromeos_strings_en-GB.pak" type="data_package" lang="en-GB" />
+    <output filename="ui_chromeos_strings_en-US.pak" type="data_package" lang="en" />
+    <if expr="use_third_party_translations">
+      <output filename="ui_chromeos_strings_eo.pak" type="data_package" lang="eo" />
+    </if>
+    <output filename="ui_chromeos_strings_es.pak" type="data_package" lang="es" />
+    <output filename="ui_chromeos_strings_es-419.pak" type="data_package" lang="es-419" />
+    <output filename="ui_chromeos_strings_et.pak" type="data_package" lang="et" />
+    <if expr="use_third_party_translations">
+      <output filename="ui_chromeos_strings_eu.pak" type="data_package" lang="eu" />
+    </if>
+    <output filename="ui_chromeos_strings_fa.pak" type="data_package" lang="fa" />
+    <output filename="ui_chromeos_strings_fake-bidi.pak" type="data_package" lang="fake-bidi" />
+    <output filename="ui_chromeos_strings_fi.pak" type="data_package" lang="fi" />
+    <output filename="ui_chromeos_strings_fil.pak" type="data_package" lang="fil" />
+    <output filename="ui_chromeos_strings_fr.pak" type="data_package" lang="fr" />
+    <if expr="use_third_party_translations">
+      <output filename="ui_chromeos_strings_gl.pak" type="data_package" lang="gl" />
+    </if>
+    <output filename="ui_chromeos_strings_gu.pak" type="data_package" lang="gu" />
+    <output filename="ui_chromeos_strings_he.pak" type="data_package" lang="he" />
+    <output filename="ui_chromeos_strings_hi.pak" type="data_package" lang="hi" />
+    <output filename="ui_chromeos_strings_hr.pak" type="data_package" lang="hr" />
+    <output filename="ui_chromeos_strings_hu.pak" type="data_package" lang="hu" />
+    <if expr="use_third_party_translations">
+      <output filename="ui_chromeos_strings_hy.pak" type="data_package" lang="hy" />
+      <output filename="ui_chromeos_strings_ia.pak" type="data_package" lang="ia" />
+    </if>
+    <output filename="ui_chromeos_strings_id.pak" type="data_package" lang="id" />
+    <output filename="ui_chromeos_strings_it.pak" type="data_package" lang="it" />
+    <output filename="ui_chromeos_strings_ja.pak" type="data_package" lang="ja" />
+    <if expr="use_third_party_translations">
+      <output filename="ui_chromeos_strings_ka.pak" type="data_package" lang="ka" />
+    </if>
+    <output filename="ui_chromeos_strings_kn.pak" type="data_package" lang="kn" />
+    <output filename="ui_chromeos_strings_ko.pak" type="data_package" lang="ko" />
+    <if expr="use_third_party_translations">
+      <output filename="ui_chromeos_strings_ku.pak" type="data_package" lang="ku" />
+      <output filename="ui_chromeos_strings_kw.pak" type="data_package" lang="kw" />
+    </if>
+    <output filename="ui_chromeos_strings_lt.pak" type="data_package" lang="lt" />
+    <output filename="ui_chromeos_strings_lv.pak" type="data_package" lang="lv" />
+    <output filename="ui_chromeos_strings_ml.pak" type="data_package" lang="ml" />
+    <output filename="ui_chromeos_strings_mr.pak" type="data_package" lang="mr" />
+    <output filename="ui_chromeos_strings_ms.pak" type="data_package" lang="ms" />
+    <output filename="ui_chromeos_strings_nl.pak" type="data_package" lang="nl" />
+    <!-- The translation console uses 'no' for Norwegian Bokmål. It should
+         be 'nb'. -->
+    <output filename="ui_chromeos_strings_nb.pak" type="data_package" lang="no" />
+    <output filename="ui_chromeos_strings_pl.pak" type="data_package" lang="pl" />
+    <output filename="ui_chromeos_strings_pt-BR.pak" type="data_package" lang="pt-BR" />
+    <output filename="ui_chromeos_strings_pt-PT.pak" type="data_package" lang="pt-PT" />
+    <output filename="ui_chromeos_strings_ro.pak" type="data_package" lang="ro" />
+    <output filename="ui_chromeos_strings_ru.pak" type="data_package" lang="ru" />
+    <output filename="ui_chromeos_strings_sk.pak" type="data_package" lang="sk" />
+    <output filename="ui_chromeos_strings_sl.pak" type="data_package" lang="sl" />
+    <output filename="ui_chromeos_strings_sr.pak" type="data_package" lang="sr" />
+    <output filename="ui_chromeos_strings_sv.pak" type="data_package" lang="sv" />
+    <output filename="ui_chromeos_strings_sw.pak" type="data_package" lang="sw" />
+    <output filename="ui_chromeos_strings_ta.pak" type="data_package" lang="ta" />
+    <output filename="ui_chromeos_strings_te.pak" type="data_package" lang="te" />
+    <output filename="ui_chromeos_strings_th.pak" type="data_package" lang="th" />
+    <output filename="ui_chromeos_strings_tr.pak" type="data_package" lang="tr" />
+    <if expr="use_third_party_translations">
+      <output filename="ui_chromeos_strings_ug.pak" type="data_package" lang="ug" />
+    </if>
+    <output filename="ui_chromeos_strings_uk.pak" type="data_package" lang="uk" />
+    <output filename="ui_chromeos_strings_vi.pak" type="data_package" lang="vi" />
+    <output filename="ui_chromeos_strings_zh-CN.pak" type="data_package" lang="zh-CN" />
+    <output filename="ui_chromeos_strings_zh-TW.pak" type="data_package" lang="zh-TW" />
+  </outputs>
+  <translations>
+    <file path="translations/ui_chromeos_strings_am.xtb" lang="am" />
+    <file path="translations/ui_chromeos_strings_ar.xtb" lang="ar" />
+    <if expr="use_third_party_translations">
+      <file path="../../third_party/launchpad_translations/ui_chromeos_strings_ast.xtb" lang="ast" />
+    </if>
+    <file path="translations/ui_chromeos_strings_bg.xtb" lang="bg" />
+    <file path="translations/ui_chromeos_strings_bn.xtb" lang="bn" />
+    <if expr="use_third_party_translations">
+      <file path="../../third_party/launchpad_translations/ui_chromeos_strings_bs.xtb" lang="bs" />
+    </if>
+    <file path="translations/ui_chromeos_strings_ca.xtb" lang="ca" />
+    <if expr="use_third_party_translations">
+      <file path="../../third_party/launchpad_translations/ui_chromeos_strings_ca-valencia.xtb" lang="ca@valencia" />
+    </if>
+    <file path="translations/ui_chromeos_strings_cs.xtb" lang="cs" />
+    <file path="translations/ui_chromeos_strings_da.xtb" lang="da" />
+    <file path="translations/ui_chromeos_strings_de.xtb" lang="de" />
+    <file path="translations/ui_chromeos_strings_el.xtb" lang="el" />
+    <if expr="use_third_party_translations">
+      <file path="../../third_party/launchpad_translations/ui_chromeos_strings_en-AU.xtb" lang="en-AU" />
+    </if>
+    <file path="translations/ui_chromeos_strings_en-GB.xtb" lang="en-GB" />
+    <if expr="use_third_party_translations">
+      <file path="../../third_party/launchpad_translations/ui_chromeos_strings_eo.xtb" lang="eo" />
+    </if>
+    <file path="translations/ui_chromeos_strings_es.xtb" lang="es" />
+    <file path="translations/ui_chromeos_strings_es-419.xtb" lang="es-419" />
+    <file path="translations/ui_chromeos_strings_et.xtb" lang="et" />
+    <if expr="use_third_party_translations">
+      <file path="../../third_party/launchpad_translations/ui_chromeos_strings_eu.xtb" lang="eu" />
+    </if>
+    <file path="translations/ui_chromeos_strings_fa.xtb" lang="fa" />
+    <file path="translations/ui_chromeos_strings_fi.xtb" lang="fi" />
+    <file path="translations/ui_chromeos_strings_fil.xtb" lang="fil" />
+    <file path="translations/ui_chromeos_strings_fr.xtb" lang="fr" />
+    <if expr="use_third_party_translations">
+      <file path="../../third_party/launchpad_translations/ui_chromeos_strings_gl.xtb" lang="gl" />
+    </if>
+    <file path="translations/ui_chromeos_strings_gu.xtb" lang="gu" />
+    <file path="translations/ui_chromeos_strings_hi.xtb" lang="hi" />
+    <file path="translations/ui_chromeos_strings_hr.xtb" lang="hr" />
+    <file path="translations/ui_chromeos_strings_hu.xtb" lang="hu" />
+    <if expr="use_third_party_translations">
+      <file path="../../third_party/launchpad_translations/ui_chromeos_strings_hy.xtb" lang="hy" />
+      <file path="../../third_party/launchpad_translations/ui_chromeos_strings_ia.xtb" lang="ia" />
+    </if>
+    <file path="translations/ui_chromeos_strings_id.xtb" lang="id" />
+    <file path="translations/ui_chromeos_strings_it.xtb" lang="it" />
+    <!-- The translation console uses 'iw' for Hebrew, but we use 'he'. -->
+    <file path="translations/ui_chromeos_strings_iw.xtb" lang="he" />
+    <file path="translations/ui_chromeos_strings_ja.xtb" lang="ja" />
+    <if expr="use_third_party_translations">
+      <file path="../../third_party/launchpad_translations/ui_chromeos_strings_ka.xtb" lang="ka" />
+    </if>
+    <file path="translations/ui_chromeos_strings_kn.xtb" lang="kn" />
+    <file path="translations/ui_chromeos_strings_ko.xtb" lang="ko" />
+    <if expr="use_third_party_translations">
+      <file path="../../third_party/launchpad_translations/ui_chromeos_strings_ku.xtb" lang="ku" />
+      <file path="../../third_party/launchpad_translations/ui_chromeos_strings_kw.xtb" lang="kw" />
+    </if>
+    <file path="translations/ui_chromeos_strings_lt.xtb" lang="lt" />
+    <file path="translations/ui_chromeos_strings_lv.xtb" lang="lv" />
+    <file path="translations/ui_chromeos_strings_ml.xtb" lang="ml" />
+    <file path="translations/ui_chromeos_strings_mr.xtb" lang="mr" />
+    <file path="translations/ui_chromeos_strings_ms.xtb" lang="ms" />
+    <file path="translations/ui_chromeos_strings_nl.xtb" lang="nl" />
+    <file path="translations/ui_chromeos_strings_no.xtb" lang="no" />
+    <file path="translations/ui_chromeos_strings_pl.xtb" lang="pl" />
+    <file path="translations/ui_chromeos_strings_pt-BR.xtb" lang="pt-BR" />
+    <file path="translations/ui_chromeos_strings_pt-PT.xtb" lang="pt-PT" />
+    <file path="translations/ui_chromeos_strings_ro.xtb" lang="ro" />
+    <file path="translations/ui_chromeos_strings_ru.xtb" lang="ru" />
+    <file path="translations/ui_chromeos_strings_sk.xtb" lang="sk" />
+    <file path="translations/ui_chromeos_strings_sl.xtb" lang="sl" />
+    <file path="translations/ui_chromeos_strings_sr.xtb" lang="sr" />
+    <file path="translations/ui_chromeos_strings_sv.xtb" lang="sv" />
+    <file path="translations/ui_chromeos_strings_sw.xtb" lang="sw" />
+    <file path="translations/ui_chromeos_strings_ta.xtb" lang="ta" />
+    <file path="translations/ui_chromeos_strings_te.xtb" lang="te" />
+    <file path="translations/ui_chromeos_strings_th.xtb" lang="th" />
+    <file path="translations/ui_chromeos_strings_tr.xtb" lang="tr" />
+    <if expr="use_third_party_translations">
+      <file path="../../third_party/launchpad_translations/ui_chromeos_strings_ug.xtb" lang="ug" />
+    </if>
+    <file path="translations/ui_chromeos_strings_uk.xtb" lang="uk" />
+    <file path="translations/ui_chromeos_strings_vi.xtb" lang="vi" />
+    <file path="translations/ui_chromeos_strings_zh-CN.xtb" lang="zh-CN" />
+    <file path="translations/ui_chromeos_strings_zh-TW.xtb" lang="zh-TW" />
+  </translations>
+  <release seq="1" allow_pseudo="false">
+    <messages fallback_to_english="true">
+      <message name="IDS_ASH_STATUS_TRAY_CELLULAR_SCANNING" desc="Message when scanning for cellular networks">
+        Searching for cellular networks...
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_ETHERNET" desc="The ethernet network device.">
+        Ethernet
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_INITIALIZING_CELLULAR" desc="Message for the status area when initializing the cellular device.">
+        Initializing cellular modem...
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NETWORK_ACTIVATING" desc="Message for the network tray tooltip and default menu text when activating a network.">
+        Activating <ph name="NAME">$1<ex>YBH Cellular</ex></ph>
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NETWORK_CONNECTED" desc="Message for the network tray tooltip and default menu text when connected to a network.">
+        Connected to <ph name="NAME">$1<ex>GoogleGuest</ex></ph>
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NETWORK_CONNECTING" desc="Message for the network tray tooltip and default menu text when connecting to a network.">
+        Connecting to <ph name="NAME">$1<ex>GoogleGuest</ex></ph>
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NETWORK_LIST_ACTIVATE" desc="Message for the network list to activate the network.">
+        Activate <ph name="NETWORKSERVICE">$1<ex>YBH Cellular</ex></ph>
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NETWORK_LIST_ACTIVATING" desc="Message for the network list when activating a network.">
+        <ph name="NAME">$1<ex>YBH Cellular</ex></ph>: Activating...
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NETWORK_LIST_CONNECTING" desc="Message for the network list when connecting to a network.">
+        <ph name="NAME">$1<ex>GoogleGuest</ex></ph>: Connecting...
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NETWORK_NOT_CONNECTED" desc="Description in status area or network dropdown when no network is connected.">
+        No network
+      </message>
+
+      <message name="IDS_ASH_STATUS_TRAY_NO_NETWORKS" desc="The message to display in the network info bubble when it is otherwise empty.">
+        No network information available
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NO_CELLULAR_NETWORKS" desc="The message to display in the network list when no cellular networks are available.">
+        No cellular network available
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_VPN_DISCONNECTED" desc="The label used in system tray bubble to display vpn is disconnected.">
+        VPN disconnected
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NETWORK_WIFI_ENABLED" desc="The label used in the tray popup to notify that Wi-Fi is turned on.">
+        Wi-Fi is turned on.
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NETWORK_WIFI_DISABLED" desc="The label used in the tray popup to notify that Wi-Fi is turned off.">
+        Wi-Fi is turned off.
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_WIFI_SCANNING_MESSAGE" desc="Scanning for wifi networks">
+        Searching for Wi-Fi networks...
+      </message>
+
+      <!-- Default user profile images. -->
+      <!-- User Image default image accessible descriptions -->
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_19" desc="Description of the default user icon with a picture of a bicycle">
+        Bicycle
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_20" desc="Description of the default user icon with a picture of a Bokeh (an out-of focus effect in photography)">
+        Bokeh
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_21" desc="Description of the default user icon with a picture of a game of chess">
+        Chess
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_22" desc="Description of the default user icon with a picture of a cup of coffee">
+        Coffee
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_23" desc="Description of the default user icon with a picture of a dragonfly">
+        Dragonfly
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_24" desc="Description of the default user icon with a picture of a frog">
+        Frog
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_25" desc="Description of the default user icon with a picture of a Gazania (a kind of flower - okay to translate as just flower or some similar flower name)">
+        Gazania Flower
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_26" desc="Description of the default user icon with a picture of a Jack Russell Terrier (a kind of dog - okay to translate as just dog)">
+        Jack Russell Terrier
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_27" desc="Description of the default user icon with a picture of a jellyfish">
+        Jellyfish
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_28" desc="Description of the default user icon with a picture of a kiwi (fruit)">
+        Kiwi
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_29" desc="Description of the default user icon with a picture of a penguin">
+        Penguin
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_30" desc="Description of the default user icon with a picture of a rainbowfish (a kind of fish)">
+        Rainbowfish
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_31" desc="Description of the default user icon with a picture of a record player (phonograph)">
+        Record player
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_32" desc="Description of the default user icon with a picture of a butterfly upside-down on a flower; the name of the photo is Upside-Down.">
+        Upside Down
+      </message>
+      <message name="IDS_LOGIN_DEFAULT_USER_DESC_33" desc="Description of the default user icon with a picture of a cat">
+        Cat
+      </message>
+
+      <!-- Attribution strings for stock user images, not translateable. -->
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_1">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_2">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_3">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_4">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_5">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_6">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_7">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_8">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_9">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_10">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_11">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_12">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_13">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_14">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_15">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_16">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_17">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_18">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_19">
+        Kirsten Hammelbo
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_20">
+        Igor Djurovic
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_21">
+        Romain Guy
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_22">
+        Barbara Dudzińska
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_23">
+        Romain Guy
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_24">
+        Dirk Ercken
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_25">
+        Pauline Ilott
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_26">
+        cynoclub
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_27">
+        Romain Guy
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_28">
+        Vladimir Vladimirov
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_29">
+        MOF
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_30">
+        Romain Guy
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_31">
+        Shaun Lowe
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_32">
+        Magdalena Wasiczek
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_AUTHOR_33">
+        Ivan Podogov
+      </message>
+
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_1">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_2">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_3">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_4">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_5">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_6">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_7">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_8">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_9">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_10">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_11">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_12">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_13">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_14">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_15">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_16">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_17">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_18">
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_19">
+        http://www.istockphoto.com/Kirkham
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_20">
+        http://www.istockphoto.com/vectorig
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_21">
+        http://www.curious-creature.org/
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_22">
+        http://www.istockphoto.com/barol16
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_23">
+        http://www.curious-creature.org/
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_24">
+        http://www.istockphoto.com/kikkerdirk
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_25">
+        http://www.istockphoto.com/pollypic
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_26">
+        http://www.istockphoto.com/cynoclub
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_27">
+        http://www.curious-creature.org/
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_28">
+        http://www.istockphoto.com/portishead1
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_29">
+        http://www.istockphoto.com/MOF
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_30">
+        http://www.curious-creature.org/
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_31">
+        http://www.istockphoto.com/shaunl
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_32">
+        http://www.magdawasiczek.pl
+      </message>
+      <message translateable="false" name="IDS_LOGIN_DEFAULT_USER_WEBSITE_33">
+      </message>
+
+      <message name="IDS_CHROMEOS_IME_INFOLIST_WINDOW_TITLE" desc="The title of the infolist window where the meanings and the usages of words are displayed.">
+        Information
+      </message>
+
+      <!-- Network error strings -->
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_UNKNOWN" desc="Network error details in notifications: UNKNOWN">
+        Unknown network error
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_OUT_OF_RANGE" desc="Network error details in notifications: OUT_OF_RANGE">
+        Out of range
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_PIN_MISSING" desc="Network error details in notifications: PIN_MISSING">
+        PIN missing
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_DHCP_FAILED" desc="Network error details in notifications: DHCP_FAILED">
+        DHCP lookup failed
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_CONNECT_FAILED" desc="Network error details in notifications: CONNECT_FAILED">
+        Connect failed
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_BAD_PASSPHRASE" desc="Network error details in notifications: BAD_PASSPHRASE. Error when a bad wifi password/passphrase is entered.">
+        Bad password
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_BAD_WEPKEY" desc="Network error details in notifications: BAD_WEPKEY">
+        Bad WEP key
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_ACTIVATION_FAILED" desc="Network error details in notifications: ACTIVATION_FAILED">
+        Activation failed
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_NEED_EVDO" desc="Network error details in notifications: NEED_EVDO">
+        Need EVDO
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_NEED_HOME_NETWORK" desc="Network error details in notifications: NEED_HOME_NETWORK">
+        Need home network
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_OTASP_FAILED" desc="Network error details in notifications: OTASP_FAILED">
+        OTASP failed
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_AAA_FAILED" desc="Network error details in notifications: AAA_FAILED">
+        AAA check failed
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_INTERNAL" desc="Network error details in notifications: INTERNAL">
+        Internal error
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_DNS_LOOKUP_FAILED" desc="Network error details in notifications: DNS_LOOKUP_FAILED">
+        DNS lookup failed
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_HTTP_GET_FAILED" desc="Network error details in notifications: HTTP_GET_FAILED">
+        HTTP get failed
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_IPSEC_PSK_AUTH_FAILED" desc="Network error details in notifications: IPSEC_PSK_AUTH_FAILED">
+        Incorrect password
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_CERT_AUTH_FAILED" desc="Network error details in notifications: IPSEC_CERT_AUTH_FAILED">
+        Authentication certificate rejected by network
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_EAP_LOCAL_TLS_FAILED" desc="Network error details in notifications: EAP_LOCAL_TLS_FAILED">
+        Authentication certificate rejected locally
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_EAP_REMOTE_TLS_FAILED" desc="Network error details in notifications: EAP_REMOTE_TLS_FAILED">
+        Authentication certificate rejected remotely
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_EAP_AUTH_FAILED" desc="Network error details in notifications: IPSEC_CERT_AUTH_FAILED">
+        Username/password incorrect or EAP-auth failed
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_PPP_AUTH_FAILED" desc="Network error details in notifications: PPP_AUTH_FAILED">
+        PPP authentication failed due to an incorrect username or password
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_CONFIGURE_FAILED" desc="Network error details in notifications: Configuration error">
+        Failed to configure network
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_CERTIFICATES_NOT_LOADED" desc="Network error details in notifications: Certificates not loaded">
+        Certificates not loaded
+      </message>
+      <message name="IDS_CHROMEOS_NETWORK_ERROR_UNRECOGNIZED" desc="Network error details in notifications: Unrecognized">
+        Unrecognized error
+      </message>
+
+      <!-- Other Network UI strings -->
+      <message name="IDS_NETWORK_CONNECTION_ERROR_TITLE" desc="Title for network connection error notification">
+        Network Connection Error
+      </message>
+      <message name="IDS_NETWORK_CONNECTION_ERROR_MESSAGE" desc="Message for network connection error notification">
+        Failed to connect to network '<ph name="name">$1<ex>GoogleGuest</ex></ph>': <ph name="details">$2<ex>Unrecognized error</ex></ph>
+      </message>
+      <message name="IDS_NETWORK_CONNECTION_ERROR_MESSAGE_WITH_SERVER_MESSAGE" desc="Message for network connection error notification with details and a server message">
+        Failed to connect to '<ph name="name">$1<ex>GoogleGuest</ex></ph>': <ph name="details">$2<ex>Unrecognized error</ex></ph>
+        Server message: <ph name="server_msg">$3<ex>Incorrect password</ex></ph>
+      </message>
+      <message name="IDS_NETWORK_CONNECTION_ERROR_MESSAGE_NO_NAME" desc="Message for network connection error where the network name is unavailable">
+        Failed to connect to network: <ph name="details">$1<ex>Unrecognized error</ex></ph>
+      </message>
+      <message name="IDS_NETWORK_VPN_CONNECTION_LOST_TITLE" desc="Title for network notification when VPN connection is lost">
+        VPN disconnected
+      </message>
+      <message name="IDS_NETWORK_VPN_CONNECTION_LOST_BODY" desc="Message for network notification when VPN connection is lost">
+        Connection to <ph name="name">$1<ex>Google VPN</ex></ph> has been lost
+      </message>
+      <message name="IDS_NETWORK_OUT_OF_CREDITS_TITLE" desc="Title for network out of data error notification">
+        Network Connection Error
+      </message>
+      <message name="IDS_NETWORK_OUT_OF_CREDITS_BODY" desc="Message body for network out of data error notification">
+        You may have used up your mobile data allowance. Visit the <ph name="name">$1<ex>GoogleGuest</ex></ph> activation portal to buy more data.
+      </message>
+      <message name="IDS_NETWORK_UNRECOGNIZED_ERROR" desc="Unrecognized Network error text">
+        Unrecognized error: <ph name="desc">$1<ex>ShillErrorString</ex></ph>
+      </message>
+      <message name="IDS_NETWORK_CELLULAR_ACTIVATED_TITLE" desc="Title for cellular activated notification">
+        Cellular Activated
+      </message>
+      <message name="IDS_NETWORK_CELLULAR_ACTIVATED" desc="Text of the cellular activated notification">
+        Congratulations! Your '<ph name="name">$1<ex>Generic Wireless</ex></ph>' data service has been activated and is ready to go.
+      </message>
+      <message name="IDS_NETWORK_ACTIVATION_ERROR_TITLE" desc="Title for network activation error notification">
+        Network Activation Error
+      </message>
+      <message name="IDS_NETWORK_ACTIVATION_NEEDS_CONNECTION" desc="Message when attempting to activate a mobile network that requires a connection">
+        Activation of '<ph name="name">$1<ex>Generic Wireless</ex></ph>' requires a network connection.
+      </message>
+      <message name="IDS_NETWORK_VPN_BUILT_IN_PROVIDER" desc="The name of the built-in VPN provider that supports OpenVPN and L2TP over IPsec.">
+        OpenVPN / L2TP
+      </message>
+    </messages>
+  </release>
+</grit>

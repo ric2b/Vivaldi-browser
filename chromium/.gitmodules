@@ -1,0 +1,368 @@
+[submodule "breakpad/src"]
+	path = breakpad/src
+	url = ../../external/google-breakpad/src.git
+	os = all
+[submodule "chrome/installer/mac/third_party/xz/xz"]
+	path = chrome/installer/mac/third_party/xz/xz
+	url = ../deps/xz.git
+	os = mac
+[submodule "chrome/test/data/perf/canvas_bench"]
+	path = chrome/test/data/perf/canvas_bench
+	url = ../canvas_bench.git
+	os = all
+[submodule "chrome/test/data/perf/frame_rate/content"]
+	path = chrome/test/data/perf/frame_rate/content
+	url = ../frame_rate/content.git
+	os = all
+[submodule "native_client"]
+	path = native_client
+	url = ../../native_client/src/native_client.git
+	os = all
+[submodule "sdch/open-vcdiff"]
+	path = sdch/open-vcdiff
+	url = ../../external/open-vcdiff.git
+	os = all
+[submodule "testing/gmock"]
+	path = testing/gmock
+	url = ../../external/googlemock.git
+	os = all
+[submodule "testing/gtest"]
+	path = testing/gtest
+	url = ../../external/googletest.git
+	os = all
+[submodule "third_party/WebKit"]
+	path = third_party/WebKit
+	url = ../blink.git
+	os = all
+[submodule "third_party/apache-mime4j"]
+	path = third_party/apache-mime4j
+	url = ../deps/apache-mime4j.git
+	os = android
+[submodule "third_party/bidichecker"]
+	path = third_party/bidichecker
+	url = ../../external/bidichecker/lib.git
+	os = all
+[submodule "third_party/bison"]
+	path = third_party/bison
+	url = ../deps/bison.git
+	os = win
+[submodule "third_party/chromite"]
+	path = third_party/chromite
+	url = ../../chromiumos/chromite.git
+	os = unix
+[submodule "third_party/cros_system_api"]
+	path = third_party/cros_system_api
+	url = ../../chromiumos/platform/system_api.git
+	os = unix
+[submodule "third_party/ffmpeg"]
+	path = third_party/ffmpeg
+	url = ../third_party/ffmpeg.git
+	os = all
+[submodule "third_party/findbugs"]
+	path = third_party/findbugs
+	url = ../deps/findbugs.git
+	os = android
+[submodule "third_party/flac"]
+	path = third_party/flac
+	url = ../deps/flac.git
+	os = all
+[submodule "third_party/freetype2/src"]
+	path = third_party/freetype2/src
+	url = ../src/third_party/freetype2.git
+	os = unix
+[submodule "third_party/gnu_binutils"]
+	path = third_party/gnu_binutils
+	url = ../../native_client/deps/third_party/gnu_binutils.git
+	os = win
+[submodule "third_party/gperf"]
+	path = third_party/gperf
+	url = ../deps/gperf.git
+	os = win
+[submodule "third_party/httpcomponents-client"]
+	path = third_party/httpcomponents-client
+	url = ../deps/httpcomponents-client.git
+	os = android
+[submodule "third_party/httpcomponents-core"]
+	path = third_party/httpcomponents-core
+	url = ../deps/httpcomponents-core.git
+	os = android
+[submodule "third_party/hunspell_dictionaries"]
+	path = third_party/hunspell_dictionaries
+	url = ../deps/hunspell_dictionaries.git
+	os = all
+[submodule "third_party/jarjar"]
+	path = third_party/jarjar
+	url = ../deps/jarjar.git
+	os = android
+[submodule "third_party/jsr-305/src"]
+	path = third_party/jsr-305/src
+	url = ../../external/jsr-305.git
+	os = android
+[submodule "third_party/leveldatabase/src"]
+	path = third_party/leveldatabase/src
+	url = ../../external/leveldb.git
+	os = all
+[submodule "third_party/libexif/sources"]
+	path = third_party/libexif/sources
+	url = ../deps/libexif/sources.git
+	os = all
+[submodule "third_party/libjpeg_turbo"]
+	path = third_party/libjpeg_turbo
+	url = ../deps/libjpeg_turbo.git
+	os = all
+[submodule "third_party/libphonenumber/src/phonenumbers"]
+	path = third_party/libphonenumber/src/phonenumbers
+	url = ../../external/libphonenumber/cpp/src/phonenumbers.git
+	os = all
+[submodule "third_party/libphonenumber/src/resources"]
+	path = third_party/libphonenumber/src/resources
+	url = ../../external/libphonenumber/resources.git
+	os = all
+[submodule "third_party/libphonenumber/src/test"]
+	path = third_party/libphonenumber/src/test
+	url = ../../external/libphonenumber/cpp/test.git
+	os = all
+[submodule "third_party/libsrtp"]
+	path = third_party/libsrtp
+	url = ../deps/libsrtp.git
+	os = all
+[submodule "third_party/libvpx"]
+	path = third_party/libvpx
+	url = ../deps/libvpx.git
+	os = all
+[submodule "third_party/lighttpd"]
+	path = third_party/lighttpd
+	url = ../deps/lighttpd.git
+	os = win,mac
+[submodule "third_party/lss"]
+	path = third_party/lss
+	url = ../../external/linux-syscall-support/lss.git
+	os = android,unix
+[submodule "third_party/mesa/src"]
+	path = third_party/mesa/src
+	url = ../deps/mesa.git
+	os = all
+[submodule "third_party/mingw-w64/mingw/bin"]
+	path = third_party/mingw-w64/mingw/bin
+	url = ../../native_client/deps/third_party/mingw-w64/mingw/bin.git
+	os = win
+[submodule "third_party/nacl_sdk_binaries"]
+	path = third_party/nacl_sdk_binaries
+	url = ../deps/nacl_sdk_binaries.git
+	os = win
+[submodule "third_party/nss"]
+	path = third_party/nss
+	url = ../deps/nss.git
+	os = win,ios,mac
+[submodule "third_party/openmax_dl"]
+	path = third_party/openmax_dl
+	url = ../../external/webrtc/deps/third_party/openmax.git
+	os = all
+[submodule "third_party/opus/src"]
+	path = third_party/opus/src
+	url = ../deps/opus.git
+	os = all
+[submodule "third_party/pdfsqueeze"]
+	path = third_party/pdfsqueeze
+	url = ../../external/pdfsqueeze.git
+	os = mac
+[submodule "third_party/pefile"]
+	path = third_party/pefile
+	url = ../../external/pefile.git
+	os = win
+[submodule "third_party/psyco_win32"]
+	path = third_party/psyco_win32
+	url = ../deps/psyco_win32.git
+	os = win
+[submodule "third_party/pyelftools"]
+	path = third_party/pyelftools
+	url = ../../chromiumos/third_party/pyelftools.git
+	os = unix
+[submodule "third_party/pyftpdlib/src"]
+	path = third_party/pyftpdlib/src
+	url = ../../external/pyftpdlib.git
+	os = all
+[submodule "third_party/pywebsocket/src"]
+	path = third_party/pywebsocket/src
+	url = ../../external/pywebsocket/src.git
+	os = all
+[submodule "third_party/safe_browsing/testing"]
+	path = third_party/safe_browsing/testing
+	url = ../../external/google-safe-browsing/testing.git
+	os = all
+[submodule "third_party/scons-2.0.1"]
+	path = third_party/scons-2.0.1
+	url = ../../native_client/src/third_party/scons-2.0.1.git
+	os = all
+[submodule "third_party/sfntly/cpp/src"]
+	path = third_party/sfntly/cpp/src
+	url = ../../external/sfntly/cpp/src.git
+	os = all
+[submodule "third_party/smhasher/src"]
+	path = third_party/smhasher/src
+	url = ../../external/smhasher.git
+	os = all
+[submodule "third_party/snappy/src"]
+	path = third_party/snappy/src
+	url = ../../external/snappy.git
+	os = all
+[submodule "third_party/trace-viewer"]
+	path = third_party/trace-viewer
+	url = ../../external/trace-viewer.git
+	os = all
+[submodule "third_party/usrsctp/usrsctplib"]
+	path = third_party/usrsctp/usrsctplib
+	url = ../../external/usrsctplib.git
+	os = all
+[submodule "third_party/webdriver/pylib"]
+	path = third_party/webdriver/pylib
+	url = ../../external/selenium/py.git
+	os = all
+[submodule "third_party/xdg-utils"]
+	path = third_party/xdg-utils
+	url = ../deps/xdg-utils.git
+	os = unix
+[submodule "third_party/yasm/binaries"]
+	path = third_party/yasm/binaries
+	url = ../deps/yasm/binaries.git
+	os = win
+[submodule "third_party/yasm/source/patched-yasm"]
+	path = third_party/yasm/source/patched-yasm
+	url = ../deps/yasm/patched-yasm.git
+	os = all
+[submodule "tools/deps2git"]
+	path = tools/deps2git
+	url = ../tools/deps2git.git
+	os = all
+[submodule "tools/grit"]
+	path = tools/grit
+	url = ../../external/grit-i18n.git
+	os = all
+[submodule "tools/gyp"]
+	path = tools/gyp
+	url = ../../external/gyp.git
+	os = all
+[submodule "tools/page_cycler/acid3"]
+	path = tools/page_cycler/acid3
+	url = ../deps/acid3.git
+	os = all
+[submodule "media/cdm/ppapi/api"]
+	path = media/cdm/ppapi/api
+	url = ../cdm.git
+[submodule "third_party/cld_2/src"]
+	path = third_party/cld_2/src
+	url = ../../external/cld2.git
+[submodule "tools/swarming_client"]
+	path = tools/swarming_client
+	url = ../../external/swarming.client.git
+[submodule "third_party/angle"]
+	path = third_party/angle
+	url = ../../angle/angle.git
+[submodule "third_party/fontconfig/src"]
+	path = third_party/fontconfig/src
+	url = ../../external/fontconfig.git
+[submodule "third_party/google_toolbox_for_mac/src"]
+	path = third_party/google_toolbox_for_mac/src
+	url = ../../external/google-toolbox-for-mac.git
+[submodule "third_party/libaddressinput/src"]
+	path = third_party/libaddressinput/src
+	url = ../../external/libaddressinput.git
+[submodule "third_party/libjingle/source/talk"]
+	path = third_party/libjingle/source/talk
+	url = ../../external/webrtc/trunk/talk.git
+[submodule "third_party/webgl/src"]
+	path = third_party/webgl/src
+	url = ../../external/khronosgroup/webgl.git
+[submodule "third_party/webrtc"]
+	path = third_party/webrtc
+	url = ../../external/webrtc/trunk/webrtc.git
+[submodule "buildtools"]
+	path = buildtools
+	url = ../buildtools.git
+[submodule "third_party/colorama/src"]
+	path = third_party/colorama/src
+	url = ../../external/colorama.git
+[submodule "third_party/elfutils/src"]
+	path = third_party/elfutils/src
+	url = ../../external/elfutils.git
+[submodule "third_party/skia"]
+	path = third_party/skia
+	url = ../../skia.git
+[submodule "third_party/android_protobuf/src"]
+	path = third_party/android_protobuf/src
+	url = ../../external/android_protobuf.git
+[submodule "third_party/junit/src"]
+	path = third_party/junit/src
+	url = ../../external/junit.git
+[submodule "third_party/liblouis/src"]
+	path = third_party/liblouis/src
+	url = ../../external/liblouis-github.git
+[submodule "third_party/py_trace_event/src"]
+	path = third_party/py_trace_event/src
+	url = ../../external/py_trace_event.git
+[submodule "v8"]
+	path = v8
+	url = ../../v8/v8.git
+[submodule "third_party/appurify-python/src"]
+	path = third_party/appurify-python/src
+	url = ../../external/github.com/appurify/appurify-python.git
+[submodule "third_party/boringssl/src"]
+	path = third_party/boringssl/src
+	url = ../../boringssl/boringssl.git
+[submodule "third_party/icu"]
+	path = third_party/icu
+	url = ../deps/icu.git
+[submodule "third_party/mockito/src"]
+	path = third_party/mockito/src
+	url = ../../external/mockito/mockito.git
+[submodule "third_party/pdfium"]
+	path = third_party/pdfium
+	url = ../../pdfium/pdfium.git
+[submodule "third_party/requests/src"]
+	path = third_party/requests/src
+	url = ../../external/github.com/kennethreitz/requests.git
+[submodule "third_party/stp/src"]
+	path = third_party/stp/src
+	url = ../../external/github.com/stp/stp.git
+[submodule "ios/third_party/gcdwebserver/src"]
+	path = ios/third_party/gcdwebserver/src
+	url = ../../external/github.com/swisspol/GCDWebServer.git
+[submodule "third_party/crashpad/crashpad"]
+	path = third_party/crashpad/crashpad
+	url = ../../crashpad/crashpad.git
+[submodule "third_party/dom_distiller_js/dist"]
+	path = third_party/dom_distiller_js/dist
+	url = ../../external/github.com/chromium/dom-distiller-dist.git
+[submodule "third_party/robolectric/lib"]
+	path = third_party/robolectric/lib
+	url = ../third_party/robolectric.git
+[submodule "third_party/webpagereplay"]
+	path = third_party/webpagereplay
+	url = ../../external/github.com/chromium/web-page-replay.git
+[submodule "third_party/jsoncpp/source"]
+	path = third_party/jsoncpp/source
+	url = ../../external/github.com/open-source-parsers/jsoncpp.git
+[submodule "third_party/cardboard-java/src"]
+	path = third_party/cardboard-java/src
+	url = ../../external/github.com/googlesamples/cardboard-java.git
+[submodule "third_party/class-dump/src"]
+	path = third_party/class-dump/src
+	url = ../../external/github.com/nygard/class-dump.git
+[submodule "third_party/custom_tabs_client/src"]
+	path = third_party/custom_tabs_client/src
+	url = ../../external/github.com/GoogleChrome/custom-tabs-client.git
+[submodule "third_party/deqp/src"]
+	path = third_party/deqp/src
+	url = ../../android/platform/external/deqp
+[submodule "third_party/errorprone/lib"]
+	path = third_party/errorprone/lib
+	url = ../third_party/errorprone.git
+[submodule "third_party/freetype-android/src"]
+	path = third_party/freetype-android/src
+	url = ../src/third_party/freetype2.git
+[submodule "third_party/libyuv"]
+	path = third_party/libyuv
+	url = ../../libyuv/libyuv.git
+[submodule "third_party/ub-uiautomator/lib"]
+	path = third_party/ub-uiautomator/lib
+	url = ../third_party/ub-uiautomator.git

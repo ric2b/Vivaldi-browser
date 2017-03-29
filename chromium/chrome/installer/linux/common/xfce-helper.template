@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Icon=@@PACKAGE@@
+Name=@@MENUNAME@@
+Type=X-XFCE-Helper
+StartupNotify=false
+X-XFCE-Binaries=@@PACKAGE@@;@@USR_BIN_SYMLINK_NAME@@;
+X-XFCE-Category=WebBrowser
+X-XFCE-Commands=%B;
+X-XFCE-CommandsWithParameter=%B "%s";

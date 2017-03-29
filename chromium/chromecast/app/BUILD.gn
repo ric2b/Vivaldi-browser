@@ -1,0 +1,41 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//testing/test.gni")
+
+source_set("cast_crash_client") {
+  sources = [
+    "android/cast_crash_reporter_client_android.cc",
+    "android/cast_crash_reporter_client_android.h",
+    "linux/cast_crash_reporter_client.cc",
+    "linux/cast_crash_reporter_client.h",
+  ]
+
+  configs += [ "//chromecast:config" ]
+
+  deps = [
+    "//base",
+    "//chromecast/base",
+    "//chromecast/crash",
+    "//components/crash/app",
+    "//components/crash/app:lib",
+    "//content/public/common",
+  ]
+}
+
+# TODO(kmackay) Consider renaming this.
+test("cast_shell_unittests") {
+  sources = [
+    "linux/cast_crash_reporter_client_unittest.cc",
+  ]
+
+  deps = [
+    ":cast_crash_client",
+    "//base",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//chromecast/crash",
+    "//testing/gtest",
+  ]
+}

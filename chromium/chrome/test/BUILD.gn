@@ -1,0 +1,1756 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chrome_build.gni")
+import("//build/config/crypto.gni")
+import("//build/config/features.gni")
+import("//build/config/ui.gni")
+import("//chrome/test/base/js2gtest.gni")
+import("//testing/test.gni")
+
+# This target exists to reference other test executables to bring these files
+# into the build.
+group("test") {
+  testonly = true
+}
+
+# GYP version: chrome/chrome_tests_unit.gypi:test_support_common
+source_set("test_support") {
+  defines = []
+  testonly = true
+
+  sources = [
+    "base/chrome_process_util.cc",
+    "base/chrome_process_util.h",
+    "base/chrome_process_util_mac.cc",
+    "base/chrome_render_view_host_test_harness.cc",
+    "base/chrome_render_view_host_test_harness.h",
+    "base/chrome_test_launcher.cc",
+    "base/chrome_test_launcher.h",
+    "base/chrome_test_suite.cc",
+    "base/chrome_test_suite.h",
+    "base/chrome_unit_test_suite.cc",
+    "base/chrome_unit_test_suite.h",
+    "base/dialog_test_browser_window.cc",
+    "base/dialog_test_browser_window.h",
+    "base/find_in_page_observer.cc",
+    "base/find_in_page_observer.h",
+    "base/history_index_restore_observer.cc",
+    "base/history_index_restore_observer.h",
+    "base/in_process_browser_test.cc",
+    "base/in_process_browser_test.h",
+    "base/profile_mock.cc",
+    "base/profile_mock.h",
+    "base/scoped_browser_locale.cc",
+    "base/scoped_browser_locale.h",
+    "base/scoped_bundle_swizzler_mac.h",
+    "base/scoped_bundle_swizzler_mac.mm",
+    "base/scoped_testing_local_state.cc",
+    "base/scoped_testing_local_state.h",
+    "base/test_browser_window.cc",
+    "base/test_browser_window.h",
+    "base/test_launcher_utils.cc",
+    "base/test_launcher_utils.h",
+    "base/test_switches.cc",
+    "base/test_switches.h",
+    "base/testing_browser_process.cc",
+    "base/testing_browser_process.h",
+    "base/testing_browser_process_platform_part.cc",
+    "base/testing_browser_process_platform_part.h",
+    "base/testing_io_thread_state.cc",
+    "base/testing_io_thread_state.h",
+    "base/testing_pref_service_syncable.cc",
+    "base/testing_pref_service_syncable.h",
+    "base/testing_profile.cc",
+    "base/testing_profile.h",
+    "base/testing_profile_manager.cc",
+    "base/testing_profile_manager.h",
+    "base/tracing.cc",
+    "base/tracing.h",
+    "base/ui_test_utils.cc",
+    "base/ui_test_utils.h",
+    "logging/win/file_logger.cc",
+    "logging/win/file_logger.h",
+    "logging/win/log_file_printer.cc",
+    "logging/win/log_file_printer.h",
+    "logging/win/log_file_reader.cc",
+    "logging/win/log_file_reader.h",
+    "logging/win/mof_data_parser.cc",
+    "logging/win/mof_data_parser.h",
+    "logging/win/test_log_collector.cc",
+    "logging/win/test_log_collector.h",
+  ]
+
+  # New deps should go in the non-iOS section below.
+  public_deps = [
+    "//content/test:test_support",
+  ]
+  deps = [
+    "//base:prefs_test_support",
+    "//base/test:test_support",
+    "//chrome:resources",
+    "//chrome:strings",
+    "//chrome/app:test_support",
+
+    #"//chrome/app/theme:theme_resources",
+    "//chrome/browser:test_support",
+    "//chrome/common:test_support",
+    "//chrome/renderer:test_support",
+    "//components/bookmarks/test",
+    "//components/gcm_driver:test_support",
+    "//components/gcm_driver/instance_id:test_support",
+    "//components/history/core/test:test",
+    "//components/metrics:test_support",
+    "//components/omnibox/browser:test_support",
+    "//components/password_manager/core/browser:test_support",
+    "//components/pref_registry:test_support",
+    "//components/rappor:test_support",
+    "//components/search_engines:test_support",
+    "//components/signin/core/browser:test_support",
+    "//components/sync_driver:test_support",
+    "//components/update_client:test_support",
+    "//content/public/app:both",
+    "//ui/gfx:test_support",
+    "//net",
+    "//net:test_support",
+    "//skia",
+    "//sql",
+    "//sql:test_support",
+    "//sync",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/zlib",
+    "//ui/message_center:test_support",
+  ]
+
+  if (!is_ios) {
+    deps += [
+      "//chrome/child",
+      "//chrome/plugin",
+      "//chrome/renderer",
+      "//chrome/utility",
+      "//content/public/child",
+      "//content/public/common",
+      "//content/public/plugin",
+      "//content/public/renderer",
+      "//content/public/utility",
+      "//components/autofill/core/browser:test_support",
+      "//components/captive_portal:test_support",
+      "//components/guest_view/browser:test_support",
+      "//components/infobars/core",
+      "//components/sessions:test_support",
+      "//components/user_manager:test_support",
+      "//components/web_resource:test_support",
+      "//google_apis:test_support",
+      "//ipc:test_support",
+      "//media:test_support",
+      "//ppapi/shared_impl",
+      "//sql:test_support",
+      "//third_party/leveldatabase",
+      "//ui/base",
+      "//ui/events:events_base",
+      "//ui/gl",
+    ]
+  }
+
+  if (enable_extensions) {
+    deps += [
+      "//chrome/common/extensions/api",
+      "//extensions:test_support",
+    ]
+  }
+
+  if (is_linux) {
+    deps += [ "//crypto:platform" ]
+  }
+  if (is_mac) {
+    # deps += [ '../third_party/ocmock/ocmock.gyp:ocmock' ] TODO(GYP)
+  }
+  if (is_win) {
+    deps += [ "//third_party/wtl" ]
+    if (use_aura) {
+      deps += [
+        "//win8:test_registrar_constants",
+        "//win8:test_support_win8",
+      ]
+    }
+  }
+  if (is_chromeos) {
+    deps += [ "//components/ownership" ]
+  }
+
+  if (enable_plugins) {
+    sources += [
+      "ppapi/ppapi_test.cc",
+      "ppapi/ppapi_test.h",
+    ]
+    deps += [ "//pdf" ]
+  }
+
+  if (use_ash) {
+    deps += [ "//ash:test_support" ]
+  }
+  if (toolkit_views) {
+    deps += [ "//ui/views:test_support" ]
+  }
+
+  if (enable_extensions) {
+    deps += [
+      "//chrome/common/extensions/api",
+      "//extensions:test_support",
+    ]
+  }
+}
+
+if (!is_android) {
+  import("//chrome/chrome_tests.gni")
+  import("//third_party/protobuf/proto_library.gni")
+
+  # GYP version: chrome/chrome_tests_unit.gypi:ipc_protobuf_message_test_proto
+  proto_library("test_proto") {
+    sources = [
+      "../common/safe_browsing/ipc_protobuf_message_test.proto",
+    ]
+  }
+
+  test("interactive_ui_tests") {
+    sources =
+        rebase_path(chrome_tests_gypi_values.chrome_interactive_ui_test_sources,
+                    ".",
+                    "//chrome")
+
+    defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+    ldflags = []
+
+    deps = [
+      "//base/allocator",
+      "//chrome/browser",
+      "//chrome/browser/devtools",
+      "//chrome/renderer",
+      "//chrome/test:test_support",
+      "//chrome:resources",
+      "//chrome:strings",
+      "//chrome:packed_extra_resources",
+      "//chrome:packed_resources",
+      "//content/app/resources",
+      "//crypto:platform",
+      "//crypto:test_support",
+      "//google_apis:test_support",
+      "//net",
+      "//net:net_resources",
+      "//net:test_support",
+      "//skia",
+      "//sync",
+      "//testing/gmock",
+      "//testing/gtest",
+      "//third_party/hunspell",
+      "//third_party/icu",
+      "//third_party/libpng",
+      "//third_party/zlib",
+      "//ui/base:test_support",
+      "//ui/resources:ui_test_pak",
+      "//ui/web_dialogs:test_support",
+    ]
+
+    # Runtime dependencies
+    datadeps = [
+      "//ppapi:ppapi_tests",
+      "//third_party/mesa:osmesa",
+    ]
+
+    if (toolkit_views) {
+      sources += rebase_path(
+              chrome_tests_gypi_values.chrome_interactive_ui_test_views_sources,
+              ".",
+              "//chrome")
+      deps += [
+        "//ui/views",
+        "//ui/views:test_support",
+        "//ui/views/controls/webview:test_support",
+      ]
+      if (!is_mac) {
+        sources += rebase_path(
+                chrome_tests_gypi_values.chrome_interactive_ui_test_views_non_mac_sources,
+                ".",
+                "//chrome")
+      }
+      if (is_linux) {
+        # TODO(gbillock): aura linux does not support the automation for
+        # SendMouseMoveNotifyWhenDone
+        sources -= [ "../browser/ui/views/toolbar/toolbar_button_test.cc" ]
+      }
+      if (is_chromeos || !use_x11) {
+        sources -= [
+          "../../ui/views/widget/desktop_aura/desktop_window_tree_host_x11_interactive_uitest.cc",
+          "../../ui/views/widget/desktop_aura/x11_topmost_window_finder_interactive_uitest.cc",
+        ]
+      }
+      if (use_aura) {
+        deps += [ "//ui/touch_selection" ]
+      }
+    }
+
+    if (is_linux && !is_chromeos) {
+      # Desktop linux.
+      sources -= [
+        # TODO(port): This times out. Attempts have been made to fix the
+        # individual failures, but each time I disable a test from these
+        # suites, it seems like one or another starts timing out too.
+        "../browser/ui/views/keyboard_access_browsertest.cc",
+      ]
+    } else {
+      # Everything but desktop Linux.
+      sources += rebase_path(
+              chrome_tests_gypi_values.chrome_interactive_ui_test_non_desktop_linux_sources,
+              ".",
+              "//chrome")
+    }
+
+    if (is_chromeos) {
+      sources += rebase_path(
+              chrome_tests_gypi_values.chrome_interactive_ui_test_chromeos_sources,
+              ".",
+              "//chrome")
+      sources += [ "../browser/notifications/login_state_notification_blocker_chromeos_browsertest.cc" ]
+      sources -= [
+        # Use only the _chromeos version on ChromeOS.
+        "base/view_event_test_platform_part_ash.cc",
+      ]
+
+      deps += [
+        "//ash/resources",
+        "//chromeos",
+      ]
+
+      if (enable_nacl) {
+        deps += [
+          "//native_client/src/trusted/service_runtime/linux:munge_nacl_helper_bootstrap",
+          "//components/nacl:nacl_helper",
+
+          # '../components/nacl_nonsfi.gyp:nacl_helper_nonsfi',  TODO(GYP)
+        ]
+      }
+
+      if (is_chrome_branded) {
+        sources -= [
+          # These tests are failing on official cros bots. crbug.com/431450.
+          "../browser/ui/views/bookmarks/bookmark_bar_view_test.cc",
+        ]
+      }
+    } else {
+      # ChromeOS doesn't use panels, everybody else does.
+      sources += rebase_path(
+              chrome_tests_gypi_values.chrome_interactive_ui_test_panels_sources,
+              ".",
+              "//chrome")
+
+      # TODO(tapted): Include on mac when views panels are ported.
+      if (toolkit_views && !is_mac) {
+        sources += rebase_path(
+                chrome_tests_gypi_values.chrome_interactive_ui_test_panels_views_sources,
+                ".",
+                "//chrome")
+      }
+    }
+
+    if (!is_linux) {
+      # Non-Linux platforms (Linux includes ChromeOS here).
+      sources += rebase_path(
+              chrome_tests_gypi_values.chrome_interactive_ui_test_non_linux_and_chromeos_sources,
+              ".",
+              "//chrome")
+    }
+
+    if (is_win) {
+      sources += rebase_path(
+              chrome_tests_gypi_values.chrome_interactive_ui_test_win_sources,
+              ".",
+              "//chrome")
+      deps += [
+        "//chrome:other_version",
+        "//third_party/isimpledom",
+        "//third_party/wtl",
+        "//ui/resources",
+      ]
+
+      configs -= [ "//build/config/win:default_incremental_linking" ]
+      configs +=
+          [ "//build/config/win:default_large_module_incremental_linking" ]
+
+      libs = [ "oleacc.lib" ]
+    }
+
+    if (is_mac) {
+      datadeps += [ "//chrome" ]
+
+      # TODO(mark): We really want this for all non-static library targets, but
+      # when we tried to pull it up to the common.gypi level, it broke other
+      # things like the ui and startup tests. *shrug*
+      ldflags += [ "-Wl,-ObjC" ]
+    }
+
+    if (cld_version == 0 || cld_version == 2) {
+      # Interactive tests should use whatever CLD2 data access mode that the
+      # application embedder is using.
+      deps += [ "//third_party/cld_2:cld2_platform_impl" ]
+    }
+
+    if (use_x11) {
+      configs += [ "//build/config/linux:xtst" ]
+      datadeps += [ "//tools/xdisplaycheck" ]
+    }
+
+    if (enable_app_list) {
+      sources += rebase_path(
+              chrome_tests_gypi_values.chrome_interactive_ui_test_app_list_sources,
+              ".",
+              "//chrome")
+    }
+
+    if (use_ash) {
+      sources += rebase_path(
+              chrome_tests_gypi_values.chrome_interactive_ui_test_ash_sources,
+              ".",
+              "//chrome")
+      deps += [ "//ash:test_support" ]
+    }
+
+    if (enable_notifications) {
+      sources += rebase_path(
+              chrome_tests_gypi_values.chrome_interactive_ui_test_notifications_sources,
+              ".",
+              "//chrome")
+
+      # Non-ChromeOS notifications tests (ChromeOS does not use cross-platform
+      # panels).
+      if (!is_chromeos) {
+        sources += [
+          "../browser/notifications/notification_browsertest.cc",
+          "../browser/notifications/platform_notification_service_browsertest.cc",
+        ]
+      }
+
+      if (is_android) {
+        sources -= [
+          # Android does not use the message center-based Notification system.
+          "../browser/notifications/message_center_notifications_browsertest.cc",
+
+          # TODO(peter): Enable the Notification browser tests.
+          "../browser/notifications/notification_browsertest.cc",
+          "../browser/notifications/platform_notification_service_browsertest.cc",
+        ]
+      }
+    }  # enable_notifications
+
+    if (use_aura || is_chromeos) {
+      sources -=
+          [ "../../ui/views/corewm/desktop_capture_controller_unittest.cc" ]
+    }
+  }
+
+  source_set("sync_integration_test_support") {
+    testonly = true
+    sources = rebase_path(
+            chrome_tests_gypi_values.test_support_sync_integration_sources,
+            ".",
+            "//chrome")
+    public_deps = [
+      "//chrome/browser",
+    ]
+    deps = [
+      ":test_support",
+      "//base",
+      "//chrome",
+      "//components/invalidation/impl",
+      "//components/invalidation/impl:test_support",
+      "//net",
+      "//skia",
+      "//sync",
+      "//sync:test_support_sync_testserver",
+      "//sync:test_support_sync_fake_server",
+      "//ui/app_list:test_support",
+    ]
+
+    if (is_mac) {
+      sources -= [
+        "../browser/sync/test/integration/dictionary_helper.cc",
+        "../browser/sync/test/integration/dictionary_helper.h",
+        "../browser/sync/test/integration/dictionary_load_observer.cc",
+        "../browser/sync/test/integration/dictionary_load_observer.h",
+      ]
+    }
+    if (!enable_app_list) {
+      sources -= [
+        "../browser/sync/test/integration/sync_app_list_helper.cc",
+        "../browser/sync/test/integration/sync_app_list_helper.h",
+      ]
+    }
+    if (!is_chromeos) {
+      sources -= [
+        "../browser/sync/test/integration/wifi_credentials_helper.cc",
+        "../browser/sync/test/integration/wifi_credentials_helper.h",
+      ]
+    }
+  }
+
+  js2gtest("browser_tests_js_webui") {
+    test_type = "webui"
+    sources = rebase_path(
+            chrome_tests_gypi_values.chrome_browser_tests_webui_js_sources,
+            ".",
+            "//chrome")
+    if (is_chrome_branded) {
+      # crbug.com/230471
+      sources -= [ "data/webui/accessibility_audit_browsertest.js" ]
+    }
+    if (!is_chromeos) {
+      sources -= [ "data/webui/certificate_viewer_dialog_test.js" ]
+    }
+    if (!enable_app_list) {
+      sources -= [ "../browser/ui/webui/app_list/start_page_browsertest.js" ]
+    }
+    if (!enable_supervised_users) {
+      sources -=
+          [ "../browser/ui/webui/downloads_ui_supervised_browsertest.js" ]
+    }
+    deps = [
+      "//chrome/browser/ui",
+      "//skia",
+    ]
+    defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+  }
+
+  test("browser_tests") {
+    sources = [
+      "base/browser_tests_main.cc",
+    ]
+    sources +=
+        rebase_path(chrome_tests_gypi_values.chrome_browser_tests_sources,
+                    ".",
+                    "//chrome")
+    sources += rebase_path(
+            chrome_tests_gypi_values.chrome_browser_extensions_test_support_sources,
+            ".",
+            "//chrome")
+
+    deps = [
+      ":browser_tests_js_webui",
+      ":sync_integration_test_support",
+      ":test_support",
+      "//base",
+      "//base:i18n",
+      "//base/allocator",
+      "//base/test:test_support",
+      "//chrome:browser_tests_pak",
+      "//chrome:packed_extra_resources",
+      "//chrome:packed_resources",
+      "//chrome:resources",
+      "//chrome:strings",
+      "//chrome/browser",
+      "//chrome/browser/resources:extension_resource_demo",
+      "//chrome/common/extensions/api",
+      "//chrome/renderer",
+      "//components/autofill/content/browser:risk_proto",
+      "//components/autofill/content/browser/wallet:test_support",
+      "//components/autofill/content/renderer:test_support",
+      "//components/captive_portal:test_support",
+      "//components/dom_distiller/content",
+      "//components/dom_distiller/core:test_support",
+      "//components/guest_view/browser:test_support",
+      "//components/resources",
+      "//components/strings",
+      "//components/translate/core/common",
+      "//components/user_manager:test_support",
+      "//crypto:platform",
+      "//crypto:test_support",
+      "//device/bluetooth:mocks",
+      "//device/serial:test_support",
+      "//extensions/common/api",
+      "//google_apis:test_support",
+      "//media",
+      "//media/base:test_support",
+      "//media/cast:test_support",
+      "//net",
+      "//net:test_support",
+      "//sdch",
+      "//skia",
+      "//sync",
+      "//sync:test_support_sync_api",
+      "//testing/gmock",
+      "//testing/gtest",
+      "//testing/perf",
+      "//third_party/cacheinvalidation",
+      "//third_party/icu",
+      "//third_party/leveldatabase",
+      "//third_party/libaddressinput",
+      "//third_party/libjingle",
+      "//third_party/safe_browsing:test_support",
+      "//third_party/webrtc/modules/desktop_capture",
+      "//third_party/widevine/cdm:version_h",
+      "//ui/accessibility:test_support",
+      "//ui/base:test_support",
+      "//ui/compositor:test_support",
+      "//ui/resources",
+      "//ui/web_dialogs:test_support",
+      "//v8",
+    ]
+
+    # Runtime dependencies
+    data_deps = [
+      "//ppapi:ppapi_tests",
+
+      #'../remoting/remoting.gyp:remoting_browser_test_resources',  TODO(GYP)
+      #'../remoting/remoting.gyp:remoting_webapp_unittests',  TODO(GYP)
+      "//third_party/mesa:osmesa",
+      "//third_party/widevine/cdm:widevine_test_license_server",
+    ]
+
+    defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+
+    # TODO(GYP) if (is_win) {
+    #       ['incremental_chrome_dll==1', {
+    #         'UseLibraryDependencyInputs': "true",
+    # }
+
+    if (cld_version == 0 || cld_version == 2) {
+      # Because the browser_tests use translate, they need CLD data.
+      deps += [ "//third_party/cld_2:cld2_platform_impl" ]
+    }
+
+    if (!enable_one_click_signin) {
+      sources -= [ "../browser/ui/sync/one_click_signin_bubble_links_delegate_browsertest.cc" ]
+    }
+    if (enable_nacl) {
+      sources += [
+        "../browser/extensions/extension_nacl_browsertest.cc",
+        "../browser/nacl_host/test/gdb_debug_stub_browsertest.cc",
+      ]
+      deps += [ "//components/nacl/renderer/plugin:nacl_trusted_plugin" ]
+
+      if (enable_nacl_untrusted) {
+        sources += [
+          "nacl/nacl_browsertest.cc",
+          "nacl/nacl_browsertest_uma.cc",
+          "nacl/nacl_browsertest_util.cc",
+          "nacl/nacl_browsertest_util.h",
+          "nacl/pnacl_header_test.cc",
+          "nacl/pnacl_header_test.h",
+        ]
+
+        # TODO(GYP): Make NaCl work in other configs and update the irt
+        # dependency as appropriate. We should probably push this
+        # dependency into ppapi/native_client so that clients don't need
+        # to know all of the different toolchain options.
+        assert(current_cpu == "x64")
+        data_deps += [
+          # "test/data/nacl:shared_test_files",  # TODO(GYP)
+          "//ppapi/native_client:nacl_irt(//native_client/build/toolchain/nacl:irt_x64)",
+          # "../ppapi/ppapi_nacl.gyp:ppapi_nacl_tests",  # TODO(GYP)
+          # "../ppapi/tests/extensions/extensions.gyp:ppapi_tests_extensions_background_keepalive",  # TODO(GYP)
+          # "../ppapi/tests/extensions/extensions.gyp:ppapi_tests_extensions_media_galleries",  # TODO(GYP)
+          # "../ppapi/tests/extensions/extensions.gyp:ppapi_tests_extensions_packaged_app",  # TODO(GYP)
+        ]
+        if (is_chromeos) {
+          sources += [ "//third_party/liblouis/nacl_wrapper/liblouis_wrapper_browsertest.cc" ]
+          deps += [
+            #'browser_chromeos',  TODO(GYP)
+            #'../third_party/liblouis/liblouis_nacl.gyp:liblouis_test_data',  TODO(GYP)
+          ]
+        }
+      }
+      if (is_win || is_linux) {
+        sources += [ "../browser/nacl_host/test/nacl_gdb_browsertest.cc" ]
+        deps += [ "//chrome/browser/nacl_host/test:mock_nacl_gdb" ]
+      }
+      if (is_win) {
+        # TODO(halyavin) NaCl on Windows can't open debug stub socket in
+        # browser process as needed by this test. See http://crbug.com/157312.
+        sources -= [ "../browser/nacl_host/test/gdb_debug_stub_browsertest.cc" ]
+        deps += [
+          #'chrome.gyp:chrome_nacl_win64',  TODO(GYP)
+        ]
+        configs -= [ "//build/config/win:default_incremental_linking" ]
+        configs +=
+            [ "//build/config/win:default_large_module_incremental_linking" ]
+      }
+      if (is_linux) {
+        deps += [
+          "//native_client/src/trusted/service_runtime/linux:munge_nacl_helper_bootstrap",
+          "//components/nacl:nacl_helper",
+
+          # "//components/nacl_nonsfi.gyp:nacl_helper_nonsfi",  # TODO(GYP)
+        ]
+      }
+    }
+    if (debug_devtools) {
+      defines += [ "DEBUG_DEVTOOLS=1" ]
+    }
+    if (use_ash) {
+      deps += [ "//ash:test_support" ]
+    }
+    if (use_aura || toolkit_views) {
+      deps += [ "//ui/events:test_support" ]
+    }
+    if (toolkit_views) {
+      sources += rebase_path(
+              chrome_tests_gypi_values.chrome_browser_tests_views_sources,
+              ".",
+              "//chrome")
+      deps += [ "//ui/views" ]
+      if (!is_mac) {
+        sources += rebase_path(
+                chrome_tests_gypi_values.chrome_browser_tests_views_non_mac_sources,
+                ".",
+                "//chrome")
+      }
+    }
+    if (is_chromeos) {
+      sources += rebase_path(
+              chrome_tests_gypi_values.chrome_browser_tests_chromeos_sources,
+              ".",
+              "//chrome")
+      sources -= [
+        "../../apps/load_and_launch_browsertest.cc",
+        "../browser/printing/cloud_print/test/cloud_print_policy_browsertest.cc",
+        "../browser/printing/cloud_print/test/cloud_print_proxy_process_browsertest.cc",
+
+        # chromeos does not support profile list avatar menu
+        "../browser/profiles/profile_list_desktop_browsertest.cc",
+        "../browser/service_process/service_process_control_browsertest.cc",
+
+        # chromeos does not use cross-platform panels
+        "../browser/ui/panels/panel_extension_browsertest.cc",
+
+        # chromeos does not use the desktop user manager
+        "../browser/ui/webui/signin/user_manager_ui_browsertest.cc",
+      ]
+      deps += [
+        "//dbus",
+        "//dbus:test_support",
+
+        #"//ui/login:resources",  TODO(GYP)
+      ]
+    } else {
+      sources -= [
+        "../browser/extensions/api/enterprise_platform_keys/enterprise_platform_keys_apitest_nss.cc",
+        "../browser/extensions/api/platform_keys/platform_keys_apitest_nss.cc",
+        "../browser/extensions/api/terminal/terminal_private_apitest.cc",
+        "../browser/invalidation/profile_invalidation_provider_factory_browsertest.cc",
+        "../browser/net/nss_context_chromeos_browsertest.cc",
+        "../browser/ui/ash/keyboard_controller_browsertest.cc",
+        "data/webui/certificate_viewer_ui_test-inl.h",
+      ]
+      if (toolkit_views) {
+        sources -= [ "../browser/ui/views/select_file_dialog_extension_browsertest.cc" ]
+      }
+    }
+    if (enable_configuration_policy) {
+      sources += rebase_path(
+              chrome_tests_gypi_values.chrome_browser_tests_policy_sources,
+              ".",
+              "//chrome")
+    }
+    if (enable_web_speech) {
+      sources += rebase_path(
+              chrome_tests_gypi_values.chrome_browser_tests_speech_sources,
+              ".",
+              "//chrome")
+    }
+    if (safe_browsing_mode == 1) {
+      sources += rebase_path(
+              chrome_tests_gypi_values.chrome_browser_tests_full_safe_browsing_sources,
+              ".",
+              "//chrome")
+    }
+    if (enable_captive_portal_detection) {
+      sources += [ "../browser/captive_portal/captive_portal_browsertest.cc" ]
+    }
+    if (!enable_webrtc) {
+      sources -= [
+        "../browser/extensions/api/webrtc_audio_private/webrtc_audio_private_browsertest.cc",
+        "../browser/extensions/api/webrtc_logging_private/webrtc_logging_private_apitest.cc",
+        "../browser/media/chrome_webrtc_browsertest.cc",
+        "../browser/media/chrome_webrtc_disable_encryption_flag_browsertest.cc",
+        "../browser/media/chrome_webrtc_getmediadevices_browsertest.cc",
+      ]
+    }
+    if (enable_media_router) {
+      sources += rebase_path(
+              chrome_tests_gypi_values.chrome_browser_tests_media_router_sources,
+              ".",
+              "//chrome")
+      deps += [ "//chrome/browser/media/router:test_support" ]
+    }
+    if (is_win) {
+      deps += [
+        "//chrome:other_version",
+        "//third_party/wtl",
+        "//ui/resources",
+      ]
+    } else {
+      sources -= [
+        "../app/chrome_command_ids.h",
+        "../app/chrome_dll_resource.h",
+        "../app/chrome_version.rc.version",
+        "../browser/media_galleries/fileapi/iapps_finder_impl_win_browsertest.cc",
+      ]
+    }
+    if (!is_chromeos && use_aura) {
+      sources -= [
+        # On Windows and Linux, we currently don't support enough of the
+        # ash environment to run these unit tests.
+        #
+        # TODO: enable these on windows and linux.
+        "../browser/ui/ash/accelerator_commands_browsertest.cc",
+        "../browser/ui/ash/accelerator_controller_browsertest.cc",
+        "../browser/ui/ash/launcher/chrome_launcher_controller_browsertest.cc",
+        "../browser/ui/ash/launcher/launcher_favicon_loader_browsertest.cc",
+        "../browser/ui/ash/shelf_browsertest.cc",
+        "../browser/ui/views/frame/browser_non_client_frame_view_ash_browsertest.cc",
+      ]
+    }
+    if (is_mac) {
+      # TODO(mark): We really want this for all non-static library
+      # targets, but when we tried to pull it up to the common.gypi
+      # level, it broke other things like the ui and startup tests. *shrug*
+      ldflags = [ "-Wl,-ObjC" ]
+
+      # Other platforms only need
+      # chrome_resources.gyp:{packed_extra_resources,packed_resources},
+      # and can build this target standalone much faster.
+      deps += [
+        #'app_mode_app_support',  TODO(GYP)
+        "//chrome",
+
+        #'../components/components.gyp:breakpad_stubs',  TODO(GYP)
+        "//third_party/ocmock",
+      ]
+      sources += [
+        "../browser/media_galleries/fileapi/iphoto_data_provider_browsertest.cc",
+        "../browser/renderer_host/chrome_render_widget_host_view_mac_history_swiper_browsertest.mm",
+        "../browser/spellchecker/spellcheck_message_filter_mac_browsertest.cc",
+      ]
+      sources -= [
+        # TODO(groby): This test depends on hunspell and we cannot run it on
+        # Mac, which does not use hunspell by default.
+        "../browser/spellchecker/spellcheck_service_browsertest.cc",
+
+        # TODO(rouslan): This test depends on the custom dictionary UI,
+        # which is disabled on Mac.
+        # TODO(GYP): This should be added somewhere first ...
+        # "../browser/ui/webui/options/edit_dictionary_browsertest.js",
+
+        # TODO(rouslan): This test depends on hunspell and we cannot run it
+        # on Mac, which does use hunspell by default.
+        # TODO(GYP): This should be added somewhere first ...
+        # "../browser/ui/webui/options/language_options_dictionary_download_browsertest.js",
+
+        # ProcessSingletonMac doesn"t do anything.
+        "../browser/process_singleton_browsertest.cc",
+
+        # This test depends on GetCommandLineForRelaunch, which is not
+        # available on Mac.
+        "../browser/printing/cloud_print/test/cloud_print_policy_browsertest.cc",
+
+        # single-process mode hangs on Mac sometimes because of multiple UI
+        # message loops. See 306348
+        "../renderer/safe_browsing/phishing_classifier_browsertest.cc",
+        "../renderer/safe_browsing/phishing_classifier_delegate_browsertest.cc",
+        "../renderer/safe_browsing/phishing_dom_feature_extractor_browsertest.cc",
+      ]
+    }
+    if (is_mac || is_win) {
+      sources += [
+        "../browser/extensions/api/networking_private/networking_private_apitest.cc",
+        "../browser/extensions/api/networking_private/networking_private_service_client_apitest.cc",
+        "../browser/media_galleries/fileapi/itunes_data_provider_browsertest.cc",
+        "../browser/media_galleries/fileapi/picasa_data_provider_browsertest.cc",
+      ]
+      deps += [ "//components/wifi:test_support" ]
+    }
+    if (!is_posix || is_chromeos) {
+      sources -= [ "../common/time_format_browsertest.cc" ]
+    }
+    if (is_android) {
+      sources -= [
+        "../browser/policy/cloud/component_cloud_policy_browsertest.cc",
+        "../browser/prefs/pref_hash_browsertest.cc",
+      ]
+    }
+    if (is_chromeos) {
+      sources += [
+        "../browser/extensions/api/networking_private/networking_private_apitest.cc",
+        "../browser/extensions/api/networking_private/networking_private_chromeos_apitest.cc",
+      ]
+    }
+    if (!is_android && !is_ios) {
+      sources +=
+          [ "../browser/copresence/chrome_whispernet_client_browsertest.cc" ]
+      deps += [ "//components/copresence" ]
+    }
+    if (enable_app_list) {
+      sources += rebase_path(
+              chrome_tests_gypi_values.chrome_browser_tests_app_list_sources,
+              ".",
+              "//chrome")
+    }
+    if (enable_supervised_users) {
+      sources += rebase_path(
+              chrome_tests_gypi_values.chrome_browser_tests_supervised_user_sources,
+              ".",
+              "//chrome")
+    }
+    if (enable_pepper_cdms) {
+      # Runtime dependencies.
+      data_deps += [
+        "//media/cdm/ppapi:clearkeycdmadapter",
+        "//third_party/widevine/cdm:widevinecdmadapter",
+      ]
+    }
+    if (!enable_print_preview) {
+      sources -= [
+        "../browser/extensions/api/cloud_print_private/cloud_print_private_apitest.cc",
+        "../browser/printing/cloud_print/test/cloud_print_policy_browsertest.cc",
+        "../browser/printing/cloud_print/test/cloud_print_proxy_process_browsertest.cc",
+        "../browser/printing/print_preview_dialog_controller_browsertest.cc",
+        "../browser/printing/print_preview_pdf_generated_browsertest.cc",
+        "../browser/service_process/service_process_control_browsertest.cc",
+        "../browser/ui/webui/print_preview/print_preview_ui_browsertest.cc",
+        "data/webui/print_preview.cc",
+        "data/webui/print_preview.h",
+        "data/webui/print_preview.js",
+      ]
+    }
+    if (enable_mdns) {
+      sources += [ "../browser/ui/webui/local_discovery/local_discovery_ui_browsertest.cc" ]
+    }
+    if (use_brlapi) {
+      deps += [ "//build/config/linux:libbrlapi" ]
+    } else {
+      sources -= [ "../browser/extensions/api/braille_display_private/braille_display_private_apitest.cc" ]
+    }
+    if (is_chrome_branded) {
+      sources -= [
+        # These tests depend on single process mode, which is disabled in
+        # official builds.
+        "../renderer/safe_browsing/phishing_classifier_browsertest.cc",
+        "../renderer/safe_browsing/phishing_classifier_delegate_browsertest.cc",
+        "../renderer/safe_browsing/phishing_dom_feature_extractor_browsertest.cc",
+      ]
+    }
+    if (!enable_autofill_dialog || is_android || is_ios) {
+      deps -= [ "//third_party/libaddressinput" ]
+    }
+    if (enable_remoting) {
+      sources += rebase_path(
+              chrome_tests_gypi_values.chrome_browser_tests_remoting_sources,
+              ".",
+              "//chrome")
+      #deps += [ "//remoting:remoting_webapp" ]  TODO(GYP)
+    }
+    if (use_x11) {
+      deps += [ "//tools/xdisplaycheck" ]
+    }
+  }
+
+  test("sync_integration_tests") {
+    sources =
+        rebase_path(chrome_tests_gypi_values.sync_integration_tests_sources,
+                    ".",
+                    "//chrome")
+
+    # TODO(phajdan.jr): Only temporary, to make transition easier.
+    defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+
+    deps = [
+      ":sync_integration_test_support",
+      ":test_support",
+      "//base/allocator",
+      "//chrome:packed_extra_resources",
+      "//chrome:packed_resources",
+      "//chrome:resources",
+      "//chrome:strings",
+      "//chrome/common",
+      "//chrome/renderer",
+      "//crypto:platform",
+      "//sync",
+      "//testing/gmock",
+      "//testing/gtest",
+      "//third_party/icu",
+      "//third_party/leveldatabase",
+      "//third_party/WebKit/public:blink",
+    ]
+
+    if (cld_version == 0 || cld_version == 2) {
+      # Language detection is irrelevant to sync, so it can depend on any
+      # implementation for CLD2. Dynamic is smaller, so go with dynamic.
+      deps += [ "//third_party/cld_2:cld2_dynamic" ]
+    }
+    if (is_mac) {
+      # Dictionary sync is disabled on Mac.
+      sources -= [
+        "../browser/sync/test/integration/multiple_client_dictionary_sync_test.cc",
+        "../browser/sync/test/integration/single_client_dictionary_sync_test.cc",
+        "../browser/sync/test/integration/two_client_dictionary_sync_test.cc",
+      ]
+
+      # The sync_integration_tests do not run on mac without this flag.
+      # Search for comments about "xcode_settings" elsewhere in this file.
+      ldflags = [ "-Wl,-ObjC" ]
+    }
+    if (is_win) {
+      deps += [
+        "//chrome:other_version",
+        "//third_party/wtl",
+        "//ui/resources",
+      ]
+
+      configs -= [ "//build/config/win:default_incremental_linking" ]
+      configs +=
+          [ "//build/config/win:default_large_module_incremental_linking" ]
+    } else {
+      sources -= [ "../app/chrome_version.rc.version" ]
+    }
+    if (!is_chromeos) {
+      sources -= [
+        "../browser/sync/test/integration/single_client_wifi_credentials_sync_test.cc",
+        "../browser/sync/test/integration/two_client_wifi_credentials_sync_test.cc",
+      ]
+    }
+
+    if (toolkit_views) {
+      deps += [ "//ui/views" ]
+    }
+    if (enable_basic_printing || enable_print_preview) {
+      deps += [ "//printing" ]
+    }
+    if (!enable_app_list) {
+      sources -= [
+        "../browser/sync/test/integration/single_client_app_list_sync_test.cc",
+        "../browser/sync/test/integration/two_client_app_list_sync_test.cc",
+      ]
+    }
+    if (!enable_supervised_users) {
+      sources -= [ "../browser/sync/test/integration/single_client_supervised_user_settings_sync_test.cc" ]
+    }
+  }
+
+  test("sync_performance_tests") {
+    sources =
+        rebase_path(chrome_tests_gypi_values.sync_performance_tests_sources,
+                    ".",
+                    "//chrome")
+
+    defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+
+    deps = [
+      ":sync_integration_test_support",
+      "//base/allocator",
+      "//crypto:platform",
+      "//sync",
+      "//testing/gmock",
+      "//testing/gtest",
+    ]
+
+    if (cld_version == 0 || cld_version == 2) {
+      # Language detection is irrelevant to sync, so it can depend on any
+      # implementation for CLD2. Dynamic is smaller, so go with dynamic.
+      deps += [ "//third_party/cld_2:cld2_dynamic" ]
+    }
+
+    if (is_mac) {
+      # Dictionary sync is disabled on Mac.
+      sources -= [ "../browser/sync/test/integration/performance/dictionary_sync_perf_test.cc" ]
+
+      # The sync_performance_tests do not run on mac without this flag.
+      # Search for comments about "xcode_settings" elsewhere in this file.
+      ldflags = [ "-Wl,-ObjC" ]
+    }
+    if (is_win) {
+      deps += [
+        "//chrome:other_version",
+        "//chrome/installer/util:strings",
+        "//third_party/wtl",
+        "//ui/resources",
+      ]
+      configs -= [ "//build/config/win:default_incremental_linking" ]
+      configs +=
+          [ "//build/config/win:default_large_module_incremental_linking" ]
+    } else {
+      sources -= [ "../app/chrome_version.rc.version" ]
+    }
+
+    if (toolkit_views) {
+      deps += [ "//ui/views" ]
+    }
+  }
+
+  # Executable to measure time to load libraries.
+  test("load_library_perf_tests") {
+    sources = [
+      "../browser/load_library_perf_test.cc",
+    ]
+
+    deps = [
+      "//base/test:test_support_perf",
+      "//testing/gtest",
+      "//testing/perf",
+      "//third_party/widevine/cdm:version_h",
+    ]
+
+    if (enable_pepper_cdms) {
+      data_deps = [
+        "//media/cdm/ppapi:clearkeycdmadapter",
+        "//third_party/widevine/cdm:widevinecdmadapter",
+      ]
+    }
+  }
+
+  unit_gypi_values = exec_script("//build/gypi_to_gn.py",
+                                 [ rebase_path("../chrome_tests_unit.gypi") ],
+                                 "scope",
+                                 [ "../chrome_tests_unit.gypi" ])
+
+  js2gtest("unit_tests_js") {
+    test_type = "unit"
+    sources = rebase_path(unit_gypi_values.chrome_unit_tests_gtestjs_sources,
+                          ".",
+                          "//chrome")
+    extra_js_files = rebase_path(unit_gypi_values.chrome_unit_tests_js_sources,
+                                 ".",
+                                 "//chrome")
+    if (is_chromeos) {
+      sources += rebase_path(
+              unit_gypi_values.chrome_unit_tests_chromeos_gtestjs_sources,
+              ".",
+              "//chrome")
+      extra_js_files +=
+          rebase_path(unit_gypi_values.chrome_unit_tests_chromeos_js_sources,
+                      ".",
+                      "//chrome")
+    }
+  }
+
+  test("unit_tests") {
+    sources =
+        rebase_path(unit_gypi_values.chrome_unit_tests_sources, ".", "//chrome")
+
+    defines = []
+
+    deps = [
+      # NOTE: New depndencies should generally be added in the OS!="ios"
+      # dependencies block below, rather than here.
+      # Unit tests should only depend on:
+      # 1) everything that the chrome binaries depend on:
+      "//chrome:browser_dependencies",
+      "//chrome:child_dependencies",
+
+      # 2) test-specific support libraries:
+      ":test_support_unit",
+      "//base/test:test_support",
+      "//chrome/test:test_support",
+      "//components/resources",
+      "//components/content_settings/core/test:test_support",
+      "//content/test:test_support",
+      "//content/public/app:both",
+      "//crypto:platform",
+      "//crypto:test_support",
+      "//net",
+      "//net:test_support",
+      "//sync:test_support_sync_api",
+      "//sync:test_support_sync_core",
+      "//sync:test_support_sync_internal_api",
+      "//testing/gmock",
+      "//testing/gtest",
+
+      # 3) anything tests directly depend on
+      "//base/allocator",
+      "//chrome:resources",
+      "//chrome:strings",
+      "//courgette:courgette_lib",
+      "//google_apis",
+      "//skia",
+      "//third_party/cacheinvalidation",
+      "//third_party/icu",
+      "//third_party/libxml",
+      "//ui/base:test_support",
+      "//ui/gfx:test_support",
+      "//ui/resources",
+    ]
+    data_deps = []
+
+    # TODO(GYP) Windows stuff
+    # ['incremental_chrome_dll==1', {
+    #   'UseLibraryDependencyInputs': "true",
+
+    if (!is_ios) {
+      deps += [
+        ":unit_tests_js",
+        "//components/audio_modem:audio_modem_test_support",
+        "//components/autofill/content/browser/wallet:test_support",
+        "//components/autofill/content/renderer:test_support",
+        "//components/metrics/proto",
+        "//components/data_reduction_proxy/core/browser:test_support",
+        "//components/safe_json:test_support",
+        "//components/webdata_services:test_support",
+        "//components/strings",
+        "//device/bluetooth:mocks",
+        "//content/app/resources",
+        "//gpu:test_support",
+        "//media:test_support",
+
+        #'../ppapi/ppapi_internal.gyp:ppapi_unittest_shared',  TODO(GYP)
+        "//third_party/leveldatabase",
+        "//third_party/libaddressinput",
+        "//third_party/libjingle",
+        "//third_party/libphonenumber",
+        "//third_party/webrtc/modules/desktop_capture",
+        "//tools/json_schema_compiler/test",
+        "//ui/gl",
+        "//v8",
+      ]
+    }
+
+    if (is_android) {
+      deps -= [ "//third_party/libaddressinput" ]
+
+      # Some android targets still depend on --gc-sections to link.
+      # TODO: remove --gc-sections for Debug builds (crbug.com/159847).
+      ldflags = [ "-Wl,--gc-sections" ]
+      deps += [ "//testing/android/native_test:native_test_native_code" ]
+      isolate_file = "../unit_tests.isolate"
+    } else {
+      sources +=
+          rebase_path(unit_gypi_values.chrome_unit_tests_non_android_sources,
+                      ".",
+                      "//chrome")
+    }
+    if (is_ios || is_chromeos) {
+      sources -=
+          [ "../browser/metrics/signin_status_metrics_provider_unittest.cc" ]
+    }
+    if (enable_background) {
+      sources +=
+          rebase_path(unit_gypi_values.chrome_unit_tests_background_sources,
+                      ".",
+                      "//chrome")
+    }
+    if (enable_spellcheck) {
+      sources +=
+          rebase_path(unit_gypi_values.chrome_unit_tests_spellchecker_sources,
+                      ".",
+                      "//chrome")
+      if (is_mac && !is_ios) {
+        deps += [ "//third_party/hunspell" ]
+      }
+    }
+
+    if (enable_one_click_signin) {
+      sources += [
+        "../browser/ui/sync/one_click_signin_sync_observer_unittest.cc",
+        "../browser/ui/sync/one_click_signin_sync_starter_unittest.cc",
+      ]
+    }
+
+    if (enable_extensions) {
+      sources +=
+          rebase_path(unit_gypi_values.chrome_unit_tests_extensions_sources,
+                      ".",
+                      "//chrome")
+      deps += [
+        "//chrome/common/extensions/api",
+        "//device/usb:mocks",
+        "//extensions:extensions_resources",
+        "//extensions/strings",
+      ]
+      if (enable_configuration_policy) {
+        sources += rebase_path(
+                unit_gypi_values.chrome_unit_tests_extensions_policy_sources,
+                ".",
+                "//chrome")
+      }
+      if (!is_chromeos) {
+        sources += rebase_path(
+                unit_gypi_values.chrome_unit_tests_extensions_non_chromeos_sources,
+                ".",
+                "//chrome")
+      }
+    }
+    if (toolkit_views) {
+      deps += [
+        "//components/web_modal:test_support",
+        "//ui/views",
+        "//ui/views:test_support",
+      ]
+      sources += rebase_path(unit_gypi_values.chrome_unit_tests_views_sources,
+                             ".",
+                             "//chrome")
+      if (!is_mac) {
+        sources += rebase_path(
+                unit_gypi_values.chrome_unit_tests_views_non_mac_sources,
+                ".",
+                "//chrome")
+      }
+    }
+    if (use_ash) {
+      sources += rebase_path(unit_gypi_values.chrome_unit_tests_ash_sources,
+                             ".",
+                             "//chrome")
+      deps += [
+        "//ash:test_support",
+        "//ash/resources",
+        "//ash/strings",
+      ]
+
+      # We eventually want to compile both in Win Aura builds, see
+      # http://crbug.com/155545.
+      if (!is_win) {
+        sources -= [ "../browser/ui/window_sizer/window_sizer_unittest.cc" ]
+      }
+    }
+    if (use_aura) {
+      sources += [ "//ui/views/controls/webview/webview_unittest.cc" ]
+      deps += [
+        "//ui/wm",
+        "//ui/aura:test_support",
+        "//ui/views:test_support",
+      ]
+    }
+    if (!is_chromeos && is_linux) {
+      sources +=
+          rebase_path(unit_gypi_values.chrome_unit_tests_desktop_linux_sources,
+                      ".",
+                      "//chrome")
+    }
+    if (!is_chromeos && !use_ozone && is_linux) {
+      deps += [
+        "//chrome/browser/ui/libgtk2ui",
+        "//build/config/linux:gio",
+      ]
+    }
+
+    if (enable_task_manager) {
+      sources +=
+          rebase_path(unit_gypi_values.chrome_unit_tests_task_manager_sources,
+                      ".",
+                      "//chrome")
+    }
+    if (enable_mdns) {
+      sources += rebase_path(unit_gypi_values.chrome_unit_tests_mdns_sources,
+                             ".",
+                             "//chrome")
+    }
+    if (enable_service_discovery) {
+      sources += rebase_path(
+              unit_gypi_values.chrome_unit_tests_service_discovery_sources,
+              ".",
+              "//chrome")
+    }
+    if (enable_configuration_policy) {
+      sources += rebase_path(
+              unit_gypi_values.chrome_unit_tests_configuration_policy_sources,
+              ".",
+              "//chrome")
+      if (is_chromeos) {
+        sources -=
+            [ "../browser/policy/cloud/user_policy_signin_service_unittest.cc" ]
+      } else if (is_android) {
+        sources -= [ "../browser/policy/policy_path_parser_unittest.cc" ]
+      }
+      if (!is_android && !is_ios && !is_chromeos) {
+        sources +=
+            [ "../browser/net/disk_cache_dir_policy_handler_unittest.cc" ]
+      }
+      if (!is_android && !is_ios) {
+        sources +=
+            [ "../browser/download/download_dir_policy_handler_unittest.cc" ]
+      }
+    }
+    if (enable_web_speech) {
+      sources += rebase_path(unit_gypi_values.chrome_unit_tests_speech_sources,
+                             ".",
+                             "//chrome")
+    }
+    if (enable_notifications) {
+      sources +=
+          rebase_path(unit_gypi_values.chrome_unit_tests_notifications_sources,
+                      ".",
+                      "//chrome")
+      if (is_android) {
+        sources -= [
+          # Android does not use the Message Center notification system.
+          "../browser/notifications/message_center_notifications_unittest.cc",
+          "../browser/notifications/message_center_settings_controller_unittest.cc",
+        ]
+      }
+    }
+    if (safe_browsing_mode == 1) {
+      # TODO(sgurun): enable tests for safe_browsing==2.
+      sources += rebase_path(
+              unit_gypi_values.chrome_unit_tests_full_safe_browsing_sources,
+              ".",
+              "//chrome")
+      deps += [ ":test_proto" ]
+      if (is_android) {
+        deps -= [ ":test_proto" ]
+        sources -= [
+          # Android doesn't support download feedbacks.
+          "../browser/safe_browsing/download_feedback_service_unittest.cc",
+          "../browser/safe_browsing/download_feedback_unittest.cc",
+          "../browser/safe_browsing/download_protection_service_unittest.cc",
+          "../browser/safe_browsing/two_phase_uploader_unittest.cc",
+          "../common/safe_browsing/ipc_protobuf_message_test_messages.h",
+          "../common/safe_browsing/ipc_protobuf_message_unittest.cc",
+        ]
+      }
+    }
+    if (enable_autofill_dialog && !is_android) {
+      sources += rebase_path(
+              unit_gypi_values.chrome_unit_tests_autofill_dialog_sources,
+              ".",
+              "//chrome")
+    }
+    if (enable_plugins) {
+      sources += rebase_path(unit_gypi_values.chrome_unit_tests_plugins_sources,
+                             ".",
+                             "//chrome")
+    }
+    if (enable_print_preview) {
+      sources +=
+          rebase_path(unit_gypi_values.chrome_unit_tests_print_preview_sources,
+                      ".",
+                      "//chrome")
+    }
+    if (enable_captive_portal_detection) {
+      sources +=
+          rebase_path(unit_gypi_values.chrome_unit_tests_captive_portal_sources,
+                      ".",
+                      "//chrome")
+    }
+    if (enable_session_service) {
+      sources += rebase_path(
+              unit_gypi_values.chrome_unit_tests_session_service_sources,
+              ".",
+              "//chrome")
+    }
+    if (enable_media_router) {
+      sources +=
+          rebase_path(unit_gypi_values.chrome_unit_tests_media_router_sources,
+                      ".",
+                      "//chrome")
+      deps += [ "//chrome/browser/media/router:test_support" ]
+      if (!toolkit_views) {
+        sources -= [ "../browser/ui/views/media_router/media_router_ui_browsertest.cc" ]
+      }
+    }
+    if (enable_webrtc) {
+      sources += rebase_path(unit_gypi_values.chrome_unit_tests_webrtc_sources,
+                             ".",
+                             "//chrome")
+    }
+    if (is_chromeos) {
+      sources +=
+          rebase_path(unit_gypi_values.chrome_unit_tests_chromeos_sources,
+                      ".",
+                      "//chrome")
+      deps += [
+        "//ash/resources",
+        "//ui/chromeos/resources",
+      ]
+      sources -= [
+        "../browser/signin/signin_global_error_unittest.cc",
+        "../browser/signin/signin_manager_unittest.cc",
+        "../browser/ui/views/app_list/linux/app_list_linux_unittest.cc",
+        "../browser/ui/views/frame/opaque_browser_frame_view_layout_unittest.cc",
+        "../browser/ui/views/sync/one_click_signin_bubble_view_unittest.cc",
+      ]
+    }
+    if (use_x11) {
+      deps += [ "//ui/events/devices" ]
+      data_deps += [ "//tools/xdisplaycheck" ]
+    } else {
+      sources -= [ "../browser/password_manager/password_store_x_unittest.cc" ]
+    }
+    if (cld_version == 0 || cld_version == 2) {
+      # Unit tests should be independent of the CLD2 access mechanism, just use
+      # static for simplicity.
+      deps += [ "//third_party/cld_2:cld2_static" ]
+    }
+    if (is_desktop_linux && current_cpu == "x64") {
+      # Only add this test for 64 bit builds because otherwise we need the 32
+      # bit library on 64 bit systems when running this test.
+      sources +=
+          [ "../browser/password_manager/native_backend_gnome_x_unittest.cc" ]
+      configs += [
+        "//chrome/browser:gnome_keyring",
+        "//chrome/browser:gnome_keyring_direct",
+      ]
+    }
+    if (is_linux && !is_chromeos) {
+      sources +=
+          [ "../browser/password_manager/native_backend_libsecret_unittest.cc" ]
+    }
+    if (is_linux && use_aura) {
+      deps += [
+        "//dbus",
+        "//dbus:test_support",
+        "//ui/aura:test_support",
+      ]
+    }
+    if (is_linux && is_chrome_branded && current_cpu == "x86") {
+      ldflags = [ "-Wl,--strip-debug" ]
+    }
+    if (is_mac) {
+      sources += rebase_path(unit_gypi_values.chrome_unit_tests_mac_sources,
+                             ".",
+                             "//chrome")
+      sources -= [
+        "../browser/ui/tests/ui_gfx_image_unittest.cc",
+        "../renderer/spellchecker/spellcheck_provider_hunspell_unittest.cc",
+        "../tools/convert_dict/convert_dict_unittest.cc",
+      ]
+
+      # The test fetches resources which means Mac need the app bundle to exist
+      # on disk so it can pull from it.
+      deps += [
+        "//third_party/google_toolbox_for_mac",
+        "//third_party/ocmock",
+      ]
+
+      # TODO(mark): We really want this for all non-static library targets,
+      # but when we tried to pull it up to the common.gypi level, it broke
+      # other things like the ui and startup tests. *shrug*
+      ldflags = [ "-Wl,-ObjC" ]
+    }
+    if (!is_mac && !is_ios) {
+      deps += [
+        "//chrome/tools/convert_dict:lib",
+        "//chrome:packed_extra_resources",
+        "//chrome:packed_resources",
+        "//third_party/hunspell",
+      ]
+    }
+    if (is_win || is_mac) {
+      sources += rebase_path(unit_gypi_values.chrome_unit_tests_win_mac_sources,
+                             ".",
+                             "//chrome")
+    }
+    if (is_win || is_mac || is_chromeos) {
+      sources += [ "../common/extensions/api/networking_private/networking_private_crypto_unittest.cc" ]
+    }
+    if (enable_rlz) {
+      deps += [ "//rlz:test_support" ]
+    } else {
+      sources -= [ "../browser/rlz/rlz_unittest.cc" ]
+    }
+    if (is_win) {
+      if (!is_component_build) {
+        # Unit_tests pdb files can get too big when incremental linking is
+        # on, disabling for this target.
+        #'LinkIncremental': '<(msvs_debug_link_nonincremental)',  TODO(GYP)
+      }
+
+      sources += rebase_path(unit_gypi_values.chrome_unit_tests_win_sources,
+                             ".",
+                             "//chrome")
+      deps += [
+        #'browser/safe_browsing/incident_reporting/verifier_test/verifier_unittest.gyp:verifier_test_dll_1',  TODO(GYP)
+        #'browser/safe_browsing/incident_reporting/verifier_test/verifier_unittest.gyp:verifier_test_dll_2',  TODO(GYP)
+        "//chrome:other_version",
+        "//chrome_elf:blacklist_test_dll_1",
+        "//chrome/installer/util:strings",
+        "//third_party/iaccessible2",
+        "//third_party/isimpledom",
+        "//third_party/wtl",
+        "//ui/resources",
+      ]
+
+      configs -= [ "//build/config/win:default_incremental_linking" ]
+      configs +=
+          [ "//build/config/win:default_large_module_incremental_linking" ]
+
+      libs = [
+        "comsupp.lib",
+        "oleacc.lib",
+        "rpcrt4.lib",
+        "urlmon.lib",
+        "winmm.lib",
+      ]
+      if (!is_chrome_branded) {
+        sources -= [ "../browser/google/google_update_win_unittest.cc" ]
+      }
+    }
+    if (is_android || is_ios) {
+      sources -= [
+        "../browser/devtools/device/webrtc/devtools_bridge_instances_request_unittest.cc",
+        "../browser/ui/sync/sync_promo_ui_unittest.cc",
+      ]
+    } else {
+      sources -= [
+        "../browser/metrics/variations/variations_request_scheduler_mobile_unittest.cc",
+        "../browser/web_resource/promo_resource_service_mobile_ntp_unittest.cc",
+      ]
+      deps += [ "//chrome/tools/profile_reset:jtl_compiler_lib" ]
+    }
+    if (!is_android && !is_chromeos) {
+      sources += rebase_path(
+              unit_gypi_values.chrome_unit_tests_non_android_or_chromeos_sources,
+              ".",
+              "//chrome")
+    }
+    if (enable_themes) {
+      sources += rebase_path(unit_gypi_values.chrome_unit_tests_themes_sources,
+                             ".",
+                             "//chrome")
+    }
+    if (!is_android && (use_nss_certs || use_openssl_certs)) {
+      sources += [ "../common/net/x509_certificate_model_unittest.cc" ]
+    }
+    if (enable_supervised_users) {
+      sources += rebase_path(
+              unit_gypi_values.chrome_unit_tests_supervised_user_sources,
+              ".",
+              "//chrome")
+    }
+    if (enable_supervised_users && !is_android && !is_ios) {
+      sources += rebase_path(
+              unit_gypi_values.chrome_unit_tests_supervised_user_legacy_sources,
+              ".",
+              "//chrome")
+    }
+    if (safe_browsing_mode == 1 && enable_extensions) {
+      sources += [ "../browser/extensions/blacklist_unittest.cc" ]
+    }
+    if (cld_version == 1) {
+      sources += [ "//third_party/cld/encodings/compact_lang_det/compact_lang_det_unittest_small.cc" ]
+      defines += [ "CLD_WINDOWS" ]
+      deps += [ "//third_party/cld" ]
+    }
+    if (enable_app_list) {
+      sources +=
+          rebase_path(unit_gypi_values.chrome_unit_tests_app_list_sources,
+                      ".",
+                      "//chrome")
+      deps += [ "//ui/app_list:test_support" ]
+    }
+    if (enable_app_list && is_chromeos) {
+      sources += rebase_path(
+              unit_gypi_values.chrome_unit_tests_app_list_chromeos_sources,
+              ".",
+              "//chrome")
+    }
+    if (!enable_plugin_installation) {
+      sources -= [ "../browser/plugins/plugin_installer_unittest.cc" ]
+    }
+  }
+
+  if (is_win || (is_linux && !is_chromeos)) {
+    # TODO(GYP): Figure out which of these work and are needed on other
+    # platforms.
+    test("chrome_app_unittests") {
+      sources = [
+        "../app/chrome_watcher_client_unittest_win.cc",
+        "../app/chrome_watcher_client_win.cc",
+        "../app/chrome_watcher_command_line_unittest_win.cc",
+        "../app/chrome_watcher_command_line_win.cc",
+        "../app/delay_load_hook_unittest_win.cc",
+        "../app/delay_load_hook_win.cc",
+        "../app/delay_load_hook_win.h",
+        "../app/signature_validator_win.cc",
+        "../app/signature_validator_win.h",
+        "../app/signature_validator_win_unittest.cc",
+        "../common/crash_keys.cc",
+        "../common/crash_keys.h",
+      ]
+
+      deps = [
+        ":test_support",
+        "//breakpad:client",
+        "//chrome/browser",
+        "//chrome/child",
+        "//base/test:run_all_unittests",
+        "//base/test:test_support",
+      ]
+      if (cld_version == 0 || cld_version == 2) {
+        # Use whatever CLD2 data access mode that the
+        # application embedder is using.
+        deps += [ "//third_party/cld_2:cld2_platform_impl" ]
+      }
+    }
+
+    test("performance_browser_tests") {
+      sources = rebase_path(
+              chrome_tests_gypi_values.performance_browser_tests_sources,
+              ".",
+              "//chrome")
+
+      defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+
+      deps = [
+        ":test_support",
+        "//base",
+        "//base:i18n",
+        "//base/test:test_support",
+        "//chrome/browser",
+        "//chrome/renderer",
+        "//components/autofill/content/browser/wallet:test_support",
+        "//components/autofill/content/renderer:test_support",
+        "//media/cast:test_support",
+        "//testing/gmock",
+        "//testing/gtest",
+        "//testing/perf",
+      ]
+
+      if (is_win) {
+        configs -= [ "//build/config/win:default_incremental_linking" ]
+        configs +=
+            [ "//build/config/win:default_large_module_incremental_linking" ]
+      } else {
+        sources -= [
+          "../app/chrome_command_ids.h",
+
+          #"../app/chrome_dll.rc",
+          #"../app/chrome_dll_resource.h",
+          "../app/chrome_version.rc.version",
+        ]
+      }
+      if (!is_mac) {
+        sources -= [ "perf/mach_ports_performancetest.cc" ]
+      }
+
+      if (cld_version == 0 || cld_version == 2) {
+        # Use whatever CLD2 data access mode that the
+        # application embedder is using.
+        deps += [ "//third_party/cld_2:cld2_platform_impl" ]
+      }
+    }
+  }
+}
+
+source_set("test_support_unit") {
+  testonly = true
+  sources = [
+    "../browser/sync/glue/session_sync_test_helper.cc",
+    "../browser/sync/glue/session_sync_test_helper.h",
+    "base/run_all_unittests.cc",
+  ]
+
+  deps = [
+    ":test_support",
+    "//base",
+    "//chrome:resources",
+    "//chrome:strings",
+    "//chrome/browser",
+    "//chrome/common",
+    "//mojo/environment:chromium",
+    "//third_party/mojo/src/mojo/edk/system",
+  ]
+
+  if (!is_android && use_ash) {
+    sources +=
+        rebase_path(unit_gypi_values.chrome_test_support_unit_ash_sources,
+                    ".",
+                    "//chrome")
+  }
+}

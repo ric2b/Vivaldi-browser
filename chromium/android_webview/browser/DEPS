@@ -1,0 +1,41 @@
+include_rules = [
+  "-android_webview",
+  "+android_webview/browser",
+  "+android_webview/common",
+  "+android_webview/native/public",
+  "+android_webview/public/browser",
+
+  "+cc",
+  "-cc/blink",
+
+  "+components/auto_login_parser",
+  "+components/autofill/content/browser",
+  "+components/autofill/core/browser",
+  "+components/autofill/core/common",
+  "+components/cdm/browser",
+  "+components/data_reduction_proxy/core/browser",
+  "+components/navigation_interception",
+  "+components/printing/common",
+  "+components/user_prefs",
+  "+components/visitedlink/browser",
+  "+components/webdata/common",
+
+  "+content/public/browser",
+  "+content/public/test",
+
+  "+media/base/android",
+
+  "+printing",
+
+  "+ui/gfx",
+  "+ui/gl",
+
+  # Temporary until we bundle our own favicon. See
+  # AwContentBrowserClient::GetDefaultFavicon
+  "!ui/resources/grit/ui_resources.h",
+
+  # POD structure required by the find-in-page IPC messages.
+  "+third_party/WebKit/public/web/WebFindOptions.h",
+  # Interface required for in-process input event handling.
+  "+third_party/WebKit/public/web/WebCompositorInputHandler.h"
+]

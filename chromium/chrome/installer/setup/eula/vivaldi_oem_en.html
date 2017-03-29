@@ -1,0 +1,41 @@
+﻿<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>Vivaldi EULA</title>
+<link rel="stylesheet" type="text/css" href="res://setup.exe/IDR_EULA_CSS.CSS" />
+<script type="text/javascript" src="res://setup.exe/IDR_EULA_JSC.JS"></script>
+</head>
+<body>
+<div class="header">
+  <table cellpadding="0" cellspacing="0" border="0">
+    <tr>
+      <td valign="top" width="48" align="center">
+        <img class="icon" src="res://setup.exe/EULA/IDR_EULA_ICO.PNG" width="32" height="32" />
+        <div class="icontext">Vivaldi</div>
+      </td>
+      <td width="10">&nbsp;</td>
+      <td>
+        <span class="title">Surf the web with Vivaldi</span><br />
+        <span class="desc">Using the internet is faster, safer and easier
+        with Vivaldi, the web browser installed on your PC</span>
+      </td>
+    </tr>
+  </table>
+</div>
+<div class="main">
+  Accept the Vivaldi Terms of Service to start using Vivaldi:
+</div>
+<div class="eula">
+  <iframe id="ifr" src="" width="99%" height="354" frameborder="0"></iframe>
+</div>
+<div id="footer" class="footer">
+  <form method="post" action="" onsubmit="checkAccept(this); return false;">
+     <div class="buttons">
+       <input type="button" name="accept" value="Accept" onclick="window.returnValue = 1; window.close();" />
+       <input type="button" name="cancel" value="Cancel" onclick="window.returnValue = 2; window.close();" />
+
+    </div>
+  </form>
+</div>
+</body>
+</html>

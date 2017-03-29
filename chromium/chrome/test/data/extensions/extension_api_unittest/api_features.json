@@ -1,0 +1,95 @@
+{
+  "test1": {
+    "channel": "stable",
+    "contexts": ["content_script", "blessed_extension", "unblessed_extension"],
+    "extension_types": ["extension"]
+  },
+  "test2": {
+    "channel": "stable",
+    "contexts": ["web_page"],
+    "matches": ["<all_urls>"]
+  },
+  "test2.foo": {
+    "contexts": ["content_script"]
+  },
+  "test3": {
+    "channel": "stable",
+    "contexts": ["content_script"]
+  },
+  "test3.foo": {
+    "contexts": ["web_page", "blessed_extension"],
+    "matches": ["<all_urls>"]
+  },
+  "test4": {
+    "channel": "stable",
+    "contexts": ["blessed_extension"],
+    "dependencies": ["api:test3.foo"]
+  },
+  "test4.foo": {
+    "contexts": ["unblessed_extension"],
+    "dependencies": ["api:test4"]
+  },
+  "test4.foo.foo": {
+    "contexts": ["content_script"],
+    "dependencies": []
+  },
+  "test5": {
+    "channel": "stable",
+    "contexts": ["web_page"],
+    "matches": ["http://foo.com/*"]
+  },
+  "test6": {
+    "channel": "stable",
+    "contexts": ["content_script"]
+  },
+  "test6.foo": {
+    "contexts": ["blessed_extension"]
+  },
+  "test7": {
+    "channel": "stable",
+    "contexts": ["web_page"],
+    "matches": ["http://foo.com/*"]
+  },
+  "test7.foo": {
+    "contexts": ["web_page"],
+    "matches": ["<all_urls>"],
+    "dependencies": ["test7"]
+  },
+  "test7.bar": {
+    "contexts": ["web_page"],
+    "matches": ["http://bar.com/*"],
+    "dependencies": ["test7.foo"]
+  },
+
+  "parent1": {
+    "channel": "stable",
+    "contexts": ["content_script"]
+  },
+  "parent1.child1": {
+    "contexts": ["web_page"],
+    "matches": ["<all_urls>"]
+  },
+  "parent1.child2": {
+  },
+  "parent2": {
+    "channel": "stable",
+    "contexts": ["content_script", "blessed_extension", "unblessed_extension"]
+  },
+  "parent2.child3": {
+    "contexts": ["blessed_extension"]
+  },
+  "parent2.child3.child.child": {
+    "contexts": ["content_script", "unblessed_extension"]
+  },
+  "parent3": {
+    "dependencies": ["api:parent1"],
+    "contexts": ["content_script", "blessed_extension", "unblessed_extension"]
+  },
+  "parent3.noparent": {
+    "channel": "stable",
+    "noparent": true,
+    "contexts": ["content_script", "blessed_extension", "unblessed_extension"]
+  },
+  "parent3.noparent.child": {
+  }
+}

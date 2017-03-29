@@ -1,0 +1,189 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//ui/ozone/ozone.gni")
+import("//testing/test.gni")
+
+# The list of platforms that will be built.
+ozone_platforms = []
+
+# Extra dependencies to pull into ui/ozone for built platforms.
+ozone_platform_deps = []
+
+# Extra dependencies to pull into ozone_unittests for built platforms.
+ozone_platform_test_deps = []
+
+if (ozone_platform_egltest) {
+  ozone_platforms += [ "egltest" ]
+  ozone_platform_deps += [ "platform/egltest" ]
+}
+
+if (ozone_platform_test) {
+  ozone_platforms += [ "test" ]
+  ozone_platform_deps += [ "platform/test" ]
+}
+
+if (ozone_platform_caca) {
+  ozone_platforms += [ "caca" ]
+  ozone_platform_deps += [ "platform/caca" ]
+}
+
+if (ozone_platform_dri || ozone_platform_drm) {
+  ozone_platforms += [
+    "dri",
+    "drm",
+  ]
+  ozone_platform_deps += [ "platform/drm" ]
+  ozone_platform_test_deps += [ "platform/drm:drm_unittests" ]
+}
+
+if (ozone_platform_gbm) {
+  ozone_platforms += [ "gbm" ]
+  ozone_platform_deps += [ "platform/drm:gbm" ]
+}
+
+platform_list_cc_file = "$target_gen_dir/platform_list.cc"
+platform_list_h_file = "$target_gen_dir/platform_list.h"
+platform_list_txt_file = "$target_gen_dir/platform_list.txt"
+constructor_list_cc_file = "$target_gen_dir/constructor_list.cc"
+
+# GYP version: ui/ozone/ozone.gyp:ozone_base
+component("ozone_base") {
+  sources = [
+    "public/cursor_factory_ozone.cc",
+    "public/cursor_factory_ozone.h",
+    "public/gpu_platform_support.cc",
+    "public/gpu_platform_support.h",
+    "public/gpu_platform_support_host.cc",
+    "public/gpu_platform_support_host.h",
+    "public/overlay_candidates_ozone.cc",
+    "public/overlay_candidates_ozone.h",
+    "public/overlay_manager_ozone.h",
+    "public/surface_factory_ozone.cc",
+    "public/surface_factory_ozone.h",
+    "public/surface_ozone_canvas.h",
+    "public/surface_ozone_egl.cc",
+    "public/surface_ozone_egl.h",
+    "public/system_input_injector.h",
+  ]
+
+  defines = [ "OZONE_BASE_IMPLEMENTATION" ]
+
+  deps = [
+    "//base",
+    "//skia",
+    "//ui/gfx/geometry",
+  ]
+}
+
+component("ozone") {
+  sources = [
+    "common/display_mode_proxy.cc",
+    "common/display_mode_proxy.h",
+    "common/display_snapshot_proxy.cc",
+    "common/display_snapshot_proxy.h",
+    "common/display_util.cc",
+    "common/display_util.h",
+    "common/egl_util.cc",
+    "common/egl_util.h",
+    "common/gpu/ozone_gpu_message_generator.cc",
+    "common/gpu/ozone_gpu_message_generator.h",
+    "common/gpu/ozone_gpu_message_params.cc",
+    "common/gpu/ozone_gpu_message_params.h",
+    "common/gpu/ozone_gpu_messages.h",
+    "common/native_display_delegate_ozone.cc",
+    "common/native_display_delegate_ozone.h",
+    "common/stub_overlay_manager.cc",
+    "common/stub_overlay_manager.h",
+    "platform_selection.cc",
+    "platform_selection.h",
+    "public/input_controller.cc",
+    "public/input_controller.h",
+    "public/ozone_gpu_test_helper.cc",
+    "public/ozone_gpu_test_helper.h",
+    "public/ozone_platform.cc",
+    "public/ozone_platform.h",
+    "public/ozone_switches.cc",
+    "public/ozone_switches.h",
+    constructor_list_cc_file,
+    platform_list_cc_file,
+    platform_list_h_file,
+  ]
+
+  defines = [ "OZONE_IMPLEMENTATION" ]
+
+  deps =
+      [
+        ":generate_constructor_list",
+        ":generate_ozone_platform_list",
+        ":ozone_base",
+        "//base",
+        "//ipc",
+        "//skia",
+        "//ui/display/types",
+        "//ui/display/util",
+        "//ui/events",
+        "//ui/events/ozone:events_ozone",
+        "//ui/gfx",
+        "//ui/gfx/geometry",
+        "//ui/gfx/ipc",
+
+        # TODO(GYP) the GYP version has a way to add additional dependencies via
+        # build flags.
+      ] + ozone_platform_deps
+}
+
+# GYP version: ui/ozone/ozone.gyp:generate_ozone_platform_list
+action("generate_ozone_platform_list") {
+  script = "generate_ozone_platform_list.py"
+  outputs = [
+    platform_list_cc_file,
+    platform_list_h_file,
+    platform_list_txt_file,
+  ]
+
+  args =
+      [
+        "--output_cc=" + rebase_path(platform_list_cc_file, root_build_dir),
+        "--output_h=" + rebase_path(platform_list_h_file, root_build_dir),
+        "--output_txt=" + rebase_path(platform_list_txt_file, root_build_dir),
+        "--default=$ozone_platform",
+      ] + ozone_platforms
+}
+
+# GYP version: ui/ozone/ozone.gyp:generate_constructor_list
+action("generate_constructor_list") {
+  script = "generate_constructor_list.py"
+
+  inputs = [
+    platform_list_txt_file,
+  ]
+  outputs = [
+    constructor_list_cc_file,
+  ]
+
+  args = [
+    "--platform_list=" + rebase_path(platform_list_txt_file, root_build_dir),
+    "--output_cc=" + rebase_path(constructor_list_cc_file, root_build_dir),
+    "--namespace=ui",
+    "--typename=OzonePlatform",
+    "--include=\"ui/ozone/public/ozone_platform.h\"",
+  ]
+
+  deps = [
+    ":generate_ozone_platform_list",
+  ]
+}
+
+test("ozone_unittests") {
+  sources = [
+    "run_all_unittests.cc",
+  ]
+
+  deps = [
+           "//base/test:test_support",
+           "//testing/gtest",
+           "//ui/gfx/geometry",
+         ] + ozone_platform_test_deps
+}

@@ -1,0 +1,29 @@
+/* Copyright 2015 The Chromium Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+:host {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+paper-spinner {
+  --paper-spinner-layer-1-color: var(--google-blue-500);
+  --paper-spinner-layer-2-color: var(--google-blue-500);
+  --paper-spinner-layer-3-color: var(--google-blue-500);
+  --paper-spinner-layer-4-color: var(--google-blue-500);
+}
+
+paper-spinner {
+  height: 38px;
+  margin-bottom: 28px;
+  width: 38px;
+}
+
+#spinner-comment {
+  color: #747474;
+  font-size: 13px;
+}

@@ -1,0 +1,24 @@
+# Device Motion / Orientation API related
+per-file DeviceSensorsTest.java=mvanouwerkerk@chromium.org
+per-file DeviceSensorsTest.java=timvolodine@chromium.org
+
+# Geolocation API related
+per-file LocationProviderTest.java=mvanouwerkerk@chromium.org
+per-file LocationProviderTest.java=timvolodine@chromium.org
+
+# Screen Orientation API related
+per-file ScreenOrientation*.java=mlamouri@chromium.org
+
+# Input handling related
+jdduke@chromium.org
+
+# Process management related
+per-file BindingManagerImplTest.java=ppi@chromium.org
+per-file ChildProcessLauncherTest.java=ppi@chromium.org
+
+# Mojo related
+per-file ServiceRegistryTest.java=ppi@chromium.org
+
+# Java Bridge
+per-file JavaBridge*=mnaganov@chromium.org
+per-file JavaBridge*=torne@chromium.org

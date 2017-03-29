@@ -1,0 +1,204 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/config.gni")
+import("//build/config/android/rules.gni")
+
+content_jni_gypi_values = exec_script("//build/gypi_to_gn.py",
+                                      [ rebase_path("../../content_jni.gypi") ],
+                                      "scope",
+                                      [ "../../content_jni.gypi" ])
+
+android_aidl("common_aidl") {
+  interface_file = "java/src/org/chromium/content/common/common.aidl"
+  import_include = "java/src"
+  sources = [
+    "java/src/org/chromium/content/common/IChildProcessCallback.aidl",
+    "java/src/org/chromium/content/common/IChildProcessService.aidl",
+  ]
+}
+
+android_resources("content_java_resources") {
+  deps = [
+    ":content_strings_grd",
+    "//ui/android:ui_java_resources",
+  ]
+  custom_package = "org.chromium.content"
+  resource_dirs = [ "java/res" ]
+}
+
+android_library("content_java") {
+  deps = [
+    ":content_java_resources",
+    "//base:base_java",
+    "//device/battery/android:battery_monitor_android",
+    "//device/battery:mojo_bindings_java",
+    "//device/bluetooth:java",
+    "//media/base/android:media_java",
+    "//media/midi:midi_java",
+    "//mojo/android:system_java",
+    "//net/android:net_java",
+    "//third_party/android_tools:android_support_v13_java",
+    "//third_party/mojo/src/mojo/public/java:bindings",
+    "//third_party/mojo/src/mojo/public/java:system",
+    "//ui/accessibility:ui_accessibility_java",
+    "//ui/android:ui_java",
+    "//third_party/jsr-305:jsr_305_javalib",
+    "//third_party/WebKit/public:blink_headers_java",
+
+    #"//content:content_common",
+  ]
+
+  if (android_sdk_version != "M") {
+    deps += [ "//third_party/android_tools:preview_java_sources" ]
+  }
+
+  srcjar_deps = [
+    ":common_aidl",
+    ":content_public_android_java_enums_srcjar",
+    "//content/browser/accessibility:content_browser_accessibility_java_enums_srcjar",
+    "//ui/touch_selection:ui_touch_selection_enums_srcjar",
+    "//ui/touch_selection:ui_touch_handle_orientation_srcjar",
+  ]
+
+  DEPRECATED_java_in_dir = "java/src"
+}
+
+java_strings_grd("content_strings_grd") {
+  grd_file = "java/strings/android_content_strings.grd"
+  outputs = [
+    "values-am/android_content_strings.xml",
+    "values-ar/android_content_strings.xml",
+    "values-bg/android_content_strings.xml",
+    "values-ca/android_content_strings.xml",
+    "values-cs/android_content_strings.xml",
+    "values-da/android_content_strings.xml",
+    "values-de/android_content_strings.xml",
+    "values-el/android_content_strings.xml",
+    "values/android_content_strings.xml",
+    "values-en-rGB/android_content_strings.xml",
+    "values-es/android_content_strings.xml",
+    "values-es-rUS/android_content_strings.xml",
+    "values-fa/android_content_strings.xml",
+    "values-fi/android_content_strings.xml",
+    "values-tl/android_content_strings.xml",
+    "values-fr/android_content_strings.xml",
+    "values-hi/android_content_strings.xml",
+    "values-hr/android_content_strings.xml",
+    "values-hu/android_content_strings.xml",
+    "values-in/android_content_strings.xml",
+    "values-it/android_content_strings.xml",
+    "values-iw/android_content_strings.xml",
+    "values-ja/android_content_strings.xml",
+    "values-ko/android_content_strings.xml",
+    "values-lt/android_content_strings.xml",
+    "values-lv/android_content_strings.xml",
+    "values-nl/android_content_strings.xml",
+    "values-nb/android_content_strings.xml",
+    "values-pl/android_content_strings.xml",
+    "values-pt-rBR/android_content_strings.xml",
+    "values-pt-rPT/android_content_strings.xml",
+    "values-ro/android_content_strings.xml",
+    "values-ru/android_content_strings.xml",
+    "values-sk/android_content_strings.xml",
+    "values-sl/android_content_strings.xml",
+    "values-sr/android_content_strings.xml",
+    "values-sv/android_content_strings.xml",
+    "values-sw/android_content_strings.xml",
+    "values-th/android_content_strings.xml",
+    "values-tr/android_content_strings.xml",
+    "values-uk/android_content_strings.xml",
+    "values-vi/android_content_strings.xml",
+    "values-zh-rCN/android_content_strings.xml",
+    "values-zh-rTW/android_content_strings.xml",
+  ]
+}
+
+java_cpp_enum("content_public_android_java_enums_srcjar") {
+  sources = [
+    "//content/browser/android/content_view_core_impl.cc",
+    "//content/browser/android/gesture_event_type.h",
+    "//content/browser/gamepad/gamepad_standard_mappings.h",
+    "//content/public/browser/invalidate_type.h",
+    "//content/public/browser/navigation_controller.h",
+    "//content/public/browser/readback_types.h",
+    "//content/public/common/console_message_level.h",
+    "//content/public/common/result_codes.h",
+    "//content/public/common/screen_orientation_values.h",
+    "//content/public/common/speech_recognition_error.h",
+    "//content/public/common/top_controls_state.h",
+  ]
+  outputs = [
+    "org/chromium/content/browser/GestureEventType.java",
+    "org/chromium/content/browser/input/CanonicalAxisIndex.java",
+    "org/chromium/content/browser/input/CanonicalButtonIndex.java",
+    "org/chromium/content/browser/input/PopupItemType.java",
+    "org/chromium/content_public/browser/InvalidateTypes.java",
+    "org/chromium/content_public/browser/navigation_controller/LoadURLType.java",
+    "org/chromium/content_public/browser/navigation_controller/UserAgentOverrideOption.java",
+    "org/chromium/content_public/browser/readback_types/ReadbackResponse.java",
+    "org/chromium/content_public/common/ConsoleMessageLevel.java",
+    "org/chromium/content_public/common/ResultCode.java",
+    "org/chromium/content_public/common/ScreenOrientationValues.java",
+    "org/chromium/content_public/common/SpeechRecognitionErrorCode.java",
+    "org/chromium/content_public/common/TopControlsState.java",
+  ]
+}
+
+generate_jar_jni("jar_jni") {
+  jni_package = "content"
+  classes = [
+    "java/util/HashSet.class",
+    "android/view/MotionEvent.class",
+  ]
+}
+
+generate_jni("content_jni_headers") {
+  sources = rebase_path(content_jni_gypi_values.sources, "", "../..")
+  jni_package = "content"
+}
+
+group("jni") {
+  deps = [
+    ":content_jni_headers",
+    ":jar_jni",
+  ]
+}
+
+android_library("content_javatests") {
+  testonly = true
+  deps = [
+    "//base:base_java",
+    "//base:base_java_test_support",
+    "//content/public/test/android:content_java_test_support",
+    "//content/shell/android:content_shell_java",
+    "//content/shell/android:content_shell_java_resources",
+    "//content/shell/android:content_shell_apk_java",
+    "//content/shell/android:content_shell_test_java",
+    "//media/base/android:media_java",
+    "//mojo/android:system_java",
+    "//net/android:net_java",
+    "//net/android:net_java_test_support",
+    "//third_party/android_tools:android_support_v13_java",
+    "//third_party/android_tools:legacy_http_javalib",
+    "//third_party/mojo/src/mojo/public/interfaces/bindings/tests:test_interfaces_java",
+    "//third_party/mojo/src/mojo/public/java:bindings",
+    "//third_party/mojo/src/mojo/public/java:system",
+    "//ui/android:ui_java",
+    ":content_java",
+  ]
+
+  DEPRECATED_java_in_dir = "javatests/src"
+}
+
+# GYP: //content/content_tests.gypi:content_junit_tests
+junit_binary("content_junit_tests") {
+  java_files = [ "junit/src/org/chromium/content/browser/input/GamepadMappingsTest.java" ]
+  deps = [
+    ":content_java",
+    "//base:base_java",
+    "//base:base_java_test_support",
+  ]
+}
+# TODO(GYP): content_icudata

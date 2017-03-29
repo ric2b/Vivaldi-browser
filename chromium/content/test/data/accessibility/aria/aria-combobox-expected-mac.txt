@@ -1,0 +1,8 @@
+AXWebArea
+++AXGroup
+++++AXStaticText AXValue='State'
+++AXGroup
+++++AXComboBox AXTitleUIElement='AXGroup group' AXLinkedUIElements=["AXList"]
+++AXList
+++++AXStaticText AXTitle='Alabama'
+++++AXStaticText AXTitle='Alaska' AXFocused='1'

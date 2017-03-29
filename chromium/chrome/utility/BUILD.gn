@@ -1,0 +1,109 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/crypto.gni")
+import("//build/config/features.gni")
+
+gypi_values = exec_script("//build/gypi_to_gn.py",
+                          [ rebase_path("../chrome_utility.gypi") ],
+                          "scope",
+                          [ "../chrome_utility.gypi" ])
+
+static_library("utility") {
+  sources = rebase_path(gypi_values.chrome_utility_sources, ".", "..")
+  defines = []
+
+  public_deps = []
+  deps = [
+    "//base",
+    "//components/safe_json:safe_json_parser_message_filter",
+    "//components/search_engines",
+    "//components/strings",
+    "//components/url_fixer",
+    "//content/public/common",
+    "//content/public/utility",
+    "//media",
+    "//skia",
+    "//third_party/libxml",
+    "//chrome:resources",
+    "//chrome:strings",
+    "//chrome/common",
+  ]
+
+  if (!is_android) {
+    deps += [
+      "//chrome/common:mojo_bindings",
+      "//net:net_utility_services",
+    ]
+    sources +=
+        rebase_path(gypi_values.chrome_utility_importer_sources, ".", "..")
+  }
+
+  if (enable_extensions) {
+    deps += [
+      "//chrome/common/extensions/api",
+      "//extensions/utility",
+    ]
+
+    public_deps += [ "//chrome/common/extensions/api" ]
+
+    sources +=
+        rebase_path(gypi_values.chrome_utility_extensions_sources, ".", "..")
+    sources +=
+        rebase_path(gypi_values.chrome_utility_shared_media_sources, ".", "..")
+
+    # Prevent wininet from loading in the renderer. http://crbug.com/460679
+    if (is_win) {
+      ldflags = [ "/DELAYLOAD:wininet.dll" ]
+    }
+
+    if (is_win || is_mac) {
+      sources +=
+          rebase_path(gypi_values.chrome_utility_win_mac_media_gallery_sources,
+                      ".",
+                      "..")
+      deps += [ "//components/wifi" ]
+    } else {
+      sources += [ "image_writer/image_writer_stub.cc" ]
+    }
+
+    if (is_mac) {
+      sources +=
+          rebase_path(gypi_values.chrome_utility_mac_media_gallery_sources,
+                      ".",
+                      "..")
+    }
+
+    # Linux should use system libexif
+    if (!is_linux) {
+      # TODO(thestig): Properly support building on Linux and ChromeOS.
+      deps += [ "//third_party/libexif" ]
+    }
+  }
+
+  if (use_nss_certs) {
+    sources += [
+      "importer/nss_decryptor_system_nss.cc",
+      "importer/nss_decryptor_system_nss.h",
+    ]
+    deps += [
+      "//crypto",
+      "//crypto:platform",
+    ]
+  }
+
+  if (!enable_print_preview) {
+    sources -= [
+      "printing_handler.cc",
+      "printing_handler.h",
+    ]
+  }
+
+  if (!enable_mdns) {
+    sources -= [
+      "local_discovery/service_discovery_message_handler.cc",
+      "local_discovery/service_discovery_message_handler.h",
+    ]
+  }
+}

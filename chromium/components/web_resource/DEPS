@@ -1,0 +1,7 @@
+include_rules = [
+  "+components/google/core",
+  "+net",
+
+  # web_resource is used on iOS.
+  "-content",
+]

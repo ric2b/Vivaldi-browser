@@ -1,0 +1,22 @@
+include_rules = [
+  "-content",
+  "+content/public",
+  "+mojo/application",
+  "+v8/include/v8.h",
+]
+
+# Ensure we don't leak internal content headers through public headers.
+specific_include_rules = {
+  ".*\.cc": [
+    # Allow inclusion of specific components that we depend on. We may only
+    # depend on components which we share with the mojo html_viewer.
+    "+components/scheduler/renderer",
+
+    # Testing utilities can access anything in content/
+    "+content",
+    "+gin/v8_initializer.h",
+    "+media/base",
+    "+third_party/iaccessible2",
+    "+ui/base/resource/resource_bundle.h",
+  ],
+}

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notes specific strings (included from vivaldi_resources.grd). -->
+<grit-part>
+  <message name="IDS_BOOKMARK_GROUP_FROM_OPERA" desc="The group name of bookmarks from Opera">
+    Imported From Opera
+  </message>
+  <message name="IDS_IMPORTED_BOOKMARKS" desc="The group name of imported bookmarks">
+    Imported bookmarks
+  </message>
+
+  <message name="IDS_USE_OPERA_DEFAULT_LOCATION" desc="The text label of the checkbox to use Opera default location for importing">
+        Use default Opera profile location
+  </message>
+</grit-part>

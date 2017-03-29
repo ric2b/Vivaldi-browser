@@ -1,0 +1,65 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+#
+# core_services should be thought of as a bundle of many of the services which
+# we ship with.
+
+import("//build/config/ui.gni")
+import("//mojo/public/mojo_application.gni")
+
+mojo_native_application("core_services") {
+  deps = [
+    ":sources",
+    "//third_party/icu:icudata",
+    "//third_party/angle:libEGL",
+    "//third_party/angle:libGLESv2",
+  ]
+  if (is_win) {
+    copy("copy_files") {
+      sources = [
+        "$root_out_dir/icudtl.dat",
+        "$root_out_dir/libEGL.dll",
+        "$root_out_dir/libGLESv2.dll",
+      ]
+      outputs = [
+        "$root_out_dir/core_services/{{source_file_part}}",
+      ]
+    }
+    deps += [ ":copy_files" ]
+  }
+}
+
+source_set("sources") {
+  sources = [
+    "core_services_application_delegate.cc",
+    "main.cc",
+  ]
+
+  deps = [
+    "//base",
+    "//components/clipboard:lib",
+    "//components/filesystem:lib",
+    "//components/view_manager/surfaces:lib",
+    "//mandoline/ui/browser:lib",
+    "//mojo/application/public/cpp",
+    "//mojo/common:tracing_impl",
+    "//mojo/services/tracing:lib",
+    "//third_party/mojo/src/mojo/public/cpp/bindings",
+  ]
+
+  if (!is_android) {
+    deps += [
+      "//components/resource_provider:lib",
+      "//components/view_manager:lib",
+      "//mojo/services/network:lib",
+    ]
+  }
+
+  if (use_aura) {
+    deps += [
+      "//components/view_manager/public/cpp",
+      "//mandoline/ui/omnibox:lib",
+    ]
+  }
+}

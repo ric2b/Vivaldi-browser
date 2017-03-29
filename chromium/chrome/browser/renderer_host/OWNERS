@@ -1,0 +1,29 @@
+# Extension system files
+# If editing, see chrome/browser/extensions/OWNERS
+per-file chrome_extension_message_filter.*=kalman@chromium.org
+per-file chrome_extension_message_filter.*=finnur@chromium.org
+per-file chrome_extension_message_filter.*=miket@chromium.org
+per-file chrome_extension_message_filter.*=rockot@chromium.org
+per-file chrome_extension_message_filter.*=benwells@chromium.org
+per-file chrome_extension_message_filter.*=rdevlin.cronin@chromium.org
+per-file chrome_extension_message_filter.*=mek@chromium.org
+per-file chrome_extension_message_filter.*=reillyg@chromium.org
+per-file chrome_extension_message_filter.*=asargent@chromium.org
+
+per-file data_reduction_proxy_resource_throttle_android.*=sgurun@chromium.org
+
+# Mac files
+per-file *.mm=avi@chromium.org
+per-file *.mm=ccameron@chromium.org
+per-file *.mm=erikchen@chromium.org
+per-file *.mm=mark@chromium.org
+per-file *.mm=rsesek@chromium.org
+per-file *.mm=thakis@chromium.org
+
+per-file *_mac.h=avi@chromium.org
+per-file *_mac.h=ccameron@chromium.org
+per-file *_mac.h=erikchen@chromium.org
+per-file *_mac.h=mark@chromium.org
+per-file *_mac.h=rsesek@chromium.org
+per-file *_mac.h=thakis@chromium.org
+

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (c) 2012 The Chromium Authors. All rights reserved.  Use of this
+  source code is governed by a BSD-style license that can be found in the
+  LICENSE file.
+-->
+
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="{{package|default('com.android.webview')}}">
+    <uses-sdk android:minSdkVersion="{{minsdk|default(21)}}"
+              android:targetSdkVersion="{{targetsdk|default(21)}}">
+    </uses-sdk>
+
+    <uses-feature android:name="android.hardware.touchscreen"
+            android:required="false"/>
+
+    <application android:label="Android System WebView"
+        android:icon="@drawable/icon_webview"
+        android:multiArch="true">
+        <activity android:name="com.android.webview.chromium.LicenseActivity"
+                  android:label="@string/license_activity_title"
+                  >
+            <intent-filter>
+                <action android:name="android.settings.WEBVIEW_LICENSE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data android:name="com.android.settings.PRIMARY_PROFILE_CONTROLLED"
+                       android:value="true" />
+        </activity>
+        <provider android:name="com.android.webview.chromium.LicenseContentProvider"
+                  android:exported="true"
+                  android:authorities="{{package|default('com.android.webview')}}.LicenseContentProvider" />
+        <meta-data android:name="com.android.webview.WebViewLibrary"
+                   android:value="libwebviewchromium.so" />
+    </application>
+</manifest>

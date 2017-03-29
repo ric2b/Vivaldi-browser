@@ -1,0 +1,17 @@
+include_rules = [
+  "+components/favicon_base",
+  "+components/keyed_service",
+  "+components/pref_registry",
+  "+components/query_parser",
+  "+components/startup_metric_utils",
+  "+grit/components_strings.h",
+  "+jni",
+  "+net/base",
+  "+ui",
+]
+
+specific_include_rules = {
+  "bookmark_model_unittest.cc": [
+    "+third_party/skia",
+  ]
+}

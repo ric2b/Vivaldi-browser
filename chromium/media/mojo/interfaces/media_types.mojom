@@ -1,0 +1,216 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module mojo;
+
+import "ui/mojo/geometry/geometry.mojom";
+
+// See media/base/buffering_state.h for descriptions.
+// Kept in sync with media::BufferingState via static_asserts.
+enum BufferingState {
+  HAVE_NOTHING,
+  HAVE_ENOUGH,
+};
+
+// See media/base/audio_decoder_config.h for descriptions.
+// Kept in sync with media::AudioCodec via static_asserts.
+enum AudioCodec {
+  UNKNOWN = 0,
+  AAC = 1,
+  MP3 = 2,
+  PCM = 3,
+  Vorbis = 4,
+  FLAC = 5,
+  AMR_NB = 6,
+  AMR_WB = 7,
+  PCM_MULAW = 8,
+  GSM_MS = 9,
+  PCM_S16BE = 10,
+  PCM_S24BE = 11,
+  Opus = 12,
+  // EAC3 = 13,
+  PCM_ALAW = 14,
+  ALAC = 15,
+  MAX = ALAC,
+};
+
+// See media/base/channel_layout.h for descriptions.
+// Kept in sync with media::ChannelLayout via static_asserts.
+// TODO(tim): The bindings generators will always prepend the enum name, should
+// mojom therefore allow enum values starting with numbers?
+enum ChannelLayout {
+  k_NONE = 0,
+  k_UNSUPPORTED = 1,
+  k_MONO = 2,
+  k_STEREO = 3,
+  k_2_1 = 4,
+  k_SURROUND = 5,
+  k_4_0 = 6,
+  k_2_2 = 7,
+  k_QUAD = 8,
+  k_5_0 = 9,
+  k_5_1 = 10,
+  k_5_0_BACK = 11,
+  k_5_1_BACK = 12,
+  k_7_0 = 13,
+  k_7_1 = 14,
+  k_7_1_WIDE = 15,
+  k_STEREO_DOWNMIX = 16,
+  k_2POINT1 = 17,
+  k_3_1 = 18,
+  k_4_1 = 19,
+  k_6_0 = 20,
+  k_6_0_FRONT = 21,
+  k_HEXAGONAL = 22,
+  k_6_1 = 23,
+  k_6_1_BACK = 24,
+  k_6_1_FRONT = 25,
+  k_7_0_FRONT = 26,
+  k_7_1_WIDE_BACK = 27,
+  k_OCTAGONAL = 28,
+  k_DISCRETE = 29,
+  k_STEREO_AND_KEYBOARD_MIC = 30,
+  k_4_1_QUAD_SIDE = 31,
+  k_MAX = k_4_1_QUAD_SIDE,
+};
+
+// See media/base/sample_format.h for descriptions.
+// Kept in sync with media::SampleFormat via static_asserts.
+enum SampleFormat {
+  UNKNOWN = 0,
+  U8,
+  S16,
+  S32,
+  F32,
+  PlanarS16,
+  PlanarF32,
+  PlanarS32,
+  Max = PlanarS32,
+};
+
+// See media/base/video_frame.h for descriptions.
+// Kept in sync with media::VideoFrame::Format via static_asserts.
+enum VideoFormat {
+  UNKNOWN = 0,
+  YV12,
+  I420,
+  YV16,
+  YV12A,
+  YV24,
+  NV12,
+  ARGB,
+  XRGB,
+  FORMAT_MAX = XRGB,
+};
+
+// See media/base/video_decoder_config.h for descriptions.
+// Kept in sync with media::VideoCodec via static_asserts.
+enum VideoCodec {
+  UNKNOWN = 0,
+  H264,
+  VC1,
+  MPEG2,
+  MPEG4,
+  Theora,
+  VP8,
+  VP9,
+  Max = VP9,
+};
+
+// See media/base/video_decoder_config.h for descriptions.
+// Kept in sync with media::VideoCodecProfile via static_asserts.
+enum VideoCodecProfile {
+  VIDEO_CODEC_PROFILE_UNKNOWN = -1,
+  VIDEO_CODEC_PROFILE_MIN = VIDEO_CODEC_PROFILE_UNKNOWN,
+  H264PROFILE_MIN = 0,
+  H264PROFILE_BASELINE = H264PROFILE_MIN,
+  H264PROFILE_MAIN = 1,
+  H264PROFILE_EXTENDED = 2,
+  H264PROFILE_HIGH = 3,
+  H264PROFILE_HIGH10PROFILE = 4,
+  H264PROFILE_HIGH422PROFILE = 5,
+  H264PROFILE_HIGH444PREDICTIVEPROFILE = 6,
+  H264PROFILE_SCALABLEBASELINE = 7,
+  H264PROFILE_SCALABLEHIGH = 8,
+  H264PROFILE_STEREOHIGH = 9,
+  H264PROFILE_MULTIVIEWHIGH = 10,
+  H264PROFILE_MAX = H264PROFILE_MULTIVIEWHIGH,
+  VP8PROFILE_MIN = 11,
+  VP8PROFILE_ANY = VP8PROFILE_MIN,
+  VP8PROFILE_MAX = VP8PROFILE_ANY,
+  VP9PROFILE_MIN = 12,
+  VP9PROFILE_ANY = VP9PROFILE_MIN,
+  VP9PROFILE_MAX = VP9PROFILE_ANY,
+  VIDEO_CODEC_PROFILE_MAX = VP9PROFILE_MAX,
+};
+
+// This defines a mojo transport format for media::AudioDecoderConfig.
+// See media/base/audio_decoder_config.h for descriptions.
+struct AudioDecoderConfig {
+  AudioCodec codec;
+  SampleFormat sample_format;
+  ChannelLayout channel_layout;
+  int32 samples_per_second;
+  array<uint8>? extra_data;
+  int64 seek_preroll_usec;
+  int32 codec_delay;
+  bool is_encrypted;
+};
+
+// This defines a mojo transport format for media::VideoDecoderConfig.
+// See media/base/video_decoder_config.h for descriptions.
+struct VideoDecoderConfig {
+  VideoCodec codec;
+  VideoCodecProfile profile;
+  VideoFormat format;
+  Size coded_size;
+  Rect visible_rect;
+  Size natural_size;
+  array<uint8>? extra_data;
+  bool is_encrypted;
+};
+
+// This defines a mojo transport format for media::SubsampleEntry.
+// See media/base/decrypt_config.h for descriptions.
+struct SubsampleEntry {
+  uint32 clear_bytes;
+  uint32 cypher_bytes;
+};
+
+// This defines a mojo transport format for media::DecryptConfig.
+// See media/base/decrypt_config.h for descriptions.
+struct DecryptConfig {
+  string key_id;
+  string iv;
+  array<SubsampleEntry> subsamples;
+};
+
+// This defines a mojo transport format for media::DecoderBuffer.
+struct MediaDecoderBuffer {
+  // See media/base/buffers.h for details.
+  int64 timestamp_usec;
+  int64 duration_usec;
+
+  // The number of bytes present in this buffer.  The data is not serialized
+  // along with this structure and must be read from a separate DataPipe.
+  uint32 data_size;
+
+  // Indicates whether or not this buffer is a random access point.
+  bool is_key_frame;
+
+  // This is backed by an std::vector and results in a few copies.
+  // Into the vector, onto and off the MessagePipe, back into a vector.
+  array<uint8>? side_data;
+  uint32 side_data_size;
+
+  // DecryptConfig for a encrypted buffer. NULL if the buffer is not encrypted.
+  DecryptConfig? decrypt_config;
+
+  // These fields indicate the amount of data to discard after decoding.
+  int64 front_discard_usec;
+  int64 back_discard_usec;
+
+  // Indicates this buffer is part of a splice around |splice_timestamp_usec|.
+  int64 splice_timestamp_usec;
+};

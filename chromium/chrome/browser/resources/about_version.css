@@ -1,0 +1,95 @@
+/* Copyright (c) 2012 The Chromium Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file. */
+
+body {
+  background-color: white;
+  color: black;
+  font-size: 100%;
+  margin: 0;
+  background-color: #f6f6f6;
+
+}
+
+#outer {
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 50px;
+  padding: 20px;
+  width: 800px;
+  min-height: 500px;
+  background-color: white;
+  border-radius: 5px;
+}
+
+#inner {
+  padding-top: 10px;
+  word-break: break-word;
+}
+
+.label {
+  -webkit-padding-end: 12px;
+  font-size: 12px;
+  font-weight: bold;
+  vertical-align: top;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.label::after {
+  content: ':';
+}
+
+#logo {
+  float: right;
+  margin-left: 40px;
+  text-align: center;
+  width: 180px;
+}
+
+#company {
+  font-size: 14px;
+  margin-top: 20px;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+#slogan {
+  font-size: 12px;
+  margin-top: 0;
+  font-weight: 400;
+  text-align: center;
+  margin-bottom: 30px;
+  color: #999999;
+}
+
+#copyright {
+  font-size: 0.7em;
+  text-align: center;
+}
+
+#product-license {
+  font-size: 0.7em;
+  text-align: center;
+}
+
+#product-tos {
+  font-size: 0.7em;
+  text-align: center;
+}
+
+#useragent {
+  font-family: Helvetica,Arial,sans-serif;
+  color: #999;
+}
+
+.version {
+  font-family: Helvetica,Arial,sans-serif;
+  max-width: 430px;
+  padding-left: 5px;
+  color: #999;
+  line-height: 20px;
+  font-size: 12px;
+  vertical-align: bottom;
+}

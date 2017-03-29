@@ -1,0 +1,41 @@
+<!--
+  -- Copyright 2014 The Chromium Authors. All rights reserved.
+  -- Use of this source code is governed by a BSD-style license that can be
+  -- found in the LICENSE file.
+  -->
+<html>
+<head>
+  <link rel="stylesheet" href="chrome://resources/css/text_defaults.css">
+  <link rel="stylesheet" href="../file_manager/foreground/css/list.css">
+  <link rel="stylesheet" href="../file_manager/foreground/css/common.css">
+  <link rel="stylesheet" href="../file_manager/foreground/css/file_types.css">
+  <link rel="stylesheet" href="../file_manager/foreground/css/share_dialog.css">
+  <link rel="stylesheet" href="css/gallery.css">
+
+  <script src="js/gallery_scripts.js"></script>
+</head>
+<body>
+  <div class="gallery">
+    <div id="content" class="content"></div>
+    <div id="header" class="header tool dimmable"></div>
+    <div id="toolbar" class="toolbar tool dimmable">
+      <div class="filename-spacer"></div>
+      <div class="middle-spacer">
+        <div class="ribbon-spacer"></div>
+        <div class="edit-bar-spacer"></div>
+      </div>
+      <div class="button-spacer">
+        <button class="button mode"></button>
+        <button class="button slideshow"></button>
+        <button class="button edit"></button>
+        <button class="button print"></button>
+        <button class="delete"></button>
+        <button class="share"></button>
+      </div>
+    </div>
+    <div class="prompt-wrapper" pos="center">
+      <div class="error-banner"></div>
+    </div>
+  </div>
+</body>
+</html>

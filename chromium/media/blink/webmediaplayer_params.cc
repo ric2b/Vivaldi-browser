@@ -1,0 +1,40 @@
+// Copyright 2013 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "media/blink/webmediaplayer_params.h"
+
+#include "base/single_thread_task_runner.h"
+#include "media/base/audio_renderer_sink.h"
+#include "media/base/media_log.h"
+
+namespace media {
+
+WebMediaPlayerParams::WebMediaPlayerParams(
+    const DeferLoadCB& defer_load_cb,
+    const scoped_refptr<AudioRendererSink>& audio_renderer_sink,
+    const scoped_refptr<MediaLog>& media_log,
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+    const IPCMediaPipelineHost::Creator& ipc_media_pipeline_host_creator,
+#endif
+    const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+    const scoped_refptr<base::SingleThreadTaskRunner>& compositor_task_runner,
+    const Context3DCB& context_3d_cb,
+    MediaPermission* media_permission,
+    blink::WebContentDecryptionModule* initial_cdm)
+    : defer_load_cb_(defer_load_cb),
+      audio_renderer_sink_(audio_renderer_sink),
+      media_log_(media_log),
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+      ipc_media_pipeline_host_creator_(ipc_media_pipeline_host_creator),
+#endif
+      media_task_runner_(media_task_runner),
+      compositor_task_runner_(compositor_task_runner),
+      context_3d_cb_(context_3d_cb),
+      media_permission_(media_permission),
+      initial_cdm_(initial_cdm) {
+}
+
+WebMediaPlayerParams::~WebMediaPlayerParams() {}
+
+}  // namespace media

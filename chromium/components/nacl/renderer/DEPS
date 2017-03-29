@@ -1,0 +1,19 @@
+include_rules = [
+  "+content/public/renderer",
+  "+native_client/src/public/imc_types.h",  # for NaClHandle
+  # for NaClErrorCode
+  "+native_client/src/trusted/service_runtime/nacl_error_code.h",
+  "+net",
+  "+ppapi/c",
+  "+ppapi/proxy",
+  "+ppapi/shared_impl",
+
+  # TODO(raymes): Once all of the resources are refactored to the new pepper
+  # resource model, these includes shouldn't be needed.
+  "+ppapi/thunk",
+
+  "+v8/include",
+  "+third_party/jsoncpp/source/include/json",
+  "+third_party/WebKit/public/platform",
+  "+third_party/WebKit/public/web",
+]

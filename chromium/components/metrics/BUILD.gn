@@ -1,0 +1,199 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# GYP version: components/metrics.gypi:metrics
+source_set("metrics") {
+  sources = [
+    "call_stack_profile_metrics_provider.cc",
+    "call_stack_profile_metrics_provider.h",
+    "clean_exit_beacon.cc",
+    "clean_exit_beacon.h",
+    "client_info.cc",
+    "client_info.h",
+    "cloned_install_detector.cc",
+    "cloned_install_detector.h",
+    "compression_utils.cc",
+    "compression_utils.h",
+    "daily_event.cc",
+    "daily_event.h",
+    "histogram_encoder.cc",
+    "histogram_encoder.h",
+    "machine_id_provider.h",
+    "machine_id_provider_stub.cc",
+    "machine_id_provider_win.cc",
+    "metrics_hashes.cc",
+    "metrics_hashes.h",
+    "metrics_log.cc",
+    "metrics_log.h",
+    "metrics_log_manager.cc",
+    "metrics_log_manager.h",
+    "metrics_log_uploader.cc",
+    "metrics_log_uploader.h",
+    "metrics_pref_names.cc",
+    "metrics_pref_names.h",
+    "metrics_provider.cc",
+    "metrics_provider.h",
+    "metrics_reporting_scheduler.cc",
+    "metrics_reporting_scheduler.h",
+    "metrics_service.cc",
+    "metrics_service.h",
+    "metrics_service_accessor.cc",
+    "metrics_service_accessor.h",
+    "metrics_service_client.cc",
+    "metrics_service_client.h",
+    "metrics_state_manager.cc",
+    "metrics_state_manager.h",
+    "metrics_switches.cc",
+    "metrics_switches.h",
+    "persisted_logs.cc",
+    "persisted_logs.h",
+    "url_constants.cc",
+    "url_constants.h",
+  ]
+
+  public_deps = [
+    "//components/metrics/proto",
+  ]
+  deps = [
+    "//base",
+    "//base:i18n",
+    "//base:prefs",
+    "//components/variations",
+    "//third_party/zlib",
+  ]
+
+  if (is_chromeos) {
+    deps += [ ":serialization" ]
+  }
+
+  if (is_win) {
+    sources -= [ "machine_id_provider_stub.cc" ]
+  }
+}
+
+# GYP version: components/metrics.gypi:metrics_gpu
+source_set("gpu") {
+  sources = [
+    "gpu/gpu_metrics_provider.cc",
+    "gpu/gpu_metrics_provider.h",
+  ]
+
+  public_deps = [
+    ":metrics",
+  ]
+  deps = [
+    "//base",
+    "//content/public/browser",
+    "//gpu/config",
+    "//ui/gfx",
+  ]
+}
+
+# GYP version: components/metrics.gypi:metrics_net
+static_library("net") {
+  sources = [
+    "net/net_metrics_log_uploader.cc",
+    "net/net_metrics_log_uploader.h",
+    "net/network_metrics_provider.cc",
+    "net/network_metrics_provider.h",
+    "net/wifi_access_point_info_provider.cc",
+    "net/wifi_access_point_info_provider.h",
+    "net/wifi_access_point_info_provider_chromeos.cc",
+    "net/wifi_access_point_info_provider_chromeos.h",
+  ]
+
+  public_deps = [
+    ":metrics",
+  ]
+  deps = [
+    "//base",
+    "//net",
+    "//url",
+  ]
+}
+
+# GYP version: components/metrics.gypi:metrics_profiler
+source_set("profiler") {
+  sources = [
+    "profiler/profiler_metrics_provider.cc",
+    "profiler/profiler_metrics_provider.h",
+    "profiler/tracking_synchronizer.cc",
+    "profiler/tracking_synchronizer.h",
+    "profiler/tracking_synchronizer_observer.cc",
+    "profiler/tracking_synchronizer_observer.h",
+  ]
+
+  public_deps = [
+    ":metrics",
+  ]
+  deps = [
+    "//base",
+    "//components/variations",
+    "//content/public/browser",
+    "//content/public/common",
+  ]
+}
+
+# GYP version: components/metrics.gypi:metrics_test_support
+source_set("test_support") {
+  sources = [
+    "test_metrics_provider.cc",
+    "test_metrics_provider.h",
+    "test_metrics_service_client.cc",
+    "test_metrics_service_client.h",
+  ]
+
+  public_deps = [
+    ":metrics",
+  ]
+  deps = [
+    "//base",
+  ]
+}
+
+if (is_linux) {
+  # GYP version: components/metrics.gypi:metrics_serialization
+  source_set("serialization") {
+    sources = [
+      "serialization/metric_sample.cc",
+      "serialization/metric_sample.h",
+      "serialization/serialization_utils.cc",
+      "serialization/serialization_utils.h",
+    ]
+    deps = [
+      "//base",
+    ]
+  }
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "compression_utils_unittest.cc",
+    "daily_event_unittest.cc",
+    "histogram_encoder_unittest.cc",
+    "machine_id_provider_win_unittest.cc",
+    "metrics_hashes_unittest.cc",
+    "metrics_log_manager_unittest.cc",
+    "metrics_log_unittest.cc",
+    "metrics_reporting_scheduler_unittest.cc",
+    "metrics_service_unittest.cc",
+    "metrics_state_manager_unittest.cc",
+    "persisted_logs_unittest.cc",
+    "profiler/profiler_metrics_provider_unittest.cc",
+    "profiler/tracking_synchronizer_unittest.cc",
+  ]
+
+  deps = [
+    ":metrics",
+    ":profiler",
+    ":test_support",
+    "//base:prefs_test_support",
+    "//base/test:test_support",
+    "//components/variations",
+    "//content/public/common",
+    "//testing/gtest",
+  ]
+}
+# TODO(GYP): metrics_chromeos

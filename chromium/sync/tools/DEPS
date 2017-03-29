@@ -1,0 +1,10 @@
+include_rules = [
+  "+components/invalidation",
+  "+google/cacheinvalidation",
+  "+jingle/notifier/base",
+  "+net",
+  "+sync/internal_api/public",
+  "+sync/js",
+  # TODO(akalin): Remove this when we use the system encryptor.
+  "+sync/test/fake_encryptor.h",
+]

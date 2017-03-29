@@ -1,0 +1,12 @@
+<link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
+<link rel="import" href="chrome://md-settings/settings_ui/settings_ui.html">
+<link rel="import" href="chrome://md-settings/prefs/prefs.html">
+
+<dom-module id="cr-settings">
+  <template>
+    <cr-settings-prefs id="prefs" pref-store="{{prefs_}}"></cr-settings-prefs>
+    <cr-settings-ui prefs="{{prefs_}}"></cr-settings-ui>
+  </template>
+  <script src="settings.js"></script>
+</dom-module>
+

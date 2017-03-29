@@ -1,0 +1,24 @@
+<link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/iron-icons.html">
+<link rel="import" href="viewer-zoom-button.html">
+
+<dom-module id="viewer-zoom-toolbar">
+  <link rel="import" type="css" href="viewer-zoom-toolbar.css">
+  <template>
+
+    <div id="zoom-buttons">
+      <div id="buttons">
+        <!-- TODO(alexandrec): Replace with custom icons. -->
+        <viewer-zoom-button id="fit-to-width-button" icon="fullscreen"
+            on-click="fitToWidth" delay="0"></viewer-zoom-button>
+        <viewer-zoom-button id="fit-to-page-button" icon="fullscreen-exit"
+            on-click="fitToPage" delay="50"></viewer-zoom-button>
+        <viewer-zoom-button id="zoom-in-button" icon="add"
+            on-click="zoomIn" delay="100"></viewer-zoom-button>
+        <viewer-zoom-button id="zoom-out-button" icon="remove"
+            on-click="zoomOut" delay="150"></viewer-zoom-button>
+      </div>
+    </div>
+  </template>
+</dom-module>
+<script src="viewer-zoom-toolbar.js"></script>

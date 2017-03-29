@@ -1,0 +1,3337 @@
+{
+  "add_to_dictionary": {
+    "message": "\u12c8\u12f0 \u1218\u12dd\u1308\u1260-\u1243\u120b\u1275 \u12a0\u12ad\u120d"
+  },
+  "add_to_personal_dictionary": {
+    "message": "\u12c8\u12f0 \u12e8\u130d\u120d \u1218\u12dd\u1308\u1260 \u1243\u120b\u1275 \u12a0\u12ad\u120d"
+  },
+  "add_word_to_dictionary": {
+    "message": "$1/}\u00bb\u1295 \u12c8\u12f0 \u1218\u12dd\u1308\u1260-\u1243\u120b\u1275 \u12a0\u12ad\u120d",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "advanced": {
+    "message": "\u12e8\u120b\u1240"
+  },
+  "alt": {
+    "message": "\u121b\u121b\u1228\u132b"
+  },
+  "altgr": {
+    "message": "\u130d\u122b\u134a\u12ad \u1208\u12cd\u1325"
+  },
+  "always_auto_correct": {
+    "message": "\u1283\u12ed\u1208\u129b"
+  },
+  "am_phonetic_arm_settings_page": {
+    "message": "\u12e8\u12a0\u122d\u1218\u1295\u129b \u12e8\u12f5\u121d\u1345 \u12a0\u1290\u1263\u1260\u1265 \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "appnamejpkeyboard": {
+    "message": "Google \u1303\u1353\u1295\u129b \u130d\u1264\u1275 (\u1208\u1303\u1353\u1295\u129b \u1241\u120d\u134d \u1230\u120c\u12f3)"
+  },
+  "appnameuskeyboard": {
+    "message": "Google \u1303\u1353\u1295\u129b \u130d\u1264\u1275 (\u1208\u12a0\u121c\u122a\u12ab \u1241\u120d\u134d \u1230\u120c\u12f3)"
+  },
+  "auto_correction_level": {
+    "message": "\u122b\u1235-\u1230\u122d \u12a5\u122d\u121b\u1275"
+  },
+  "backspace": {
+    "message": "\u12e8\u128b\u120a\u1275 \u12f0\u121d\u1233\u123d"
+  },
+  "basic": {
+    "message": "\u1218\u1220\u1228\u1273\u12ca"
+  },
+  "be_fra_settings_page": {
+    "message": "\u12e8\u1264\u120d\u1304\u121d\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 (\u1348\u1228\u1295\u1233\u12ed\u129b) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "be_ger_settings_page": {
+    "message": "\u12e8\u1264\u120d\u1300\u121d\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 (\u1300\u122d\u1218\u1295\u129b) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "be_nld_settings_page": {
+    "message": "\u12e8\u1264\u120d\u1300\u121d\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 (\u12f0\u127d\u129b) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "bg_bul_settings_page": {
+    "message": "\u12e8\u1261\u120d\u130b\u122a\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "bg_phonetic_bul_settings_page": {
+    "message": "\u12e8\u1261\u120d\u130b\u122a\u12eb\u129b \u12f5\u121d\u1345 \u12a0\u1290\u1263\u1260\u1265 \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e"
+  },
+  "br_por_settings_page": {
+    "message": "\u12e8\u1265\u122b\u12da\u120d\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 (\u12e8\u1265\u122b\u12da\u120d \u1356\u122d\u1271\u130b\u120d\u129b) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "by_bel_settings_page": {
+    "message": "\u12e8\u1264\u120b\u1229\u1235\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "ca_eng_eng_settings_page": {
+    "message": "\u12e8\u12ab\u1293\u12f3 \u12a5\u1295\u130d\u120a\u12dd\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 (\u12a5\u1295\u130d\u120a\u12dd\u129b) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "ca_fra_settings_page": {
+    "message": "\u12e8\u12ab\u1293\u12f3 \u1348\u1228\u1295\u1233\u12ed\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 (\u1348\u1228\u1295\u1233\u12ed\u129b) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "ca_multix_fra_settings_page": {
+    "message": "\u12e8\u12ab\u1293\u12f5\u129b \u1265\u12dd\u1210 \u124b\u1295\u124b \u1241\u120d\u134d \u1230\u120c\u12f3 (\u1348\u1228\u1295\u1233\u12ed\u129b) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "capital": {
+    "message": "\u12a0\u1262\u12ed \u1206\u1204"
+  },
+  "capslock": {
+    "message": "\u12a0\u1262\u12eb\u1275 \u121b\u122d\u130a\u12eb"
+  },
+  "ch_fr_fra_settings_page": {
+    "message": "\u12e8\u1235\u12ca\u12dd \u1348\u1228\u1295\u1233\u12ed\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 (\u1348\u1228\u1295\u1233\u12ed\u129b) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "ch_ger_settings_page": {
+    "message": "\u12e8\u1235\u12ca\u12dd \u1241\u120d\u134d \u1230\u120c\u12f3 (\u1300\u122d\u1218\u1295\u129b) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "chos_inputtool_description": {
+    "message": "Google \u12e8\u130d\u1265\u12d3\u1275 \u1218\u1223\u122a\u12eb\u12ce\u127d \u1208Chrome \u1235\u122d\u12d3\u1270 \u12ad\u12c8\u1293 \u1260Chrome \u1235\u122d\u12d3\u1270 \u12ad\u12c8\u1293 \u12cd\u1235\u1325 \u1260\u1218\u1228\u1321\u1275 \u124b\u1295\u124b \u12a5\u1295\u12f2\u1270\u12ed\u1261 \u12eb\u1235\u127d\u1208\u12ce\u1273\u120d\u1362"
+  },
+  "chos_inputtool_title": {
+    "message": "Google \u12e8\u130d\u1264\u1275 \u1218\u1233\u122a\u12eb\u12ce\u127d"
+  },
+  "compositionmodedirect": {
+    "message": "\u1240\u1325\u1270\u129b \u130d\u1264\u1275"
+  },
+  "compositionmodefullascii": {
+    "message": "\u1230\u134a \u120b\u1272\u1295"
+  },
+  "compositionmodefullkatakana": {
+    "message": "\u12ab\u1273\u12ab\u1293"
+  },
+  "compositionmodehalfascii": {
+    "message": "\u120b\u1272\u1295"
+  },
+  "compositionmodehalfkatakana": {
+    "message": "\u1263\u1208\u130d\u121b\u123d \u1235\u134b\u1275 \u12ab\u1273\u12ab\u1293"
+  },
+  "compositionmodehiragana": {
+    "message": "\u1202\u122b\u130b\u1293"
+  },
+  "configbasicstitle": {
+    "message": "\u1218\u1220\u1228\u1273\u12ca \u1290\u1308\u122e\u127d"
+  },
+  "configclearhistory": {
+    "message": "\u130d\u120b\u12ca\u1290\u1275 \u12e8\u1270\u120b\u1260\u1230 \u12cd\u1202\u1265 \u12eb\u133d\u12f1..."
+  },
+  "configclearhistorycancelbutton": {
+    "message": "\u12ed\u1245\u122d"
+  },
+  "configclearhistoryconversionhistory": {
+    "message": "\u12e8\u120d\u12c8\u1323 \u1273\u122a\u12ad"
+  },
+  "configclearhistorymessage": {
+    "message": "\u12e8\u121a\u12a8\u1270\u1209\u1275\u1295 \u1295\u1325\u120e\u127d \u12ed\u12f0\u121d\u1235\u1231\u1366"
+  },
+  "configclearhistoryokbutton": {
+    "message": "\u130d\u120b\u12ca\u1290\u1275 \u12e8\u1270\u120b\u1260\u1230 \u12cd\u1202\u1265 \u12eb\u133d\u12f1"
+  },
+  "configclearhistorysuggestionhistory": {
+    "message": "\u12e8\u12a0\u1235\u1270\u12eb\u12e8\u1275 \u1325\u1246\u121b \u1273\u122a\u12ad"
+  },
+  "configclearhistorytitle": {
+    "message": "\u130d\u120b\u12ca\u1290\u1275 \u12e8\u1270\u120b\u1260\u1230 \u12cd\u1202\u1265 \u12eb\u133d\u12f1"
+  },
+  "configcreditsdescription": {
+    "message": "\u12e8\u1245\u1302 \u1218\u1265\u1275 \u00a9 2013 Google Inc. \u1201\u1209\u121d \u1218\u1265\u1276\u127d \u12e8\u1270\u1320\u1260\u1241 \u1293\u1278\u12cd\u1362"
+  },
+  "configdialogcancel": {
+    "message": "\u12ed\u1245\u122d"
+  },
+  "configdialogok": {
+    "message": "\u12a5\u123a"
+  },
+  "configdictionarytoolbutton": {
+    "message": "\u12e8\u1270\u1320\u1243\u121a \u1218\u12dd\u1308\u1260-\u1243\u120b\u1275 \u12eb\u1240\u1293\u1265\u1229..."
+  },
+  "configdictionarytooldescription": {
+    "message": "\u12e8\u120d\u12c8\u1323 \u12a5\u1329\u12ce\u127d\u1295 \u1208\u121b\u1260\u1300\u1275 \u12e8\u12a5\u122b\u1235\u12ce\u1295 \u1243\u120b\u1275 \u12c8\u12f0 \u12e8\u1270\u1320\u1243\u121a \u1218\u12dd\u1308\u1260-\u1243\u120b\u1271 \u12eb\u12ad\u1209\u1362"
+  },
+  "configdictionarytooltitle": {
+    "message": "\u12e8\u1270\u1320\u1243\u121a \u1218\u12dd\u1308\u1260-\u1243\u120b\u1276\u127d"
+  },
+  "configincognitomode": {
+    "message": "\u130d\u120b\u12ca\u1290\u1275 \u12e8\u1270\u120b\u1260\u1231 \u120d\u12c8\u1323\u12ce\u127d\u1295\u1293 \u12e8\u12a0\u1235\u1270\u12eb\u12e8\u1275 \u1325\u1246\u121b\u12ce\u127d\u1295 \u12a5\u1293 \u12a5\u1295\u12f2\u1201\u121d \u12e8\u1270\u1320\u1243\u121a \u1218\u12dd\u1308\u1260-\u1243\u120b\u1275\u1295\u121d \u12eb\u1230\u1293\u12ad\u1209"
+  },
+  "configinputassistancetitle": {
+    "message": "\u12e8\u130d\u1264\u1275 \u12a5\u122d\u12f3\u1273"
+  },
+  "configosscreditsdescription": {
+    "message": "\u12ed\u1205 \u1236\u134d\u1275\u12cc\u122d \u1260<a href=\"./credits_en.html\">\u12ad\u134d\u1275 \u121d\u1295\u132d \u1236\u134d\u1275\u12cc\u122d</a> \u1290\u12cd \u12a5\u12cd\u1295 \u120a\u1206\u1295 \u12e8\u127b\u1208\u12cd\u1362"
+  },
+  "configpreeditmethod": {
+    "message": "\u12e8\u130d\u1264\u1275 \u1201\u1290\u1273\u1366"
+  },
+  "configpreeditmethodkana": {
+    "message": "\u12ab\u1293"
+  },
+  "configpreeditmethodromaji": {
+    "message": "\u122e\u121b\u1302"
+  },
+  "configprivacytitle": {
+    "message": "\u130d\u120b\u12ca\u1290\u1275"
+  },
+  "configpunctuationmethod": {
+    "message": "\u12e8\u1235\u122d\u12d3\u1270 \u1290\u1325\u1265 \u1245\u1325\u1366"
+  },
+  "configselectionshortcut": {
+    "message": "\u12e8\u121d\u122d\u132b \u12a0\u124b\u122b\u132d\u1366"
+  },
+  "configselectionshortcutno": {
+    "message": "\u121d\u1295\u121d \u12a0\u124b\u122b\u132d \u12e8\u1208\u121d"
+  },
+  "configsessionkeymap": {
+    "message": "\u12e8\u1241\u120d\u134d \u12ab\u122d\u1273 \u1245\u1325"
+  },
+  "configsessionkeymapatok": {
+    "message": "ATOK"
+  },
+  "configsessionkeymapchromeos": {
+    "message": "Chrome OS"
+  },
+  "configsessionkeymapcustom": {
+    "message": "\u1265\u1301 \u12e8\u1241\u120d\u134d \u12ab\u122d\u1273"
+  },
+  "configsessionkeymapkotoeri": {
+    "message": "\u12ae\u1276\u12c8\u122a"
+  },
+  "configsessionkeymapmsime": {
+    "message": "MS-\u12a0\u12ed\u12a4\u121d\u12a2"
+  },
+  "configsettingstitle": {
+    "message": "\u12e8\u1303\u1353\u1295\u129b \u130d\u1265\u12d3\u1275 \u1245\u1295\u1265\u122e\u127d"
+  },
+  "configshiftkeymodeswitch": {
+    "message": "\u12e8Shift \u1241\u120d\u134d \u1201\u1290\u1273 \u12ed\u1240\u12ed\u1229\u1366"
+  },
+  "configshiftkeymodeswitchalphanumeric": {
+    "message": "\u134a\u12f0\u120d \u1241\u1325\u122d"
+  },
+  "configshiftkeymodeswitchkatakana": {
+    "message": "\u12ab\u1273\u12ab\u1293"
+  },
+  "configshiftkeymodeswitchoff": {
+    "message": "\u1320\u134d\u1277\u120d"
+  },
+  "configspacecharacterform": {
+    "message": "\u12e8\u12ad\u134d\u1270\u1275 \u130d\u1264\u1275 \u1245\u1325\u1366"
+  },
+  "configspacecharacterformfollow": {
+    "message": "\u12e8\u130d\u1264\u1275 \u1201\u1290\u1273\u1295 \u12ed\u12a8\u1270\u1209"
+  },
+  "configspacecharacterformfull": {
+    "message": "\u1219\u1209 \u1235\u134b\u1275"
+  },
+  "configspacecharacterformhalf": {
+    "message": "\u130d\u121b\u123d"
+  },
+  "configsuggestionssize": {
+    "message": "\u12e8\u12a0\u1235\u1270\u12eb\u12e8\u1275 \u1325\u1246\u121b\u12ce\u127d \u1265\u12db\u1275\u1366"
+  },
+  "configsuggesttitle": {
+    "message": "\u1260\u12a0\u1235\u1270\u12eb\u12e8\u1275 \u1320\u1241\u121d"
+  },
+  "configsymbolmethod": {
+    "message": "\u12e8\u121d\u120d\u12ad\u1275 \u1245\u1325\u1366"
+  },
+  "configuploadusagestats": {
+    "message": "\u12e8\u12a0\u1320\u1243\u1240\u121d \u1235\u1273\u1235\u1272\u12ad\u1235 \u12a5\u1293 \u12e8\u1265\u120d\u123d\u1275 \u122a\u1356\u122d\u1276\u127d \u1260\u122b\u1235-\u1230\u122d \u12c8\u12f0 Google \u12ed\u120b\u12a9"
+  },
+  "configuseautoimeturnoff": {
+    "message": "\u1260\u122b\u1235-\u1230\u122d \u12c8\u12f0 \u130d\u121b\u123d-\u1235\u134b\u1275 \u12ed\u1240\u12ed\u1229"
+  },
+  "configusedictionarysuggest": {
+    "message": "\u12e8\u1235\u122d\u12d3\u1275 \u1218\u12dd\u1308\u1260-\u1243\u120b\u1275\u1295 \u12ed\u1320\u1240\u1219"
+  },
+  "configusehistorysuggest": {
+    "message": "\u12e8\u130d\u1264\u1275 \u1273\u122a\u12ad\u1295 \u12ed\u1320\u1240\u1219"
+  },
+  "ctrl": {
+    "message": "\u1218\u1246\u1323\u1320\u122a\u12eb"
+  },
+  "current_keyboard_prefix": {
+    "message": "\u12a0\u1201\u1295 \u1270\u1218\u122d\u1326 \u12eb\u1208 \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 "
+  },
+  "current_lang": {
+    "message": "\u12e8\u130d\u1265\u12d3\u1275 \u124b\u1295\u124b \u127b\u12ed\u1295\u129b \u1290\u12cd"
+  },
+  "current_punc": {
+    "message": "\u12e8\u1235\u122d\u12d3\u1270 \u1290\u1325\u1265 \u1235\u134b\u1275 \u1219\u1209 \u1290\u12cd"
+  },
+  "current_sbc": {
+    "message": "\u12e8\u1241\u121d\u134a \u1235\u134b\u1275 \u1219\u1209 \u1290\u12cd"
+  },
+  "cz_cze_settings_page": {
+    "message": "\u12e8\u127c\u12ad\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "cz_qwerty_cze_settings_page": {
+    "message": "\u12e8\u127c\u12ad\u129b Qwerty \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "d83c_dc04": {
+    "message": "\u12e8\u121b\u1205\u1306\u1295\u130d \u1230\u12f5\u122d"
+  },
+  "d83c_dccf": {
+    "message": "\u12e8\u1306\u12a8\u122d \u12ab\u122d\u1273"
+  },
+  "d83c_dd70": {
+    "message": "\u12e8\u12f0\u121d \u12a0\u12ed\u1290\u1275 A"
+  },
+  "d83c_dd71": {
+    "message": "\u12e8\u12f0\u121d \u12a0\u12ed\u1290\u1275 B"
+  },
+  "d83c_dd7e": {
+    "message": "\u12e8\u12f0\u121d \u12a0\u12ed\u1290\u1275 O"
+  },
+  "d83c_dd7f": {
+    "message": "\u1218\u12aa\u1293 \u121b\u1246\u121a\u12eb"
+  },
+  "d83c_dd8e": {
+    "message": "\u12e8\u12f0\u121d \u12a0\u12ed\u1290\u1275 AB"
+  },
+  "d83c_dd91": {
+    "message": "CL"
+  },
+  "d83c_dd92": {
+    "message": "\u12a0\u122a\u134d"
+  },
+  "d83c_dd93": {
+    "message": "\u1290\u133b"
+  },
+  "d83c_dd94": {
+    "message": "\u1218\u1273\u12c8\u1242\u12eb"
+  },
+  "d83c_dd95": {
+    "message": "\u12a0\u12f2\u1235"
+  },
+  "d83c_dd96": {
+    "message": "\u1295\u130d"
+  },
+  "d83c_dd97": {
+    "message": "\u12a5\u123a"
+  },
+  "d83c_dd98": {
+    "message": "\u12a4\u1235\u12a6\u12a4\u1235"
+  },
+  "d83c_dd99": {
+    "message": "\u120b\u12ed!"
+  },
+  "d83c_dd9a": {
+    "message": "\u12a8"
+  },
+  "d83c_de01": {
+    "message": "\u1303\u1353\u1295\u129b \u1243\u120d \u00e2\u20ac\u02dc\u12a5\u12da\u1205\u00e2\u20ac\u2122"
+  },
+  "d83c_de02": {
+    "message": "\u1303\u1353\u1295\u129b \u1243\u120d \u00e2\u20ac\u02dc\u12a0\u1308\u120d\u130d\u120e\u1275\u00e2\u20ac\u2122"
+  },
+  "d83c_de1a": {
+    "message": "\u1303\u1353\u1295\u129b \u1243\u120d \u00ab\u1290\u133b\u00bb"
+  },
+  "d83c_de2f": {
+    "message": "\u1303\u1353\u1295\u129b \u1243\u120d \u00ab\u1270\u12ed\u12df\u120d\u00bb"
+  },
+  "d83c_de32": {
+    "message": "\u1303\u1353\u1295\u129b \u1243\u120d \u00e2\u20ac\u02dc\u1270\u12a8\u120d\u12ad\u120f\u120d\u00e2\u20ac\u2122"
+  },
+  "d83c_de33": {
+    "message": "\u127b\u12ed\u1295\u129b \u1243\u120d \u00ab\u1266\u1273 \u12ed\u1308\u129b\u120d\u00bb"
+  },
+  "d83c_de34": {
+    "message": "\u127b\u12ed\u1295\u129b \u1243\u120d \u00ab\u12a5\u1208\u134d\u00bb"
+  },
+  "d83c_de35": {
+    "message": "\u127b\u12ed\u1295\u129b \u1243\u120d \u00ab\u1219\u1209\u00bb"
+  },
+  "d83c_de36": {
+    "message": "\u1303\u1353\u1295\u129b \u1243\u120d \u00ab\u12ad\u134d\u12eb\u12ce\u127d\u00bb"
+  },
+  "d83c_de37": {
+    "message": "\u1303\u1353\u1295\u129b \u1243\u120d \u00ab\u12c8\u122d\u1203\u12ca\u00bb"
+  },
+  "d83c_de38": {
+    "message": "\u127b\u12ed\u1295\u129b \u1243\u120d \u00ab\u1218\u1270\u130d\u1260\u122a\u12eb\u00bb"
+  },
+  "d83c_de39": {
+    "message": "\u1303\u1353\u1295\u129b \u1243\u120d \u00ab\u1245\u1293\u123d\u00bb"
+  },
+  "d83c_de3a": {
+    "message": "\u127b\u12ed\u1295\u129b \u1243\u120d \u00ab\u1260\u1235\u122b \u120b\u12ed\u00bb"
+  },
+  "d83c_de50": {
+    "message": "\u1303\u1353\u1295\u129b \u1243\u120d \u00ab\u1325\u1245\u121d\u00bb"
+  },
+  "d83c_de51": {
+    "message": "\u127b\u12ed\u1295\u129b \u1243\u120d \u00ab\u1338\u12f5\u124b\u120d\u00bb"
+  },
+  "d83c_df00": {
+    "message": "\u12a0\u12cd\u120e \u1295\u134b\u1235"
+  },
+  "d83c_df01": {
+    "message": "\u132d\u130b\u130b\u121b"
+  },
+  "d83c_df02": {
+    "message": "\u12e3\u1295\u1325\u120b"
+  },
+  "d83c_df03": {
+    "message": "\u12e8\u121b\u1273 \u12ad\u12cb\u12ad\u1265\u1275"
+  },
+  "d83c_df04": {
+    "message": "\u1300\u1295\u1260\u122d \u1260\u1270\u122b\u122b\u12ce\u127d \u120b\u12ed \u1235\u1275\u12c8\u1323"
+  },
+  "d83c_df05": {
+    "message": "\u1300\u1295\u1260\u122d \u1235\u1275\u12c8\u1323"
+  },
+  "d83c_df06": {
+    "message": "\u12a8\u1270\u121b \u1260\u12a0\u1218\u123b\u123d \u120b\u12ed"
+  },
+  "d83c_df07": {
+    "message": "\u1300\u1295\u1260\u122d \u1235\u1275\u1320\u120d\u1245"
+  },
+  "d83c_df08": {
+    "message": "\u1240\u1235\u1270 \u12f0\u1218\u1293"
+  },
+  "d83c_df09": {
+    "message": "\u12e8\u121b\u1273 \u12f5\u120d\u12f5\u12ed"
+  },
+  "d83c_df0a": {
+    "message": "\u121b\u12d5\u1260\u120d"
+  },
+  "d83c_df0b": {
+    "message": "\u12a5\u1233\u1270 \u130e\u1218\u122b"
+  },
+  "d83c_df0c": {
+    "message": "\u134d\u1296\u1270 \u1210\u120a\u1265"
+  },
+  "d83c_df0d": {
+    "message": "\u12e8\u12a0\u12cd\u122e\u1353-\u12a0\u134d\u122a\u12ab \u1209\u120d"
+  },
+  "d83c_df0e": {
+    "message": "\u12e8\u12a0\u121c\u122a\u12ab\u12ce\u127d \u1209\u120d"
+  },
+  "d83c_df0f": {
+    "message": "\u12e8\u12a5\u1235\u12eb-\u12a0\u12cd\u1235\u1275\u122b\u120a\u12eb \u1209\u120d"
+  },
+  "d83c_df10": {
+    "message": "\u12e8\u12ac\u1295\u1275\u122e\u1236\u127d \u1209\u120d"
+  },
+  "d83c_df11": {
+    "message": "\u12a0\u12f2\u1235 \u1328\u1228\u1243"
+  },
+  "d83c_df12": {
+    "message": "\u12e8\u1230\u121d \u1229\u1265 \u1328\u1228\u1243"
+  },
+  "d83c_df13": {
+    "message": "\u12e8\u1218\u1300\u1218\u122a\u12eb \u1229\u1265 \u1328\u1228\u1243"
+  },
+  "d83c_df14": {
+    "message": "\u12e8\u1230\u121d \u1328\u1228\u1243"
+  },
+  "d83c_df15": {
+    "message": "\u1219\u1209 \u1328\u1228\u1243"
+  },
+  "d83c_df16": {
+    "message": "\u12e8\u12f0\u1260\u12d8\u12d8 \u1328\u1228\u1243"
+  },
+  "d83c_df17": {
+    "message": "\u12e8\u1218\u1328\u1228\u123b \u1229\u1265 \u1328\u1228\u1243"
+  },
+  "d83c_df18": {
+    "message": "\u12e8\u12f0\u1260\u12d8\u12d8 \u1229\u1265 \u1328\u1228\u1243"
+  },
+  "d83c_df19": {
+    "message": "\u1229\u1265 \u1328\u1228\u1243"
+  },
+  "d83c_df1a": {
+    "message": "\u12e8\u12a0\u12f2\u1235 \u1328\u1228\u1243 \u134a\u1275"
+  },
+  "d83c_df1b": {
+    "message": "\u12e8\u1218\u1300\u1218\u122a\u12eb \u1229\u1265 \u1328\u1228\u1243 \u134a\u1275"
+  },
+  "d83c_df1c": {
+    "message": "\u12e8\u1218\u1328\u1228\u123b \u1229\u1265 \u1328\u1228\u1243 \u134a\u1275"
+  },
+  "d83c_df1d": {
+    "message": "\u12e8\u1219\u1209 \u1328\u1228\u1243 \u134a\u1275"
+  },
+  "d83c_df1e": {
+    "message": "\u12e8\u1338\u1210\u12ed \u134a\u1275"
+  },
+  "d83c_df1f": {
+    "message": "\u1265\u1229\u1205 \u12ae\u12a8\u1265"
+  },
+  "d83c_df20": {
+    "message": "\u1270\u12c8\u122d\u12cb\u122a \u12ae\u12a8\u1265"
+  },
+  "d83c_df30": {
+    "message": "\u12e8\u1208\u12cd\u12dd \u12a0\u12ed\u1290\u1275"
+  },
+  "d83c_df31": {
+    "message": "\u12a5\u1295\u1261\u1325"
+  },
+  "d83c_df32": {
+    "message": "\u1201\u120c \u12a0\u1228\u1295\u1313\u12f4 \u12db\u134c"
+  },
+  "d83c_df33": {
+    "message": "\u12a0\u122d\u130b\u134a \u12db\u134d"
+  },
+  "d83c_df34": {
+    "message": "\u12d8\u121d\u1263\u1263"
+  },
+  "d83c_df35": {
+    "message": "\u1260\u1208\u1235"
+  },
+  "d83c_df37": {
+    "message": "\u1271\u120a\u1355"
+  },
+  "d83c_df38": {
+    "message": "\u127c\u122a \u1265\u120e\u1230\u121d \u12a0\u1260\u1263"
+  },
+  "d83c_df39": {
+    "message": "\u133d\u1308\u122c\u12f3"
+  },
+  "d83c_df3a": {
+    "message": "\u1202\u1262\u1235\u12a8\u1235"
+  },
+  "d83c_df3b": {
+    "message": "\u12a0\u12f0\u12ed \u12a0\u1260\u1263"
+  },
+  "d83c_df3c": {
+    "message": "\u121b\u1260\u1265"
+  },
+  "d83c_df3d": {
+    "message": "\u1260\u1246\u120e"
+  },
+  "d83c_df3e": {
+    "message": "\u12e8\u1229\u12dd \u1270\u12ad\u120d"
+  },
+  "d83c_df3f": {
+    "message": "\u12a5\u133d"
+  },
+  "d83c_df40": {
+    "message": "\u1263\u1208\u12a0\u122b\u1275 \u1245\u1320\u120d \u12cd\u12f5\u121b"
+  },
+  "d83c_df41": {
+    "message": "\u12e8\u121c\u1355\u120d \u1245\u1320\u120d"
+  },
+  "d83c_df42": {
+    "message": "\u1228\u130b\u134a \u1245\u1320\u120e\u127d"
+  },
+  "d83c_df43": {
+    "message": "\u1295\u134b\u1235 \u120b\u12ed \u12eb\u1208 \u1295\u134b\u1235"
+  },
+  "d83c_df44": {
+    "message": "\u12e8\u1305\u1265 \u1325\u120b"
+  },
+  "d83c_df45": {
+    "message": "\u1272\u121b\u1272\u121d"
+  },
+  "d83c_df46": {
+    "message": "\u1303\u1260\u122d\u1303\u1295"
+  },
+  "d83c_df47": {
+    "message": "\u12c8\u12ed\u1296\u127d"
+  },
+  "d83c_df48": {
+    "message": "\u1210\u1265\u1210\u1265"
+  },
+  "d83c_df49": {
+    "message": "\u1210\u1265\u1210\u1265"
+  },
+  "d83c_df4a": {
+    "message": "\u1273\u1295\u1300\u122a\u1295"
+  },
+  "d83c_df4b": {
+    "message": "\u120e\u121a"
+  },
+  "d83c_df4c": {
+    "message": "\u1219\u12dd"
+  },
+  "d83c_df4d": {
+    "message": "\u12a0\u1293\u1293\u1235"
+  },
+  "d83c_df4e": {
+    "message": "\u1240\u12ed \u1356\u121d"
+  },
+  "d83c_df4f": {
+    "message": "\u12a0\u1228\u1295\u1313\u12f4 \u1356\u121d"
+  },
+  "d83c_df50": {
+    "message": "\u1272\u1292"
+  },
+  "d83c_df51": {
+    "message": "\u12ae\u12ad"
+  },
+  "d83c_df52": {
+    "message": "\u12a5\u1295\u1306\u122a"
+  },
+  "d83c_df53": {
+    "message": "\u12a5\u1295\u1306\u122a"
+  },
+  "d83c_df54": {
+    "message": "\u1203\u121d\u1260\u122d\u1308\u122d"
+  },
+  "d83c_df55": {
+    "message": "\u12e8\u1352\u12db \u1241\u122b\u132d"
+  },
+  "d83c_df56": {
+    "message": "\u1235\u130b"
+  },
+  "d83c_df57": {
+    "message": "\u12e8\u12f6\u122e \u12a5\u130d\u122d"
+  },
+  "d83c_df58": {
+    "message": "\u12e8\u1270\u130b\u1308\u1228 \u1229\u12dd"
+  },
+  "d83c_df59": {
+    "message": "\u12f5\u1261\u120d\u1261\u120d \u1229\u12dd"
+  },
+  "d83c_df5a": {
+    "message": "\u12e8\u1260\u1230\u1208 \u1229\u12dd"
+  },
+  "d83c_df5b": {
+    "message": "\u12a5\u122d\u12f5 \u12a5\u1293 \u1229\u12dd"
+  },
+  "d83c_df5c": {
+    "message": "\u122b\u1218\u1295"
+  },
+  "d83c_df5d": {
+    "message": "\u1235\u1353\u130c\u1272"
+  },
+  "d83c_df5e": {
+    "message": "\u12f3\u1266"
+  },
+  "d83c_df5f": {
+    "message": "\u12f5\u1295\u127d \u1325\u1265\u1235"
+  },
+  "d83c_df60": {
+    "message": "\u12e8\u1270\u1320\u1260\u1230 \u12f5\u1295\u127d"
+  },
+  "d83c_df61": {
+    "message": "\u121e\u127a"
+  },
+  "d83c_df62": {
+    "message": "\u12a6\u12f0\u1295"
+  },
+  "d83c_df63": {
+    "message": "\u1231\u123a"
+  },
+  "d83c_df64": {
+    "message": "\u12e8\u1270\u1320\u1260\u1230 \u123d\u122a\u121d\u1355"
+  },
+  "d83c_df65": {
+    "message": "\u12e8\u12a0\u1233 \u12ac\u12ad"
+  },
+  "d83c_df66": {
+    "message": "\u1208\u1235\u120b\u120b \u12a0\u12ed\u1235\u12ad\u122c\u121d"
+  },
+  "d83c_df67": {
+    "message": "\u12e8\u1260\u1228\u12f6 \u12a0\u12ed\u1235\u12ad\u122c\u121d"
+  },
+  "d83c_df68": {
+    "message": "\u12a0\u12ed\u1235\u12ad\u122c\u121d"
+  },
+  "d83c_df69": {
+    "message": "\u12f6\u1293\u1275"
+  },
+  "d83c_df6a": {
+    "message": "\u1265\u1235\u12a9\u1275"
+  },
+  "d83c_df6b": {
+    "message": "\u127e\u12ae\u120c\u1275"
+  },
+  "d83c_df6c": {
+    "message": "\u12a8\u1228\u121c\u120b"
+  },
+  "d83c_df6d": {
+    "message": "\u120a\u120a\u1356\u1355"
+  },
+  "d83c_df6e": {
+    "message": "\u12ab\u1235\u1273\u122d\u12f5"
+  },
+  "d83c_df6f": {
+    "message": "\u12e8\u121b\u122d \u1308\u1323\u1263"
+  },
+  "d83c_df70": {
+    "message": "\u12ac\u12ad"
+  },
+  "d83c_df71": {
+    "message": "\u1264\u1295\u1276"
+  },
+  "d83c_df72": {
+    "message": "\u12c8\u1325"
+  },
+  "d83c_df73": {
+    "message": "\u1218\u1325\u1260\u123b"
+  },
+  "d83c_df74": {
+    "message": "\u1239\u12ab \u12a5\u1293 \u1262\u120b"
+  },
+  "d83c_df75": {
+    "message": "\u12e8\u123b\u12ed \u1218\u1320\u132b"
+  },
+  "d83c_df76": {
+    "message": "\u1233\u12ac"
+  },
+  "d83c_df77": {
+    "message": "\u12c8\u12ed\u1295"
+  },
+  "d83c_df78": {
+    "message": "\u12ae\u12ad\u1274\u120d"
+  },
+  "d83c_df79": {
+    "message": "\u12e8\u1210\u1229\u122d \u1218\u1320\u1325"
+  },
+  "d83c_df7a": {
+    "message": "\u1262\u122b"
+  },
+  "d83c_df7b": {
+    "message": "\u12e8\u1262\u122b \u1218\u1320\u132b\u12ce\u127d"
+  },
+  "d83c_df7c": {
+    "message": "\u12e8\u1215\u133b\u1295 \u1321\u1326"
+  },
+  "d83c_df80": {
+    "message": "\u122a\u1263\u1295"
+  },
+  "d83c_df81": {
+    "message": "\u1235\u1326\u1273"
+  },
+  "d83c_df82": {
+    "message": "\u12e8\u120d\u12f0\u1275 \u12ac\u12ad"
+  },
+  "d83c_df83": {
+    "message": "\u1303\u12ad-\u12a6-\u120b\u1295\u1270\u122d\u1295"
+  },
+  "d83c_df84": {
+    "message": "\u12e8\u1308\u1293 \u12db\u134d"
+  },
+  "d83c_df85": {
+    "message": "\u12a0\u1263\u1263 \u1308\u1293"
+  },
+  "d83c_df86": {
+    "message": "\u122a\u127d\u1275"
+  },
+  "d83c_df87": {
+    "message": "\u12a0\u1265\u1208\u132d\u120b\u132d"
+  },
+  "d83c_df88": {
+    "message": "\u134a\u129b"
+  },
+  "d83c_df89": {
+    "message": "\u12e8\u12f5\u130d\u1235 \u120b\u12ed \u1356\u1350\u122d"
+  },
+  "d83c_df8a": {
+    "message": "\u12ae\u1295\u1348\u1272"
+  },
+  "d83c_df8b": {
+    "message": "\u12e8\u12db\u134d \u12a5\u1293 \u12e8\u12c8\u1228\u1240\u1275 \u1241\u122b\u132e\u127d"
+  },
+  "d83c_df8c": {
+    "message": "\u12e8\u1270\u12eb\u12eb\u12d9 \u1263\u1295\u12f2\u122b\u12ce\u127d"
+  },
+  "d83c_df8d": {
+    "message": "\u12e8\u1353\u12ed\u1295 \u12f2\u12ae\u122d"
+  },
+  "d83c_df8e": {
+    "message": "\u12a0\u123b\u1295\u1309\u120a\u1276\u127d"
+  },
+  "d83c_df8f": {
+    "message": "\u12e8\u12ab\u122d\u1355 \u12e5\u1228\u1275"
+  },
+  "d83c_df90": {
+    "message": "\u12e8\u1295\u134b\u1235 \u1243\u132d\u120d"
+  },
+  "d83c_df91": {
+    "message": "\u1328\u1228\u1243\u1295 \u1218\u1218\u120d\u12a8\u1275"
+  },
+  "d83c_df92": {
+    "message": "\u12e8\u1270\u121b\u122a \u1266\u122d\u1233"
+  },
+  "d83c_df93": {
+    "message": "\u12e8\u121d\u122d\u1243\u1275 \u1246\u1265"
+  },
+  "d83c_dfa0": {
+    "message": "\u1270\u123d\u12a8\u122d\u12ab\u122a \u1348\u1228\u1235"
+  },
+  "d83c_dfa1": {
+    "message": "\u12e8\u134c\u122a\u1235 \u121b\u123d\u12a8\u122d\u12a8\u122a\u12eb"
+  },
+  "d83c_dfa2": {
+    "message": "\u122e\u1208\u122d \u12ae\u1235\u1270\u122d"
+  },
+  "d83c_dfa3": {
+    "message": "\u12a0\u1233 \u121b\u1325\u1218\u12f5"
+  },
+  "d83c_dfa4": {
+    "message": "\u121b\u12ed\u12ad\u122e\u134e\u1295"
+  },
+  "d83c_dfa5": {
+    "message": "\u12e8\u134a\u120d\u121d \u12ab\u121c\u122b"
+  },
+  "d83c_dfa6": {
+    "message": "\u134a\u120d\u121d"
+  },
+  "d83c_dfa7": {
+    "message": "\u12e8\u1306\u122e \u121b\u12f3\u1218\u132b"
+  },
+  "d83c_dfa8": {
+    "message": "\u12e8\u1240\u1208\u121d \u1264\u1270-\u1235\u12d5\u120d"
+  },
+  "d83c_dfa9": {
+    "message": "\u1228\u1305\u121d \u1246\u1265"
+  },
+  "d83c_dfaa": {
+    "message": "\u1230\u122d\u12a8\u1235"
+  },
+  "d83c_dfab": {
+    "message": "\u1272\u12ac\u1275"
+  },
+  "d83c_dfac": {
+    "message": "\u12ad\u120b\u1350\u122d\u1266\u122d\u12f5"
+  },
+  "d83c_dfad": {
+    "message": "\u12e8\u134a\u1275 \u132d\u1295\u1265\u120d"
+  },
+  "d83c_dfae": {
+    "message": "\u12e8\u126a\u12f2\u12ee \u1328\u12cb\u1273"
+  },
+  "d83c_dfaf": {
+    "message": "\u12e8\u1218\u1203\u120d \u12d2\u120b\u121b"
+  },
+  "d83c_dfb0": {
+    "message": "\u12e8\u1241\u121b\u122d \u121b\u123d\u1295"
+  },
+  "d83c_dfb1": {
+    "message": "\u1262\u120b\u122d\u12f5"
+  },
+  "d83c_dfb2": {
+    "message": "\u12e8\u1328\u12cb\u1273 \u12d5\u1323 \u12a9\u1265"
+  },
+  "d83c_dfb3": {
+    "message": "\u1266\u12cd\u120a\u1295\u130d"
+  },
+  "d83c_dfb4": {
+    "message": "\u12e8\u1218\u132b\u12c8\u127b \u12ab\u122d\u1273"
+  },
+  "d83c_dfb5": {
+    "message": "\u12e8\u1219\u12da\u1243 \u1296\u1273"
+  },
+  "d83c_dfb6": {
+    "message": "\u12e8\u1219\u12da\u1243 \u1296\u1273\u12ce\u127d"
+  },
+  "d83c_dfb7": {
+    "message": "\u1233\u12ad\u134e\u1295"
+  },
+  "d83c_dfb8": {
+    "message": "\u130a\u1273\u122d"
+  },
+  "d83c_dfb9": {
+    "message": "\u1352\u12eb\u1296"
+  },
+  "d83c_dfba": {
+    "message": "\u1325\u1229\u1295\u1263"
+  },
+  "d83c_dfbb": {
+    "message": "\u126b\u12ee\u120a\u1295"
+  },
+  "d83c_dfbc": {
+    "message": "\u12e8\u1219\u12da\u1243 \u12f5\u122d\u1230\u1275"
+  },
+  "d83c_dfbd": {
+    "message": "\u12e8\u1218\u122e\u132b \u1353\u12ab\u12cd\u1275"
+  },
+  "d83c_dfbe": {
+    "message": "\u1274\u1292\u1235"
+  },
+  "d83c_dfbf": {
+    "message": "\u1235\u12aa"
+  },
+  "d83c_dfc0": {
+    "message": "\u1245\u122d\u132b\u1275 \u12b3\u1235"
+  },
+  "d83c_dfc1": {
+    "message": "\u12e8\u12ab\u122c\u12ce\u127d \u1263\u1295\u12f2\u122b"
+  },
+  "d83c_dfc2": {
+    "message": "\u12e8\u1260\u1228\u12f6 \u1270\u1295\u1238\u122b\u1273\u127d"
+  },
+  "d83c_dfc3": {
+    "message": "\u122f\u132d"
+  },
+  "d83c_dfc4": {
+    "message": "\u1230\u122d\u134a\u1295\u130d"
+  },
+  "d83c_dfc6": {
+    "message": "\u12cb\u1295\u132b"
+  },
+  "d83c_dfc7": {
+    "message": "\u12e8\u1348\u1228\u1235 \u12a5\u123d\u1245\u12f5\u121d\u12f5\u121d"
+  },
+  "d83c_dfc8": {
+    "message": "\u12e8\u12a0\u121c\u122a\u12ab \u1349\u1275\u1266\u120d"
+  },
+  "d83c_dfc9": {
+    "message": "\u12a5\u130d\u122d \u12b3\u1235"
+  },
+  "d83c_dfca": {
+    "message": "\u12cb\u1293\u1270\u129b"
+  },
+  "d83c_dfe0": {
+    "message": "\u1264\u1275"
+  },
+  "d83c_dfe1": {
+    "message": "\u1264\u1275"
+  },
+  "d83c_dfe2": {
+    "message": "\u12e8\u1262\u122e \u1205\u1295\u133b"
+  },
+  "d83c_dfe3": {
+    "message": "\u12e8\u1303\u1353\u1295 \u1356\u1235\u1273 \u1264\u1275"
+  },
+  "d83c_dfe4": {
+    "message": "\u12e8\u12a0\u12cd\u122e\u1353 \u1356\u1235\u1273 \u1264\u1275"
+  },
+  "d83c_dfe5": {
+    "message": "\u1206\u1235\u1352\u1273\u120d"
+  },
+  "d83c_dfe6": {
+    "message": "\u1263\u1295\u12ad"
+  },
+  "d83c_dfe7": {
+    "message": "\u12a4\u1272\u12a4\u121d"
+  },
+  "d83c_dfe8": {
+    "message": "\u1206\u1274\u120d"
+  },
+  "d83c_dfe9": {
+    "message": "\u12e8\u134d\u1245\u122d \u1206\u1274\u120d"
+  },
+  "d83c_dfea": {
+    "message": "\u1231\u1245"
+  },
+  "d83c_dfeb": {
+    "message": "\u1275\u121d\u1205\u122d\u1275 \u1264\u1275"
+  },
+  "d83c_dfec": {
+    "message": "\u1218\u12f0\u1265\u122d"
+  },
+  "d83c_dfed": {
+    "message": "\u134b\u1265\u122a\u12ab"
+  },
+  "d83c_dfee": {
+    "message": "\u1240\u1295 \u134b\u1296\u1235"
+  },
+  "d83c_dfef": {
+    "message": "\u12e8\u1303\u1353\u1295 \u1264\u1270\u1218\u1295\u130d\u1235\u1275"
+  },
+  "d83c_dff0": {
+    "message": "\u12e8\u12a0\u12cd\u122e\u1353 \u1264\u1270\u1218\u1295\u130d\u1235\u1275"
+  },
+  "d83d_dc00": {
+    "message": "\u12a0\u12ed\u1325"
+  },
+  "d83d_dc01": {
+    "message": "\u12a0\u12ed\u1325"
+  },
+  "d83d_dc02": {
+    "message": "\u1260\u122c"
+  },
+  "d83d_dc03": {
+    "message": "\u12e8\u12cd\u1203 \u130e\u123d"
+  },
+  "d83d_dc04": {
+    "message": "\u120b\u121d"
+  },
+  "d83d_dc06": {
+    "message": "\u1290\u1265\u122d"
+  },
+  "d83d_dc07": {
+    "message": "\u1325\u1295\u1278\u120d"
+  },
+  "d83d_dc08": {
+    "message": "\u12f5\u1218\u1275"
+  },
+  "d83d_dc09": {
+    "message": "\u12f5\u122b\u130e\u1295"
+  },
+  "d83d_dc0a": {
+    "message": "\u12a0\u12de"
+  },
+  "d83d_dc0b": {
+    "message": "\u12a0\u1233 \u1290\u1263\u122a"
+  },
+  "d83d_dc0c": {
+    "message": "\u1240\u1295\u12f5 \u12a0\u12cd\u1323"
+  },
+  "d83d_dc0d": {
+    "message": "\u12a5\u1263\u1265"
+  },
+  "d83d_dc0e": {
+    "message": "\u1348\u1228\u1235"
+  },
+  "d83d_dc0f": {
+    "message": "\u1260\u130d \u12a0\u12cd\u122b"
+  },
+  "d83d_dc10": {
+    "message": "\u134d\u12e8\u120d"
+  },
+  "d83d_dc11": {
+    "message": "\u1260\u130d"
+  },
+  "d83d_dc12": {
+    "message": "\u1326\u1323"
+  },
+  "d83d_dc13": {
+    "message": "\u12a0\u12cd\u122b \u12f6\u122e"
+  },
+  "d83d_dc14": {
+    "message": "\u12f6\u122e"
+  },
+  "d83d_dc15": {
+    "message": "\u12cd\u123b"
+  },
+  "d83d_dc16": {
+    "message": "\u12a0\u1233\u121b"
+  },
+  "d83d_dc17": {
+    "message": "\u12a8\u122d\u12a8\u122e"
+  },
+  "d83d_dc18": {
+    "message": "\u12dd\u1206\u1295"
+  },
+  "d83d_dc19": {
+    "message": "\u12a6\u12ad\u1275\u1350\u1235"
+  },
+  "d83d_dc1a": {
+    "message": "\u1245\u122d\u134a\u1275"
+  },
+  "d83d_dc1b": {
+    "message": "\u1290\u134d\u1233\u1275"
+  },
+  "d83d_dc1c": {
+    "message": "\u1309\u1295\u12f3\u1295"
+  },
+  "d83d_dc1d": {
+    "message": "\u1295\u1265"
+  },
+  "d83d_dc1e": {
+    "message": "\u120c\u12f2 \u1262\u1275\u120d"
+  },
+  "d83d_dc1f": {
+    "message": "\u12a0\u1233"
+  },
+  "d83d_dc20": {
+    "message": "\u12e8\u12f1\u122d \u12a0\u1233"
+  },
+  "d83d_dc21": {
+    "message": "\u1270\u1290\u134a \u12a0\u1233"
+  },
+  "d83d_dc22": {
+    "message": "\u12a4\u120a"
+  },
+  "d83d_dc23": {
+    "message": "\u12e8\u121d\u1275\u1348\u1208\u1348\u120d \u132b\u1279\u1275"
+  },
+  "d83d_dc24": {
+    "message": "\u12e8\u1205\u133b\u1295 \u132b\u1329\u1275 \u134a\u1275"
+  },
+  "d83d_dc25": {
+    "message": "\u1205\u133b\u1295 \u132b\u1329\u1275"
+  },
+  "d83d_dc26": {
+    "message": "\u12c8\u134d"
+  },
+  "d83d_dc27": {
+    "message": "\u1354\u1295\u130d\u12ca\u1295"
+  },
+  "d83d_dc28": {
+    "message": "\u12ae\u12cb\u120b"
+  },
+  "d83d_dc29": {
+    "message": "\u1351\u12f5\u120d"
+  },
+  "d83d_dc2a": {
+    "message": "\u1263\u1208\u12a0\u1295\u12f5 \u123b\u129b \u130d\u1218\u120d"
+  },
+  "d83d_dc2b": {
+    "message": "\u1263\u1208\u1201\u1208\u1275 \u123b\u129b \u130d\u1218\u120d"
+  },
+  "d83d_dc2c": {
+    "message": "\u12f6\u120d\u134a\u1295"
+  },
+  "d83d_dc2d": {
+    "message": "\u12e8\u12a0\u12ed\u1325 \u134a\u1275"
+  },
+  "d83d_dc2e": {
+    "message": "\u12e8\u120b\u121d \u134a\u1275"
+  },
+  "d83d_dc2f": {
+    "message": "\u12e8\u1273\u12ed\u1308\u122d \u134a\u1275"
+  },
+  "d83d_dc30": {
+    "message": "\u12e8\u1325\u1295\u1278\u120d \u134a\u1275"
+  },
+  "d83d_dc31": {
+    "message": "\u12e8\u12f5\u1218\u1275 \u134a\u1275"
+  },
+  "d83d_dc32": {
+    "message": "\u12e8\u12f5\u122b\u130e\u1295 \u134a\u1275"
+  },
+  "d83d_dc33": {
+    "message": "\u12cd\u1203 \u12e8\u121a\u1270\u134b \u12a0\u1233 \u1290\u1263\u122a"
+  },
+  "d83d_dc34": {
+    "message": "\u12e8\u1348\u1228\u1235 \u134a\u1275"
+  },
+  "d83d_dc35": {
+    "message": "\u12e8\u1326\u1323 \u134a\u1275"
+  },
+  "d83d_dc36": {
+    "message": "\u12e8\u12cd\u123b \u134a\u1275"
+  },
+  "d83d_dc37": {
+    "message": "\u12e8\u12a0\u1233\u121b \u134a\u1275"
+  },
+  "d83d_dc38": {
+    "message": "\u12e8\u12a5\u1295\u1241\u122b\u122a\u1275 \u134a\u1275"
+  },
+  "d83d_dc39": {
+    "message": "\u12e8\u1203\u121d\u1235\u1270\u122d \u134a\u1275"
+  },
+  "d83d_dc3a": {
+    "message": "\u12e8\u1270\u12a9\u120b \u134a\u1275"
+  },
+  "d83d_dc3b": {
+    "message": "\u12e8\u12f5\u1265 \u134a\u1275"
+  },
+  "d83d_dc3c": {
+    "message": "\u12e8\u1353\u1295\u12f3 \u134a\u1275"
+  },
+  "d83d_dc3d": {
+    "message": "\u12e8\u12a0\u1233\u121b \u12a0\u134d\u1295\u132b"
+  },
+  "d83d_dc3e": {
+    "message": "\u1218\u12f3\u134d"
+  },
+  "d83d_dc40": {
+    "message": "\u12a0\u12ed\u1296\u127d"
+  },
+  "d83d_dc42": {
+    "message": "\u1306\u122e"
+  },
+  "d83d_dc43": {
+    "message": "\u12a0\u134d\u1295\u132b"
+  },
+  "d83d_dc44": {
+    "message": "\u12a0\u134d"
+  },
+  "d83d_dc45": {
+    "message": "\u121d\u120b\u1235"
+  },
+  "d83d_dc46": {
+    "message": "\u1323\u1275 \u12c8\u12f0\u120b\u12ed"
+  },
+  "d83d_dc47": {
+    "message": "\u1323\u1275 \u12c8\u12f0\u1273\u127d"
+  },
+  "d83d_dc48": {
+    "message": "\u12e8\u130d\u122b \u1323\u1275"
+  },
+  "d83d_dc49": {
+    "message": "\u12e8\u1240\u129d \u1323\u1275"
+  },
+  "d83d_dc4a": {
+    "message": "\u12e8\u1270\u1328\u1260\u1320 \u1261\u1322"
+  },
+  "d83d_dc4b": {
+    "message": "\u12a5\u1305 \u121b\u12cd\u1208\u1265\u1208\u1265"
+  },
+  "d83d_dc4c": {
+    "message": "\u12e8\u12a5\u123a \u12a5\u1305 \u121d\u120d\u12ad\u1275"
+  },
+  "d83d_dc4d": {
+    "message": "\u12a0\u122a\u134d \u1290\u12cd"
+  },
+  "d83d_dc4e": {
+    "message": "\u12f0\u1263\u122a \u1290\u12cd"
+  },
+  "d83d_dc4f": {
+    "message": "\u12a5\u1305 \u121b\u1328\u1265\u1328\u1265"
+  },
+  "d83d_dc50": {
+    "message": "\u12ad\u134d\u1275 \u12a5\u1306\u127d"
+  },
+  "d83d_dc51": {
+    "message": "\u12a0\u12ad\u120a\u120d"
+  },
+  "d83d_dc52": {
+    "message": "\u12e8\u1234\u1275 \u1246\u1265"
+  },
+  "d83d_dc53": {
+    "message": "\u12e8\u12a0\u12ed\u1295 \u1218\u1290\u133d\u122d"
+  },
+  "d83d_dc54": {
+    "message": "\u12ad\u122b\u1263\u1275"
+  },
+  "d83d_dc55": {
+    "message": "\u1272\u1238\u122d\u1275"
+  },
+  "d83d_dc56": {
+    "message": "\u1231\u122a"
+  },
+  "d83d_dc57": {
+    "message": "\u1240\u121a\u1235"
+  },
+  "d83d_dc58": {
+    "message": "\u12ae\u121a\u1296"
+  },
+  "d83d_dc59": {
+    "message": "\u1262\u12aa\u1292"
+  },
+  "d83d_dc5a": {
+    "message": "\u12e8\u1234\u1275 \u120d\u1265\u1235"
+  },
+  "d83d_dc5b": {
+    "message": "\u1266\u122d\u1233"
+  },
+  "d83d_dc5c": {
+    "message": "\u12e8\u12a5\u1305 \u1266\u122d\u1233"
+  },
+  "d83d_dc5d": {
+    "message": "\u12a0\u1290\u1235\u1270\u129b \u1266\u122d\u1233"
+  },
+  "d83d_dc5e": {
+    "message": "\u12e8\u12c8\u1295\u12f5 \u132b\u121b"
+  },
+  "d83d_dc5f": {
+    "message": "\u12e8\u12a0\u1275\u120c\u1275 \u132b\u121b"
+  },
+  "d83d_dc60": {
+    "message": "\u1263\u1208\u1270\u1228\u12a8\u12dd \u132b\u121b"
+  },
+  "d83d_dc61": {
+    "message": "\u12e8\u1234\u1275 \u12ad\u134d\u1275 \u132b\u121b"
+  },
+  "d83d_dc62": {
+    "message": "\u12e8\u1234\u1275 \u1261\u1275"
+  },
+  "d83d_dc63": {
+    "message": "\u12e8\u12a5\u130d\u122d \u12a0\u123b\u122b"
+  },
+  "d83d_dc64": {
+    "message": "\u12e8\u1230\u12cd\u1290\u1275 \u120b\u12ed\u129b\u12cd \u12ad\u134d\u120d \u1245\u122d\u133d"
+  },
+  "d83d_dc65": {
+    "message": "\u12e8\u1230\u12cd\u1290\u1276\u127d \u120b\u12ed\u129b\u12cd \u12ad\u134d\u120d \u1245\u122d\u133d"
+  },
+  "d83d_dc66": {
+    "message": "\u12c8\u1295\u12f5 \u120d\u1305"
+  },
+  "d83d_dc67": {
+    "message": "\u1234\u1275 \u120d\u1305"
+  },
+  "d83d_dc68": {
+    "message": "\u12c8\u1295\u12f5"
+  },
+  "d83d_dc69": {
+    "message": "\u1234\u1275"
+  },
+  "d83d_dc6a": {
+    "message": "\u1264\u1270\u1230\u1265"
+  },
+  "d83d_dc6b": {
+    "message": "\u12c8\u1295\u12f5 \u12a5\u1293 \u1234\u1275"
+  },
+  "d83d_dc6c": {
+    "message": "\u1201\u1208\u1275 \u12c8\u1295\u12f6\u127d"
+  },
+  "d83d_dc6d": {
+    "message": "\u1201\u1208\u1275 \u1234\u1276\u127d"
+  },
+  "d83d_dc6e": {
+    "message": "\u12e8\u1356\u120a\u1235 \u1263\u120d\u12f0\u1228\u1263"
+  },
+  "d83d_dc6f": {
+    "message": "\u1263\u1208\u1325\u1295\u1278\u120d \u1306\u122e \u1234\u1275"
+  },
+  "d83d_dc70": {
+    "message": "\u1219\u123d\u122a\u1275"
+  },
+  "d83d_dc71": {
+    "message": "\u1262\u132b \u1338\u1309\u122d \u12eb\u1208\u12cd \u1230\u12cd"
+  },
+  "d83d_dc72": {
+    "message": "\u1313 \u1352 \u121b\u12ce \u12eb\u1208\u12cd \u12c8\u1295\u12f5"
+  },
+  "d83d_dc73": {
+    "message": "\u1325\u121d\u1325\u121d \u12e8\u1208\u1260\u1230 \u12c8\u1295\u12f5"
+  },
+  "d83d_dc74": {
+    "message": "\u12d5\u12f5\u121c\u12cd \u12e8\u1308\u134b \u12c8\u1295\u12f5"
+  },
+  "d83d_dc75": {
+    "message": "\u12d5\u12f5\u121c\u12cb \u12e8\u1308\u134b \u1234\u1275"
+  },
+  "d83d_dc76": {
+    "message": "\u1205\u133b\u1295"
+  },
+  "d83d_dc77": {
+    "message": "\u130d\u1295\u1260\u129b"
+  },
+  "d83d_dc78": {
+    "message": "\u120d\u12d5\u120d\u1275"
+  },
+  "d83d_dc79": {
+    "message": "\u12a6\u130d\u122d"
+  },
+  "d83d_dc7a": {
+    "message": "\u130e\u1265\u120a\u1295"
+  },
+  "d83d_dc7b": {
+    "message": "\u1218\u1295\u1348\u1235"
+  },
+  "d83d_dc7c": {
+    "message": "\u1205\u133b\u1295 \u1218\u120d\u12d3\u12ad"
+  },
+  "d83d_dc7d": {
+    "message": "\u1263\u12f3 \u134d\u1321\u122d"
+  },
+  "d83d_dc7e": {
+    "message": "\u1263\u12f3 \u132d\u122b\u1245"
+  },
+  "d83d_dc7f": {
+    "message": "\u12f5\u1295\u12ad"
+  },
+  "d83d_dc80": {
+    "message": "\u122b\u1235 \u1245\u120d"
+  },
+  "d83d_dc81": {
+    "message": "\u12e8\u1218\u1228\u1303 \u12f4\u1235\u12ad"
+  },
+  "d83d_dc82": {
+    "message": "\u1320\u1263\u1242"
+  },
+  "d83d_dc83": {
+    "message": "\u12f3\u1295\u1230\u129b"
+  },
+  "d83d_dc84": {
+    "message": "\u120a\u1355\u1235\u1272\u12ad"
+  },
+  "d83d_dc85": {
+    "message": "\u12e8\u1325\u134d\u122d \u12a5\u1295\u12ad\u1265\u12ab\u1264"
+  },
+  "d83d_dc86": {
+    "message": "\u12e8\u134a\u1275 \u121b\u1233\u1305"
+  },
+  "d83d_dc87": {
+    "message": "\u1338\u1309\u122d \u1218\u1241\u1228\u1325"
+  },
+  "d83d_dc88": {
+    "message": "\u12e8\u12c8\u1295\u12f6\u127d \u1338\u1309\u122d \u1264\u1275"
+  },
+  "d83d_dc89": {
+    "message": "\u1218\u122d\u134c"
+  },
+  "d83d_dc8a": {
+    "message": "\u12ad\u1292\u1295"
+  },
+  "d83d_dc8b": {
+    "message": "\u12e8\u1270\u1233\u1218\u1260\u1275 \u121d\u120d\u12ad\u1275"
+  },
+  "d83d_dc8c": {
+    "message": "\u12e8\u134d\u1245\u122d \u12f0\u1265\u12f3\u1264"
+  },
+  "d83d_dc8d": {
+    "message": "\u1240\u1208\u1260\u1275"
+  },
+  "d83d_dc8e": {
+    "message": "\u12a5\u1295\u1241"
+  },
+  "d83d_dc8f": {
+    "message": "\u1218\u1233\u121d"
+  },
+  "d83d_dc90": {
+    "message": "\u12e8\u12a0\u1260\u1263 \u1309\u1295\u1309\u1295"
+  },
+  "d83d_dc91": {
+    "message": "\u1325\u1295\u12f5"
+  },
+  "d83d_dc92": {
+    "message": "\u12e8\u1230\u122d\u130d \u1340\u120e\u1275 \u1264\u1275"
+  },
+  "d83d_dc93": {
+    "message": "\u12e8\u121a\u1218\u1273 \u120d\u1265"
+  },
+  "d83d_dc94": {
+    "message": "\u12e8\u1270\u1230\u1260\u1228 \u120d\u1265"
+  },
+  "d83d_dc95": {
+    "message": "\u1201\u1208\u1275 \u120d\u1266\u127d"
+  },
+  "d83d_dc96": {
+    "message": "\u12e8\u121a\u12eb\u1265\u1208\u1328\u120d\u132d \u120d\u1265"
+  },
+  "d83d_dc97": {
+    "message": "\u12e8\u121a\u12eb\u12f5\u130d \u120d\u1265"
+  },
+  "d83d_dc98": {
+    "message": "\u120d\u1265 \u12a5\u1293 \u1240\u1235\u1275"
+  },
+  "d83d_dc99": {
+    "message": "\u1230\u121b\u12eb\u12ca \u120d\u1265"
+  },
+  "d83d_dc9a": {
+    "message": "\u12a0\u1228\u1295\u1313\u12f4 \u120d\u1265"
+  },
+  "d83d_dc9b": {
+    "message": "\u1262\u132b \u120d\u1265"
+  },
+  "d83d_dc9c": {
+    "message": "\u1210\u121d\u122b\u12ca \u120d\u1265"
+  },
+  "d83d_dc9d": {
+    "message": "\u122a\u1263\u1295 \u12eb\u1208\u12cd \u120d\u1265"
+  },
+  "d83d_dc9e": {
+    "message": "\u12e8\u121a\u12de\u1229 \u120d\u1266\u127d"
+  },
+  "d83d_dc9f": {
+    "message": "\u12e8\u120d\u1265 \u130c\u1325"
+  },
+  "d83d_dca0": {
+    "message": "\u12e8\u12a0\u1260\u1263 \u1245\u1320\u120d"
+  },
+  "d83d_dca1": {
+    "message": "\u12a0\u121d\u1356\u120d"
+  },
+  "d83d_dca2": {
+    "message": "\u1295\u12f4\u1275"
+  },
+  "d83d_dca3": {
+    "message": "\u1348\u1295\u1302"
+  },
+  "d83d_dca4": {
+    "message": "\u12e8\u12a5\u1295\u1245\u120d\u134b\u121d\u1290\u1275 \u121d\u120d\u12ad\u1275"
+  },
+  "d83d_dca5": {
+    "message": "\u130d\u132d\u1275"
+  },
+  "d83d_dca6": {
+    "message": "\u120b\u1265 \u1218\u122d\u1328\u1275"
+  },
+  "d83d_dca7": {
+    "message": "\u1240\u12dd\u1243\u12db \u120b\u1265"
+  },
+  "d83d_dca8": {
+    "message": "\u122f\u132d \u1230\u1228\u12dd"
+  },
+  "d83d_dca9": {
+    "message": "\u12ab\u12ab"
+  },
+  "d83d_dcaa": {
+    "message": "\u12e8\u12ad\u1295\u12f5 \u1321\u1295\u127b"
+  },
+  "d83d_dcab": {
+    "message": "\u122b\u1231 \u12e8\u12de\u1228\u1260\u1275"
+  },
+  "d83d_dcac": {
+    "message": "\u12e8\u1295\u130d\u130d\u122d \u134a\u129b"
+  },
+  "d83d_dcad": {
+    "message": "\u12e8\u1210\u1233\u1265 \u134a\u129b"
+  },
+  "d83d_dcae": {
+    "message": "\u12e8\u12a0\u1260\u1263 \u121b\u1205\u1270\u121d"
+  },
+  "d83d_dcaf": {
+    "message": "\u1219\u1209 \u1290\u1325\u1265"
+  },
+  "d83d_dcb0": {
+    "message": "\u12e8\u1308\u1295\u12d8\u1265 \u1266\u122d\u1233"
+  },
+  "d83d_dcb1": {
+    "message": "\u12e8\u121d\u1295\u12db\u122c \u1270\u1218\u1295"
+  },
+  "d83d_dcb2": {
+    "message": "\u12e8\u12f6\u120b\u122d \u121d\u120d\u12ad\u1275"
+  },
+  "d83d_dcb3": {
+    "message": "\u12ad\u122c\u12f2\u1275 \u12ab\u122d\u12f5"
+  },
+  "d83d_dcb4": {
+    "message": "\u12e8\u12e8\u1295 \u1296\u1275"
+  },
+  "d83d_dcb5": {
+    "message": "\u12e8\u12f6\u120b\u122d \u1296\u1275"
+  },
+  "d83d_dcb6": {
+    "message": "\u12e8\u12e9\u122e \u1296\u1275"
+  },
+  "d83d_dcb7": {
+    "message": "\u12e8\u1353\u12cd\u1295\u12f5 \u1296\u1275"
+  },
+  "d83d_dcb8": {
+    "message": "\u12e8\u121a\u1260\u122d \u1308\u1295\u12d8\u1265"
+  },
+  "d83d_dcb9": {
+    "message": "\u12a5\u12eb\u12f0\u1308 \u12eb\u1208 \u1308\u1260\u12eb"
+  },
+  "d83d_dcba": {
+    "message": "\u1218\u1240\u1218\u132b"
+  },
+  "d83d_dcbb": {
+    "message": "\u1270\u12ae"
+  },
+  "d83d_dcbc": {
+    "message": "\u123b\u1295\u1323"
+  },
+  "d83d_dcbd": {
+    "message": "\u121a\u1292 \u12f2\u1235\u12ad"
+  },
+  "d83d_dcbe": {
+    "message": "\u134d\u120e\u1352 \u12f2\u1235\u12ad"
+  },
+  "d83d_dcbf": {
+    "message": "\u1265\u1209\u122c\u12ed"
+  },
+  "d83d_dcc0": {
+    "message": "\u12f2\u126a\u12f2"
+  },
+  "d83d_dcc1": {
+    "message": "\u12e8\u134b\u12ed\u120d \u12a0\u1243\u134a"
+  },
+  "d83d_dcc2": {
+    "message": "\u12ad\u134d\u1275 \u12a0\u1243\u134a"
+  },
+  "d83d_dcc3": {
+    "message": "\u1230\u1290\u12f5"
+  },
+  "d83d_dcc4": {
+    "message": "\u1230\u1290\u12f5"
+  },
+  "d83d_dcc5": {
+    "message": "\u12e8\u1240\u1295 \u1218\u1241\u1320\u122a\u12eb"
+  },
+  "d83d_dcc6": {
+    "message": "\u12e8\u121a\u1240\u12f0\u12f5 \u1240\u1295 \u1218\u1241\u1320\u122a\u12eb"
+  },
+  "d83d_dcc7": {
+    "message": "\u12e8\u12ab\u122d\u12f5 \u1218\u1228\u1303 \u1320\u124b\u121a"
+  },
+  "d83d_dcc8": {
+    "message": "\u12c8\u12f0 \u120b\u12ed \u12e8\u1218\u12cd\u1323\u1275 \u12a0\u12dd\u121b\u121a\u12eb"
+  },
+  "d83d_dcc9": {
+    "message": "\u12c8\u12f0 \u1273\u127d \u12e8\u1218\u12cd\u1228\u12f5 \u12a0\u12dd\u121b\u121a\u12eb"
+  },
+  "d83d_dcca": {
+    "message": "\u12e8\u12a0\u121e\u120c \u130d\u122b\u134d"
+  },
+  "d83d_dccb": {
+    "message": "\u1245\u1295\u1325\u1265 \u1230\u120c\u12f3"
+  },
+  "d83d_dccc": {
+    "message": "\u121a\u1235\u121b\u122d"
+  },
+  "d83d_dccd": {
+    "message": "\u12f5\u1261\u120d\u1261\u120d \u121a\u1235\u121b\u122d"
+  },
+  "d83d_dcce": {
+    "message": "\u12e8\u12c8\u1228\u1240\u1275 \u12ad\u120a\u1355"
+  },
+  "d83d_dccf": {
+    "message": "\u1240\u1325 \u12eb\u1208 \u121b\u1235\u1218\u122a\u12eb"
+  },
+  "d83d_dcd0": {
+    "message": "\u1236\u1235\u1275 \u121b\u12d5\u12d8\u1295 \u121b\u1235\u1218\u122a\u12eb"
+  },
+  "d83d_dcd1": {
+    "message": "\u12e8\u12d5\u120d\u1263\u1275 \u1275\u122e\u127d"
+  },
+  "d83d_dcd2": {
+    "message": "\u12e8\u1212\u1233\u1265 \u1218\u12dd\u1308\u1265"
+  },
+  "d83d_dcd3": {
+    "message": "\u12e8\u121b\u1235\u1273\u12c8\u123b \u12f0\u1265\u1270\u122d"
+  },
+  "d83d_dcd4": {
+    "message": "\u12eb\u130c\u1320 \u121b\u1235\u1273\u12c8\u123b \u12f0\u1265\u1270\u122d"
+  },
+  "d83d_dcd5": {
+    "message": "\u12e8\u1270\u12d8\u130b \u1218\u133d\u1210\u134d"
+  },
+  "d83d_dcd6": {
+    "message": "\u12ad\u134d\u1275 \u1218\u133d\u1210\u134d"
+  },
+  "d83d_dcd7": {
+    "message": "\u12a0\u1228\u1295\u1313\u12f4 \u1218\u133d\u1210\u134d"
+  },
+  "d83d_dcd8": {
+    "message": "\u1218\u133d\u1210\u134d"
+  },
+  "d83d_dcd9": {
+    "message": "\u12a0\u1228\u1295\u1313\u12f4 \u1218\u133d\u1210\u134d"
+  },
+  "d83d_dcda": {
+    "message": "\u1218\u133d\u1210\u134d\u1275"
+  },
+  "d83d_dcdb": {
+    "message": "\u12e8\u1235\u121d \u1263\u1305"
+  },
+  "d83d_dcdc": {
+    "message": "\u1265\u122b\u1293"
+  },
+  "d83d_dcdd": {
+    "message": "\u121b\u1235\u1273\u12c8\u123b"
+  },
+  "d83d_dcde": {
+    "message": "\u1235\u120d\u12ad"
+  },
+  "d83d_dcdf": {
+    "message": "\u1325\u122a \u1270\u1240\u1263\u12ed"
+  },
+  "d83d_dce0": {
+    "message": "\u134b\u12ad\u1235"
+  },
+  "d83d_dce1": {
+    "message": "\u12e8\u1233\u1270\u120b\u12ed\u1275 \u12f2\u123d"
+  },
+  "d83d_dce2": {
+    "message": "\u12f5\u121d\u133d \u121b\u1309\u12eb"
+  },
+  "d83d_dce3": {
+    "message": "\u12f5\u121d\u133d \u121b\u1309\u12eb"
+  },
+  "d83d_dce4": {
+    "message": "\u12e8\u1270\u120b\u12a8 \u1218\u120d\u12d5\u12ad\u1275"
+  },
+  "d83d_dce5": {
+    "message": "\u1308\u1262 \u1218\u120d\u12a5\u12ad\u1275 \u1233\u1325\u1295"
+  },
+  "d83d_dce6": {
+    "message": "\u1325\u1245\u120d"
+  },
+  "d83d_dce7": {
+    "message": "\u12a2\u121c\u12ed\u120d"
+  },
+  "d83d_dce8": {
+    "message": "\u1308\u1262 \u1218\u120d\u12d5\u12ad\u1275"
+  },
+  "d83d_dce9": {
+    "message": "\u12c8\u132a \u1218\u120d\u12d5\u12ad\u1275"
+  },
+  "d83d_dcea": {
+    "message": "\u12dd\u130d \u1218\u120d\u12d5\u12ad\u1275 \u1233\u1325\u1295 \u12a8\u12c8\u1228\u12f0 \u1263\u1295\u12f2\u122b \u130b\u122d"
+  },
+  "d83d_dceb": {
+    "message": "\u12dd\u130d \u1218\u120d\u12d5\u12ad\u1275 \u1233\u1325\u1295 \u12c8\u12f0\u120b\u12ed \u12a8\u134d \u12ab\u1208 \u1263\u1295\u12f2\u122b \u130b\u122d"
+  },
+  "d83d_dcec": {
+    "message": "\u12ad\u134d\u1275 \u1218\u120d\u12d5\u12ad\u1275 \u1233\u1325\u1295 \u12c8\u12f0\u120b\u12ed \u12a8\u134d \u12ab\u1208 \u1263\u1295\u12f2\u122b \u130b\u122d"
+  },
+  "d83d_dced": {
+    "message": "\u12ad\u134d\u1275 \u1218\u120d\u12d5\u12ad\u1275 \u1233\u1325\u1295 \u12a8\u12c8\u1228\u12f0 \u1263\u1295\u12f2\u122b \u130b\u122d"
+  },
+  "d83d_dcee": {
+    "message": "\u12e8\u1356\u1235\u1273 \u1233\u1325\u1295"
+  },
+  "d83d_dcef": {
+    "message": "\u12e8\u1356\u1235\u1273 \u1321\u1229\u1295\u1263"
+  },
+  "d83d_dcf0": {
+    "message": "\u130b\u12dc\u1323"
+  },
+  "d83d_dcf1": {
+    "message": "\u1270\u1295\u1240\u1233\u1243\u123d \u1235\u120d\u12ad"
+  },
+  "d83d_dcf2": {
+    "message": "\u1270\u1295\u1240\u1233\u1243\u123d \u1235\u120d\u12ad \u12a8\u1240\u1235\u1275 \u130b\u122d"
+  },
+  "d83d_dcf3": {
+    "message": "\u12e8\u1295\u12dd\u1228\u1275 \u1201\u1290\u1273"
+  },
+  "d83d_dcf4": {
+    "message": "\u1235\u120d\u12ad \u1320\u134d\u1277\u120d"
+  },
+  "d83d_dcf5": {
+    "message": "\u121d\u1295\u121d \u1270\u1295\u1240\u1233\u1243\u123d \u1235\u120d\u12ad \u12e8\u1208\u121d"
+  },
+  "d83d_dcf6": {
+    "message": "\u12e8\u1270\u1295\u1240\u1233\u1243\u123d \u1235\u120d\u12ad \u12a0\u12cd\u1273\u1228 \u1218\u1228\u1265 \u121d\u120d\u12ad\u1276\u127d"
+  },
+  "d83d_dcf7": {
+    "message": "\u12ab\u121c\u122b"
+  },
+  "d83d_dcf9": {
+    "message": "\u12e8\u126a\u12f2\u12ee \u12ab\u121c\u122b"
+  },
+  "d83d_dcfa": {
+    "message": "\u1274\u120c\u126a\u12e5\u1295"
+  },
+  "d83d_dcfb": {
+    "message": "\u122c\u12f2\u12ee"
+  },
+  "d83d_dcfc": {
+    "message": "\u12e8\u126a\u12f2\u12ee \u12ad\u122d"
+  },
+  "d83d_dd00": {
+    "message": "\u12e8\u1270\u1320\u120b\u1208\u1349 \u1240\u1235\u1276\u127d"
+  },
+  "d83d_dd01": {
+    "message": "\u1260\u1230\u12d3\u1275 \u12a0\u1245\u1323\u132b \u12e8\u121a\u1204\u12f1 \u1240\u1235\u1276\u127d"
+  },
+  "d83d_dd02": {
+    "message": "\u1260\u1230\u12d3\u1275 \u12a0\u1245\u1323\u132b \u12e8\u121a\u1204\u12f1 \u1240\u1235\u1276\u127d"
+  },
+  "d83d_dd03": {
+    "message": "\u12f3\u130d\u121d \u132b\u1295"
+  },
+  "d83d_dd04": {
+    "message": "\u1260\u1270\u1243\u122b\u1292 \u1230\u12d3\u1275 \u12a0\u1245\u1323\u132b \u12e8\u121a\u1204\u12f1 \u1240\u1235\u1276\u127d"
+  },
+  "d83d_dd05": {
+    "message": "\u12dd\u1245\u1270\u129b \u1265\u1229\u1205\u1290\u1275"
+  },
+  "d83d_dd06": {
+    "message": "\u12a8\u134d\u1270\u129b \u1265\u1229\u1205\u1290\u1275"
+  },
+  "d83d_dd07": {
+    "message": "\u1218\u1293\u1308\u122d \u12e8\u1208\u121d"
+  },
+  "d83d_dd08": {
+    "message": "\u12f5\u121d\u133d \u121b\u1309\u12eb"
+  },
+  "d83d_dd09": {
+    "message": "\u1260\u12dd\u1245\u1270\u129b \u12f5\u121d\u133d \u12eb\u1208 \u12f5\u121d\u133d \u121b\u1309\u12eb"
+  },
+  "d83d_dd0a": {
+    "message": "\u1260\u12a8\u134d\u1270\u129b \u12f5\u121d\u133d \u12eb\u1208 \u12f5\u121d\u133d \u121b\u1309\u12eb"
+  },
+  "d83d_dd0b": {
+    "message": "\u1263\u1275\u122a"
+  },
+  "d83d_dd0c": {
+    "message": "\u12e8\u12a4\u120c\u12ad\u1275\u122a\u12ad \u1218\u1230\u12aa\u12eb"
+  },
+  "d83d_dd0d": {
+    "message": "\u12c8\u12f0 \u130d\u122b \u12eb\u130b\u12f0\u1208 \u121b\u1309\u12eb \u1218\u1290\u133d\u122d"
+  },
+  "d83d_dd0e": {
+    "message": "\u12c8\u12f0 \u130d\u122b \u12eb\u130b\u12f0\u1208 \u121b\u1309\u12eb \u1218\u1290\u133d\u122d"
+  },
+  "d83d_dd0f": {
+    "message": "\u12a8\u1240\u1208\u121d \u1265\u12d5\u122d \u130b\u122d \u12eb\u1208 \u130b\u1295"
+  },
+  "d83d_dd10": {
+    "message": "\u130b\u1295 \u1260\u1241\u120d\u134d \u1270\u12d8\u130d\u1277\u120d"
+  },
+  "d83d_dd11": {
+    "message": "\u1241\u120d\u134d"
+  },
+  "d83d_dd12": {
+    "message": "\u12e8\u1270\u1246\u1208\u1348 \u130b\u1295"
+  },
+  "d83d_dd13": {
+    "message": "\u12e8\u1270\u12a8\u1348\u1270 \u130b\u1295"
+  },
+  "d83d_dd14": {
+    "message": "\u12f0\u12c8\u120d"
+  },
+  "d83d_dd15": {
+    "message": "\u12f0\u12c8\u120d \u12e8\u1208\u121d"
+  },
+  "d83d_dd16": {
+    "message": "\u12d5\u120d\u1263\u1275"
+  },
+  "d83d_dd17": {
+    "message": "\u12e8\u12a0\u1308\u1293\u129d \u121d\u120d\u12ad\u1275"
+  },
+  "d83d_dd18": {
+    "message": "\u12e8\u122c\u12f2\u12ee \u12a0\u12dd\u122b\u122d"
+  },
+  "d83d_dd19": {
+    "message": "\u12c8\u12f0 \u128b\u120b"
+  },
+  "d83d_dd1a": {
+    "message": "\u1218\u1328\u1228\u123b"
+  },
+  "d83d_dd1b": {
+    "message": "\u12e8ON \u1240\u1235\u1275"
+  },
+  "d83d_dd1c": {
+    "message": "\u12e8\u1260\u1245\u122d\u1261 \u121d\u120d\u12ad\u1275"
+  },
+  "d83d_dd1d": {
+    "message": "\u12e8\u120b\u12ed \u121d\u120d\u12ad\u1275"
+  },
+  "d83d_dd1e": {
+    "message": "\u12a818 \u12d3\u1218\u1275 \u1260\u1273\u127d \u12a0\u12ed\u127b\u120d\u121d"
+  },
+  "d83d_dd20": {
+    "message": "\u12a0\u1262\u12ed \u1206\u1204\u12eb\u1275"
+  },
+  "d83d_dd21": {
+    "message": "\u1295\u12d1\u1235 \u1206\u1204\u12eb\u1275"
+  },
+  "d83d_dd22": {
+    "message": "\u1241\u1325\u122e\u127d"
+  },
+  "d83d_dd23": {
+    "message": "\u121d\u120d\u12ad\u1276\u127d"
+  },
+  "d83d_dd24": {
+    "message": "\u12e8\u120b\u1272\u1295 \u134a\u12f0\u120d"
+  },
+  "d83d_dd25": {
+    "message": "\u12a5\u1233\u1275"
+  },
+  "d83d_dd26": {
+    "message": "\u12e8\u1265\u122d\u1203\u1295 \u1263\u1275\u122a"
+  },
+  "d83d_dd27": {
+    "message": "\u1218\u134d\u127b"
+  },
+  "d83d_dd28": {
+    "message": "\u1218\u12f6\u123b"
+  },
+  "d83d_dd29": {
+    "message": "\u1265\u120e\u1295 \u12a5\u1293 \u121b\u1230\u122a\u12eb"
+  },
+  "d83d_dd2a": {
+    "message": "\u12e8\u121b\u1265\u1230\u12eb \u1262\u120b"
+  },
+  "d83d_dd2b": {
+    "message": "\u123d\u1309\u1325"
+  },
+  "d83d_dd2c": {
+    "message": "\u121b\u12ed\u12ad\u122e\u1235\u12ae\u1355"
+  },
+  "d83d_dd2d": {
+    "message": "\u1274\u120c\u1235\u12ae\u1355"
+  },
+  "d83d_dd2e": {
+    "message": "\u12e8\u1218\u1235\u1273\u12c8\u1275 \u12b3\u1235"
+  },
+  "d83d_dd2f": {
+    "message": "\u1263\u1208\u1235\u12f5\u1235\u1275 \u132b\u134d \u12ae\u12a8\u1265"
+  },
+  "d83d_dd30": {
+    "message": "\u12a0\u1228\u1295\u1313\u12f4 \u12a5\u1293 \u1262\u132b \u1245\u1320\u120d"
+  },
+  "d83d_dd31": {
+    "message": "\u12e8\u1263\u1208\u1236\u1235\u1275 \u1323\u1275 \u1260\u1275\u122d"
+  },
+  "d83d_dd32": {
+    "message": "\u12e8\u1325\u1241\u122d \u12ab\u122c \u12a0\u12dd\u122b\u122d"
+  },
+  "d83d_dd33": {
+    "message": "\u12e8\u1290\u132d \u12ab\u122c \u12a0\u12dd\u122b\u122d"
+  },
+  "d83d_dd34": {
+    "message": "\u1275\u120d\u1245 \u1240\u12ed \u12ad\u1265"
+  },
+  "d83d_dd35": {
+    "message": "\u1275\u120d\u1245 \u1230\u121b\u12eb\u12ca \u12ad\u1265"
+  },
+  "d83d_dd36": {
+    "message": "\u1275\u120d\u1245 \u1265\u122d\u1271\u12ab\u1293\u121b \u12a0\u120d\u121b\u12dd"
+  },
+  "d83d_dd37": {
+    "message": "\u1275\u120d\u1245 \u1230\u121b\u12eb\u12ca \u12a0\u120d\u121b\u12dd"
+  },
+  "d83d_dd38": {
+    "message": "\u1275\u1295\u123d \u1265\u122d\u1271\u12ab\u1293\u121b \u12a0\u120d\u121b\u12dd"
+  },
+  "d83d_dd39": {
+    "message": "\u1275\u1295\u123d \u1230\u121b\u12eb\u12ca \u12a0\u120d\u121b\u12dd"
+  },
+  "d83d_dd3a": {
+    "message": "\u12e8\u120b\u12ed \u1236\u1235\u1275 \u121b\u12d5\u12d8\u1295"
+  },
+  "d83d_dd3b": {
+    "message": "\u12e8\u1273\u127d \u1236\u1235\u1275 \u121b\u12d5\u12d8\u1295"
+  },
+  "d83d_dd3c": {
+    "message": "\u12e8\u120b\u12ed \u1236\u1235\u1275 \u121b\u12d5\u12d8\u1295 \u12a0\u12dd\u122b\u122d"
+  },
+  "d83d_dd3d": {
+    "message": "\u12e8\u1273\u127d \u1236\u1235\u1275 \u121b\u12d5\u12d8\u1295 \u12a0\u12dd\u122b\u122d"
+  },
+  "d83d_dd50": {
+    "message": "1 \u1230\u12d3\u1275"
+  },
+  "d83d_dd51": {
+    "message": "2 \u1230\u12d3\u1275"
+  },
+  "d83d_dd52": {
+    "message": "3 \u1230\u12d3\u1275"
+  },
+  "d83d_dd53": {
+    "message": "4 \u1230\u12d3\u1275"
+  },
+  "d83d_dd54": {
+    "message": "5 \u1230\u12d3\u1275"
+  },
+  "d83d_dd55": {
+    "message": "6 \u1230\u12d3\u1275"
+  },
+  "d83d_dd56": {
+    "message": "7 \u1230\u12d3\u1275"
+  },
+  "d83d_dd57": {
+    "message": "8 \u1230\u12d3\u1275"
+  },
+  "d83d_dd58": {
+    "message": "9 \u1230\u12d3\u1275"
+  },
+  "d83d_dd59": {
+    "message": "10 \u1230\u12d3\u1275"
+  },
+  "d83d_dd5a": {
+    "message": "11 \u1230\u12d3\u1275"
+  },
+  "d83d_dd5b": {
+    "message": "12 \u1230\u12d3\u1275"
+  },
+  "d83d_dd5c": {
+    "message": "\u12a0\u1295\u12f5 \u1270\u12a9\u120d"
+  },
+  "d83d_dd5d": {
+    "message": "\u1201\u1208\u1275 \u1270\u12a9\u120d"
+  },
+  "d83d_dd5e": {
+    "message": "\u1236\u1235\u1275 \u1270\u12a9\u120d"
+  },
+  "d83d_dd5f": {
+    "message": "\u12a0\u122b\u1275 \u1270\u12a9\u120d"
+  },
+  "d83d_dd60": {
+    "message": "\u12a0\u121d\u1235\u1275 \u1270\u12a9\u120d"
+  },
+  "d83d_dd61": {
+    "message": "\u1235\u12f5\u1235\u1275 \u1270\u12a9\u120d"
+  },
+  "d83d_dd62": {
+    "message": "\u1230\u1263\u1275 \u1270\u12a9\u120d"
+  },
+  "d83d_dd63": {
+    "message": "\u1235\u121d\u1295\u1275 \u1270\u12a9\u120d"
+  },
+  "d83d_dd64": {
+    "message": "\u12d8\u1320\u129d \u1270\u12a9\u120d"
+  },
+  "d83d_dd65": {
+    "message": "\u12a0\u1235\u122d \u1270\u12a9\u120d"
+  },
+  "d83d_dd66": {
+    "message": "\u12a0\u1235\u122b \u12a0\u1295\u12f5 \u1270\u12a9\u120d"
+  },
+  "d83d_dd67": {
+    "message": "\u12a0\u1235\u122b \u1201\u1208\u1275 \u1270\u12a9\u120d"
+  },
+  "d83d_ddfb": {
+    "message": "\u1349\u1302 \u1270\u122b\u122b"
+  },
+  "d83d_ddfc": {
+    "message": "\u12e8\u1276\u12ad\u12ee \u130d\u1295\u1265"
+  },
+  "d83d_ddfd": {
+    "message": "\u12e8\u1290\u133b\u1290\u1275 \u1210\u12cd\u120d\u1275"
+  },
+  "d83d_ddfe": {
+    "message": "\u12e8\u1303\u1353\u1295 \u12ab\u122d\u1273"
+  },
+  "d83d_ddff": {
+    "message": "\u12e8\u121e\u12eb\u12ed \u1210\u12cd\u120d\u1275"
+  },
+  "d83d_de00": {
+    "message": "\u1275\u120d\u1245 \u1348\u1308\u130d\u1273"
+  },
+  "d83d_de01": {
+    "message": " \u12a8\u12a0\u12ed\u1295 \u130b\u122d \u12a0\u1265\u122e \u1348\u1308\u130d\u1273"
+  },
+  "d83d_de02": {
+    "message": "\u12e8\u12f0\u1235\u1273 \u12a5\u1295\u1263"
+  },
+  "d83d_de03": {
+    "message": "\u1348\u1308\u130d \u12eb\u1208 \u12ad\u134d\u1275 \u12a0\u134d"
+  },
+  "d83d_de04": {
+    "message": "\u1348\u1308\u130d \u12a8\u121a\u1209 \u12a0\u12ed\u1296\u127d \u130b\u122d \u12ad\u134d\u1275 \u12e8\u1206\u1290 \u1348\u1308\u130d \u12eb\u1208 \u12a0\u134d"
+  },
+  "d83d_de05": {
+    "message": "\u12a8\u1240\u12dd\u1243\u12db \u120b\u1265 \u130b\u122d \u1348\u1308\u130d\u1273"
+  },
+  "d83d_de06": {
+    "message": " \u1260\u12dd\u130d \u12a0\u12ed\u1296\u127d \u1348\u1308\u130d\u1273 \u12eb\u1208\u12cd \u12ad\u134d\u1275 \u12a0\u134d"
+  },
+  "d83d_de07": {
+    "message": "\u12a8\u1245\u12f5\u1235\u1293 \u130b\u122d \u1348\u1308\u130d\u1273"
+  },
+  "d83d_de08": {
+    "message": "\u12a8\u1240\u1295\u12f6\u127d \u130b\u122d \u1348\u1308\u130d\u1273"
+  },
+  "d83d_de09": {
+    "message": "\u12e8\u121a\u1323\u1240\u1235 \u134a\u1275"
+  },
+  "d83d_de0a": {
+    "message": "\u1348\u1308\u130d\u1273"
+  },
+  "d83d_de0b": {
+    "message": "\u12e8\u130e\u1218\u1300\u12cd \u134a\u1275"
+  },
+  "d83d_de0c": {
+    "message": "\u12a5\u134e\u12ed\u1273"
+  },
+  "d83d_de0d": {
+    "message": "\u1348\u1308\u130d \u12e8\u121a\u120d \u134a\u1275"
+  },
+  "d83d_de0e": {
+    "message": "\u12a0\u122a\u134d"
+  },
+  "d83d_de0f": {
+    "message": "\u12a0\u120b\u130b\u132d"
+  },
+  "d83d_de10": {
+    "message": "\u1235\u121c\u1275 \u12e8\u120c\u1208\u12cd \u134a\u1275"
+  },
+  "d83d_de11": {
+    "message": "\u1235\u121c\u1275 \u12e8\u121b\u12ed\u1290\u1260\u1265\u1260\u1275"
+  },
+  "d83d_de12": {
+    "message": "\u12a0\u12eb\u1235\u1245\u121d"
+  },
+  "d83d_de13": {
+    "message": "\u1240\u12dd\u1243\u12db \u120b\u1265"
+  },
+  "d83d_de14": {
+    "message": "\u1210\u1233\u1265 \u120b\u12ed \u12eb\u1208 \u134a\u1275"
+  },
+  "d83d_de15": {
+    "message": "\u130d\u122b \u12e8\u1308\u1263\u12cd \u134a\u1275"
+  },
+  "d83d_de16": {
+    "message": "\u12e8\u12f0\u1290\u1308\u1320 \u134a\u1275"
+  },
+  "d83d_de17": {
+    "message": "\u12e8\u121a\u1235\u121d \u134a\u1275"
+  },
+  "d83d_de18": {
+    "message": "\u1260\u12a0\u12e8\u122d \u1218\u1233\u121d"
+  },
+  "d83d_de19": {
+    "message": "\u1218\u1233\u121d \u12a5\u1293 \u1348\u1308\u130d\u1273"
+  },
+  "d83d_de1a": {
+    "message": "\u1218\u1233\u121d"
+  },
+  "d83d_de1b": {
+    "message": "\u12e8\u12c8\u1323 \u121d\u120b\u1235"
+  },
+  "d83d_de1c": {
+    "message": "\u12a5\u12e8\u1270\u1323\u1240\u1230 \u121d\u120b\u1235 \u121b\u12cd\u1323\u1275"
+  },
+  "d83d_de1d": {
+    "message": "\u1232\u12eb\u1235\u1320\u120b"
+  },
+  "d83d_de1e": {
+    "message": "\u12e8\u1270\u12a8\u134b"
+  },
+  "d83d_de1f": {
+    "message": "\u12e8\u1270\u1328\u1290\u1240"
+  },
+  "d83d_de20": {
+    "message": "\u12e8\u1270\u1293\u12f0\u12f0"
+  },
+  "d83d_de21": {
+    "message": "\u1208\u121d\u1266\u1329\u1295 \u12e8\u1323\u1208"
+  },
+  "d83d_de22": {
+    "message": "\u121b\u120d\u1240\u1235"
+  },
+  "d83d_de23": {
+    "message": "\u12d5\u12f5\u1209\u1295 \u12a0\u1260\u120b\u1238"
+  },
+  "d83d_de24": {
+    "message": "\u12e8\u12f5\u120d \u1235\u121c\u1275"
+  },
+  "d83d_de25": {
+    "message": "\u1208\u1325\u1242\u1275!"
+  },
+  "d83d_de26": {
+    "message": "\u12e8\u1270\u12ae\u1233\u1270\u1228 \u134a\u1275"
+  },
+  "d83d_de27": {
+    "message": "\u1260\u1323\u121d \u12e8\u1328\u1290\u1240\u12cd"
+  },
+  "d83d_de28": {
+    "message": "\u12e8\u1348\u122b"
+  },
+  "d83d_de29": {
+    "message": "\u12e8\u12f0\u12a8\u1218\u12cd"
+  },
+  "d83d_de2a": {
+    "message": "\u12a5\u1295\u1245\u120d\u134d \u12e8\u1218\u1323\u1260\u1275"
+  },
+  "d83d_de2b": {
+    "message": "\u12e8\u12f0\u12a8\u1218\u12cd"
+  },
+  "d83d_de2c": {
+    "message": "\u121b\u1328\u1293\u1260\u1235"
+  },
+  "d83d_de2d": {
+    "message": "\u132e\u12ad \u1265\u120e \u121b\u120d\u1240\u1235"
+  },
+  "d83d_de2e": {
+    "message": "\u12ad\u134d\u1275 \u12a0\u134d \u12eb\u1208\u12cd \u134a\u1275"
+  },
+  "d83d_de2f": {
+    "message": "\u12a0\u1349\u1295 \u12e8\u12eb\u12d8 \u134a\u1275"
+  },
+  "d83d_de30": {
+    "message": "\u12e8\u127e\u12a8\u1208 \u134a\u1275"
+  },
+  "d83d_de31": {
+    "message": "\u134d\u122d\u1203\u1275 \u12eb\u1208\u12cd \u134a\u1275"
+  },
+  "d83d_de32": {
+    "message": "\u1260\u1323\u121d \u12e8\u1270\u1308\u1228\u1218 \u134a\u1275"
+  },
+  "d83d_de33": {
+    "message": "\u134a\u1271 \u12e8\u1240\u120b"
+  },
+  "d83d_de34": {
+    "message": "\u1218\u1270\u129b\u1275"
+  },
+  "d83d_de35": {
+    "message": "\u122b\u1231 \u12e8\u12de\u1228\u1260\u1275"
+  },
+  "d83d_de36": {
+    "message": "\u12a0\u134d \u12e8\u120c\u1208\u12cd \u134a\u1275"
+  },
+  "d83d_de37": {
+    "message": "\u132d\u1295\u1265\u120d \u12eb\u1208\u12cd \u134a\u1275"
+  },
+  "d83d_de38": {
+    "message": "grinning cat face"
+  },
+  "d83d_de39": {
+    "message": "tears of joy cat face"
+  },
+  "d83d_de3a": {
+    "message": "\u1348\u1308\u130d \u12e8\u121a\u120d \u12f5\u1218\u1275 \u134a\u1275"
+  },
+  "d83d_de3b": {
+    "message": "\u1348\u1308\u130d \u12e8\u121a\u120d \u12f5\u1218\u1275 \u134a\u1275"
+  },
+  "d83d_de3c": {
+    "message": "wry cat face"
+  },
+  "d83d_de3d": {
+    "message": "\u12e8\u121a\u1235\u121d \u12f5\u1218\u1275"
+  },
+  "d83d_de3e": {
+    "message": "\u1208\u121d\u1266\u1329\u1295 \u12e8\u1323\u1208 \u12f5\u1218\u1275 \u134a\u1275"
+  },
+  "d83d_de3f": {
+    "message": "\u12e8\u121a\u12eb\u1208\u1245\u1235 \u12f5\u1218\u1275 \u134a\u1275"
+  },
+  "d83d_de40": {
+    "message": "\u12e8\u12f0\u12a8\u1218\u12cd \u12f5\u1218\u1275 \u134a\u1275"
+  },
+  "d83d_de45": {
+    "message": "\u1325\u1229 \u121d\u120d\u12ad\u1275 \u12e8\u121b\u12ed\u1230\u1325"
+  },
+  "d83d_de46": {
+    "message": "\u12e8\u1325\u1229 \u1290\u12cd \u121d\u120d\u12ad\u1275"
+  },
+  "d83d_de47": {
+    "message": "\u12a0\u12dd\u1293\u1208\u1201"
+  },
+  "d83d_de48": {
+    "message": "\u12ad\u1349 \u12a0\u120b\u12ed\u121d"
+  },
+  "d83d_de49": {
+    "message": "\u12ad\u1349 \u1290\u1308\u122d \u12a0\u120d\u1230\u121b\u121d"
+  },
+  "d83d_de4a": {
+    "message": "\u121d\u1295\u121d \u12ad\u1349 \u12a0\u120d\u1293\u1308\u122d\u121d"
+  },
+  "d83d_de4b": {
+    "message": "\u12f0\u1235\u1270\u129b \u1230\u12cd"
+  },
+  "d83d_de4c": {
+    "message": "\u12c8\u1295\u12f3\u1273"
+  },
+  "d83d_de4d": {
+    "message": "\u12e8\u1270\u12ae\u1233\u1270\u1228 \u1230\u12cd"
+  },
+  "d83d_de4e": {
+    "message": "\u1208\u121d\u1266\u1329\u1295 \u12e8\u1323\u1208"
+  },
+  "d83d_de4f": {
+    "message": "\u12a5\u1301\u1295 \u12a0\u1323\u1325\u134e"
+  },
+  "d83d_de80": {
+    "message": "\u122e\u12ac\u1275"
+  },
+  "d83d_de81": {
+    "message": "\u1204\u120a\u12ae\u1355\u1270\u122d"
+  },
+  "d83d_de82": {
+    "message": "\u12e8\u12a5\u1295\u134b\u120e\u1275 \u1263\u1261\u122d"
+  },
+  "d83d_de83": {
+    "message": "\u1263\u1261\u122d"
+  },
+  "d83d_de84": {
+    "message": "\u1263\u1208\u12a8\u134d\u1270\u129b \u134d\u1325\u1290\u1275 \u1263\u1261\u122d"
+  },
+  "d83d_de85": {
+    "message": "\u1263\u1208\u12a8\u134d\u1270\u129b \u134d\u1325\u1290\u1275 \u1263\u1261\u122d \u12a8\u1239\u120d \u12a0\u134d\u1295\u132b \u130b\u122d"
+  },
+  "d83d_de86": {
+    "message": "\u1263\u1261\u122d"
+  },
+  "d83d_de87": {
+    "message": "\u12e8\u121d\u12f5\u122d \u12cd\u1235\u1325 \u1263\u1261\u122d"
+  },
+  "d83d_de88": {
+    "message": "\u1240\u120b\u120d \u1263\u1261\u122d"
+  },
+  "d83d_de89": {
+    "message": "\u12e8\u1263\u1261\u122d \u1323\u1262\u12eb"
+  },
+  "d83d_de8a": {
+    "message": "\u12e8\u12a4\u120c\u12ad\u1275\u122a\u12ad \u1263\u1261\u122d"
+  },
+  "d83d_de8b": {
+    "message": "\u12e8\u12a4\u120c\u12ad\u1275\u122a\u12ad \u12a0\u12cd\u1276\u1261\u1235"
+  },
+  "d83d_de8c": {
+    "message": "\u12a0\u12cd\u1276\u1261\u1235"
+  },
+  "d83d_de8d": {
+    "message": "\u1218\u132a \u12a0\u12cd\u1276\u1261\u1235"
+  },
+  "d83d_de8e": {
+    "message": "\u12e8\u12a4\u120c\u12ad\u1275\u122a\u12ad \u12a0\u12cd\u1276\u1261\u1235"
+  },
+  "d83d_de8f": {
+    "message": "\u12e8\u12a0\u12cd\u1276\u1261\u1235 \u134c\u122d\u121b\u1273"
+  },
+  "d83d_de90": {
+    "message": "\u121a\u1292\u1263\u1235"
+  },
+  "d83d_de91": {
+    "message": "\u12a0\u121d\u1261\u120b\u1295\u1235"
+  },
+  "d83d_de92": {
+    "message": "\u12e8\u12a5\u1233\u1275 \u12a0\u12f0\u130b \u1218\u12aa\u1293"
+  },
+  "d83d_de93": {
+    "message": "\u12e8\u1356\u120a\u1235 \u1218\u12aa\u1293"
+  },
+  "d83d_de94": {
+    "message": "\u1218\u132a \u12e8\u1356\u120a\u1235 \u1218\u12aa\u1293"
+  },
+  "d83d_de95": {
+    "message": "\u1273\u12ad\u1232"
+  },
+  "d83d_de96": {
+    "message": "\u1218\u132a \u1273\u12ad\u1232"
+  },
+  "d83d_de97": {
+    "message": "\u1218\u12aa\u1293"
+  },
+  "d83d_de98": {
+    "message": "\u1218\u132a \u1218\u12aa\u1293"
+  },
+  "d83d_de99": {
+    "message": "\u12e8\u1218\u12dd\u1293\u129b \u1270\u123d\u12a8\u122d\u12ab\u122a"
+  },
+  "d83d_de9a": {
+    "message": "\u12e8\u1218\u120b\u12aa\u12eb \u132d\u1290\u1275 \u1218\u12aa\u1293"
+  },
+  "d83d_de9b": {
+    "message": "\u12e8\u132d\u1290\u1275 \u1218\u12aa\u1293"
+  },
+  "d83d_de9c": {
+    "message": "\u1275\u122b\u12ad\u1270\u122d"
+  },
+  "d83d_de9d": {
+    "message": "\u1263\u1208\u12a0\u1295\u12f5 \u1210\u12f2\u12f5"
+  },
+  "d83d_de9e": {
+    "message": "\u12e8\u1270\u122b\u122b \u1210\u12f2\u12f5"
+  },
+  "d83d_de9f": {
+    "message": "\u1270\u1295\u1320\u120d\u1323\u12ed \u1210\u12f2\u12f5"
+  },
+  "d83d_dea0": {
+    "message": "\u12e8\u1270\u122b\u122b \u1308\u1218\u12f5 \u1218\u12c8\u1323\u132b"
+  },
+  "d83d_dea1": {
+    "message": "\u12e8\u12a0\u12e8\u122d \u120b\u12ed \u1218\u12aa\u1293"
+  },
+  "d83d_dea2": {
+    "message": "\u1218\u122d\u12a8\u1265"
+  },
+  "d83d_dea3": {
+    "message": "\u12a0\u1290\u1235\u1270\u129b \u1300\u120d\u1263"
+  },
+  "d83d_dea4": {
+    "message": "\u12e8\u121e\u1270\u122d \u1300\u120d\u1263"
+  },
+  "d83d_dea5": {
+    "message": "\u12a0\u130d\u12f5\u121d \u12e8\u1275\u122b\u134a\u12ad \u1218\u1265\u122b\u1276\u127d"
+  },
+  "d83d_dea6": {
+    "message": "\u12a0\u1240\u1263\u12ca \u12e8\u1275\u122b\u134a\u12ad \u1218\u1265\u122b\u1276\u127d"
+  },
+  "d83d_dea7": {
+    "message": "\u1260\u1218\u1230\u122b\u1275 \u120b\u12ed"
+  },
+  "d83d_dea8": {
+    "message": "\u1270\u123d\u12a8\u122d\u12ab\u122a \u1218\u1265\u122b\u1275"
+  },
+  "d83d_dea9": {
+    "message": "\u12e8\u12a0\u12ab\u1263\u1262 \u1263\u1295\u12f2\u122b"
+  },
+  "d83d_deaa": {
+    "message": "\u1260\u122d"
+  },
+  "d83d_deab": {
+    "message": "\u12e8\u1218\u130d\u1262\u12eb \u12e8\u1208\u121d \u121d\u120d\u12ad\u1275"
+  },
+  "d83d_deac": {
+    "message": "\u12e8\u121b\u1328\u1235 \u121d\u120d\u12ad\u1275"
+  },
+  "d83d_dead": {
+    "message": "\u12e8\u121b\u1328\u1235 \u12a0\u12ed\u127b\u120d\u121d \u121d\u120d\u12ad\u1275"
+  },
+  "d83d_deae": {
+    "message": "\u12e8\u1246\u123b\u123b \u1218\u1323\u12eb \u121d\u120d\u12ad\u1275"
+  },
+  "d83d_deaf": {
+    "message": "\u12e8\u1246\u123b\u123b \u12a0\u12ed\u1323\u1209 \u121d\u120d\u12ad\u1275"
+  },
+  "d83d_deb0": {
+    "message": "\u12e8\u1218\u1320\u1325 \u12cd\u1203"
+  },
+  "d83d_deb1": {
+    "message": "\u12e8\u1218\u1320\u1325 \u12eb\u120d\u1206\u1290 \u12cd\u1203"
+  },
+  "d83d_deb2": {
+    "message": "\u1262\u1235\u12ad\u120c\u1275"
+  },
+  "d83d_deb3": {
+    "message": "\u1262\u1235\u12ad\u120c\u1275 \u12e8\u1208\u121d"
+  },
+  "d83d_deb4": {
+    "message": "\u1262\u1235\u12ad\u120c\u1275 \u1290\u1302"
+  },
+  "d83d_deb5": {
+    "message": "\u12e8\u1270\u122b\u122b \u1262\u1235\u12ad\u120c\u1275 \u1290\u1302"
+  },
+  "d83d_deb6": {
+    "message": "\u12a5\u130d\u1228\u129b"
+  },
+  "d83d_deb7": {
+    "message": "\u121d\u1295\u121d \u12a5\u130d\u1228\u129b\u12ce\u127d \u12e8\u1209\u121d"
+  },
+  "d83d_deb8": {
+    "message": "\u120d\u1306\u127d \u1218\u1295\u1308\u12f5 \u12eb\u124b\u122d\u1323\u1209"
+  },
+  "d83d_deb9": {
+    "message": "\u12e8\u12c8\u1295\u12f6\u127d \u121d\u120d\u12ad\u1275"
+  },
+  "d83d_deba": {
+    "message": "\u12e8\u1234\u1276\u127d \u121d\u120d\u12ad\u1275"
+  },
+  "d83d_debb": {
+    "message": "\u12e8\u12cd\u1203 \u123d\u1295\u1275 \u121d\u120d\u12ad\u1275"
+  },
+  "d83d_debc": {
+    "message": "\u12e8\u1205\u133b\u1295 \u121d\u120d\u12ad\u1275"
+  },
+  "d83d_debd": {
+    "message": "\u123d\u1295\u1275 \u1264\u1275"
+  },
+  "d83d_debe": {
+    "message": "\u12cd\u1203 \u1218\u12f5\u134a\u12eb \u12eb\u1208\u12cd \u123d\u1295\u1275 \u1264\u1275"
+  },
+  "d83d_debf": {
+    "message": "\u123b\u12c8\u122d"
+  },
+  "d83d_dec0": {
+    "message": "\u1308\u120b \u1218\u1273\u1320\u1265"
+  },
+  "d83d_dec1": {
+    "message": "\u1263\u129e"
+  },
+  "d83d_dec2": {
+    "message": "\u12e8\u1353\u1235\u1356\u122d\u1275 \u1218\u1246\u1323\u1320\u122a\u12eb"
+  },
+  "d83d_dec3": {
+    "message": "\u1309\u121d\u1229\u12ad"
+  },
+  "d83d_dec4": {
+    "message": "\u12e8\u123b\u1295\u1323 \u1218\u1320\u12e8\u1242\u12eb"
+  },
+  "d83d_dec5": {
+    "message": "\u12e8\u1270\u1228\u1231 \u123b\u1295\u1323\u12ce\u127d"
+  },
+  "de_ger_settings_page": {
+    "message": "\u12e8\u1300\u122d\u1218\u1295\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "de_neo_ger_settings_page": {
+    "message": "\u12e8\u1300\u122d\u1218\u1295\u129b Neo 2 \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "dictionarytoolcategorytitle": {
+    "message": "\u121d\u12f5\u1265"
+  },
+  "dictionarytoolcommentnewinput": {
+    "message": "\u12a0\u1235\u1270\u12eb\u12e8\u1275"
+  },
+  "dictionarytoolcommenttitle": {
+    "message": "\u12a0\u1235\u1270\u12eb\u12e8\u1275"
+  },
+  "dictionarytooldeletedictionaryconfirm": {
+    "message": "[object Object]\u1295 \u1218\u1230\u1228\u12dd \u12ed\u1348\u120d\u130b\u1209?"
+  },
+  "dictionarytooldeletedictionarytitle": {
+    "message": "\u1218\u12dd\u1308\u1260-\u1243\u120b\u1275\u1295 \u1230\u122d\u12dd"
+  },
+  "dictionarytooldictionarylisttitle": {
+    "message": "\u1218\u12dd\u1308\u1260-\u1243\u120b\u1276\u127d"
+  },
+  "dictionarytooldictionaryname": {
+    "message": "\u12e8\u1218\u12dd\u1308\u1260-\u1243\u120b\u1275 \u1235\u121d"
+  },
+  "dictionarytooldonebutton": {
+    "message": "\u1270\u12a8\u1293\u12cd\u1297\u120d"
+  },
+  "dictionarytoolexportbutton": {
+    "message": "\u12c8\u12f0 \u12cd\u132a \u120b\u12ad"
+  },
+  "dictionarytoolimportbutton": {
+    "message": "\u12a0\u1235\u1218\u1323..."
+  },
+  "dictionarytoolmenutitle": {
+    "message": "\u12e8\u1218\u12dd\u1308\u1260-\u1243\u120b\u1275\u1295 \u121b\u1240\u1293\u1260\u122d"
+  },
+  "dictionarytoolnewdictionarynameplaceholder": {
+    "message": "\u12a0\u12f2\u1235 \u1218\u12dd\u1308\u1260-\u1243\u120b\u1275"
+  },
+  "dictionarytoolpagetitle": {
+    "message": "\u12e8\u1270\u1320\u1243\u121a \u1218\u12dd\u1308\u1260-\u1243\u120b\u1276\u127d"
+  },
+  "dictionarytoolreadingnewinput": {
+    "message": "\u12a0\u12f2\u1235 \u1295\u1263\u1265"
+  },
+  "dictionarytoolreadingtitle": {
+    "message": "\u1295\u1263\u1265"
+  },
+  "dictionarytoolstatuserrordictionarynamecontainsinvalidcharacter": {
+    "message": "\u1235\u1219 \u120d\u12ad \u12eb\u120d\u1206\u1290 \u1241\u121d\u134a(\u12ce\u127d) \u12a0\u1209\u1275\u1362"
+  },
+  "dictionarytoolstatuserrordictionarynameduplicated": {
+    "message": "\u1235\u1219 \u12a0\u1235\u1240\u12f5\u121e \u12a0\u1208\u1362"
+  },
+  "dictionarytoolstatuserrordictionarynameempty": {
+    "message": "\u12a5\u1263\u12ad\u12ce \u12e8\u1218\u12dd\u1308\u1260-\u1243\u120b\u1275 \u1235\u121d \u12ed\u1270\u12ed\u1261\u1362"
+  },
+  "dictionarytoolstatuserrordictionarynametoolong": {
+    "message": "\u1235\u1219 \u1260\u1323\u121d \u1228\u1305\u121d \u1290\u12cd\u1362"
+  },
+  "dictionarytoolstatuserrordictionarysizelimitexceeded": {
+    "message": "\u1270\u1328\u121b\u122a \u1218\u12dd\u1308\u1260-\u1243\u120b\u1276\u127d\u1295 \u1218\u134d\u1320\u122d \u12a0\u12ed\u127b\u120d\u121d\u1362"
+  },
+  "dictionarytoolstatuserroremptyfile": {
+    "message": "\u134b\u12ed\u1209 \u1263\u12f6 \u1290\u12cd\u1362"
+  },
+  "dictionarytoolstatuserrorentrysizelimitexceeded": {
+    "message": "\u1260\u12da\u1205 \u1218\u12dd\u1308\u1260-\u1243\u120b\u1275 \u12cd\u1235\u1325 \u1270\u1328\u121b\u122a \u130d\u1264\u1276\u127d\u1295 \u1218\u134d\u1320\u122d \u12a0\u12ed\u127b\u120d\u121d\u1362"
+  },
+  "dictionarytoolstatuserrorfilenotfound": {
+    "message": "\u134b\u12ed\u1209\u1295 \u1218\u12ad\u1348\u1275 \u12a0\u120d\u1270\u127b\u1208\u121d\u1362"
+  },
+  "dictionarytoolstatuserrorfilesizelimitexceeded": {
+    "message": "\u12e8\u12cd\u1202\u1265 \u1218\u1320\u1291 \u12a8\u134b\u12ed\u120d \u1218\u1320\u1295 \u1308\u12f0\u1261 \u12ed\u1260\u120d\u1323\u120d\u1362"
+  },
+  "dictionarytoolstatuserrorgeneral": {
+    "message": "\u12ad\u12c8\u1293\u12cd \u12a0\u120d\u1270\u1233\u12ab\u121d\u1362"
+  },
+  "dictionarytoolstatuserrorimportinvalidentries": {
+    "message": "\u12a0\u1295\u12f3\u1295\u12f5 \u1243\u120b\u1275\u1295 \u121b\u1235\u1218\u1323\u1275 \u12a0\u12ed\u127b\u120d\u121d\u1362"
+  },
+  "dictionarytoolstatuserrorimporttoomanywords": {
+    "message": "\u12e8\u121b\u1235\u1218\u132b \u121d\u1295\u1329 \u1260\u1323\u121d \u1265\u12d9 \u1243\u120b\u1275\u1295 \u12ed\u12df\u120d\u1362"
+  },
+  "dictionarytoolstatuserrorinvalidfileformat": {
+    "message": "\u134b\u12ed\u1209\u1295 \u121b\u1295\u1260\u1265 \u12a0\u120d\u1270\u127b\u1208\u121d\u1362"
+  },
+  "dictionarytoolstatuserrornoundohistory": {
+    "message": "\u120a\u1240\u1208\u1260\u1235 \u12e8\u121a\u127d\u120d \u1270\u1328\u121b\u122a \u12ad\u12c8\u1293 \u12e8\u1208\u121d\u1362"
+  },
+  "dictionarytoolstatuserrorreadingcontainsinvalidcharacter": {
+    "message": "\u1295\u1263\u1261 \u120d\u12ad \u12eb\u120d\u1206\u1290 \u1241\u121d\u134a(\u12ce\u127d) \u12a0\u1209\u1275\u1362 \u1260\u1295\u1263\u1261 \u12cd\u1235\u1325 \u12e8\u12a0\u1235\u12aa \u1241\u121d\u134a\u12ce\u127d\u1363 \u1202\u122b\u130b\u1293\u1363 \u12f5\u121d\u133d \u12eb\u1208\u12cd \u12e8\u12f5\u121d\u133d \u121d\u120d\u12ad\u1275(\u309b)\u1363 \u12a8\u134a\u120d \u12f0\u121d\u133d \u12eb\u1208\u12cd \u12e8\u12f5\u121d\u133d \u121d\u120d\u12ad\u1275(\u309c)\u1363 \u12e8\u1218\u1203\u120d \u1290\u1325\u1265(\u30fb)\u1363 \u12e8\u1270\u122b\u12d8\u1218 \u12e8\u12f5\u121d\u133d \u121d\u120d\u12ad\u1275(\u30fc)\u1363 \u12e8\u1303\u1353\u1295\u129b \u12ae\u121b(\u3001)\u1363 \u12e8\u1303\u1353\u1295\u129b \u12a0\u122b\u1275 \u1290\u1325\u1265(\u3002)\u1363 \u12e8\u1303\u1353\u1295\u129b \u1245\u1295\u134d(\u300c\u300d\u300e\u300f) \u12a5\u1293 \u12e8\u1303\u1353\u1295\u129b \u12cc\u126d\u12f3\u123d(\u301c) \u1218\u1320\u1240\u121d \u12ed\u127d\u120b\u1209\u1362"
+  },
+  "dictionarytoolstatuserrorreadingempty": {
+    "message": "\u12a5\u1263\u12ad\u12ce \u1295\u1263\u1261\u1295 \u12ed\u1270\u12ed\u1261\u1275\u1362"
+  },
+  "dictionarytoolstatuserrorreadingtoolong": {
+    "message": "\u1295\u1263\u1261 \u1260\u1323\u121d \u1228\u1305\u121d \u1290\u12cd\u1362"
+  },
+  "dictionarytoolstatuserrortitleaddentry": {
+    "message": "\u12e8\u130d\u1264\u1275 \u1235\u1205\u1270\u1275 \u12eb\u12ad\u1209"
+  },
+  "dictionarytoolstatuserrortitlecreatedictionary": {
+    "message": "\u12e8\u1218\u12dd\u1308\u1260-\u1243\u120b\u1275 \u1235\u1205\u1270\u1275 \u12ed\u134d\u1320\u1229"
+  },
+  "dictionarytoolstatuserrortitledeletedictionary": {
+    "message": "\u12e8\u1218\u12dd\u1308\u1260-\u1243\u120b\u1275 \u1235\u1205\u1270\u1275 \u12ed\u1230\u122d\u12d9"
+  },
+  "dictionarytoolstatuserrortitledeleteentry": {
+    "message": "\u12e8\u130d\u1264\u1275 \u1235\u1205\u1270\u1275 \u12ed\u1230\u122d\u12d9"
+  },
+  "dictionarytoolstatuserrortitleeditentry": {
+    "message": "\u12e8\u130d\u1264\u1275 \u1235\u1205\u1270\u1275 \u12eb\u122d\u1275\u12d1"
+  },
+  "dictionarytoolstatuserrortitleimportdata": {
+    "message": "\u1235\u1205\u1270\u1275 \u12eb\u1235\u1218\u1321"
+  },
+  "dictionarytoolstatuserrortitlerenamedictionary": {
+    "message": "\u12e8\u1218\u12dd\u1308\u1260-\u1243\u120b\u1275 \u1235\u1205\u1270\u1275 \u12f3\u130d\u121d \u12ed\u1230\u12ed\u1219"
+  },
+  "dictionarytoolstatuserrorwordcontainsinvalidcharacter": {
+    "message": "\u1243\u1209 \u120d\u12ad \u12eb\u120d\u1206\u1290 \u1241\u121d\u134a(\u12ce\u127d) \u12a0\u1209\u1275\u1362"
+  },
+  "dictionarytoolstatuserrorwordempty": {
+    "message": "\u12a5\u1263\u12ad\u12ce \u1243\u1209\u1295 \u12ed\u1270\u12ed\u1261\u1362"
+  },
+  "dictionarytoolstatuserrorwordtoolong": {
+    "message": "\u1243\u1209 \u1260\u1323\u121d \u1228\u1305\u121d \u1290\u12cd\u1362"
+  },
+  "dictionarytoolwordnewinput": {
+    "message": "\u12a0\u12f2\u1235 \u1243\u120d"
+  },
+  "dictionarytoolwordtitle": {
+    "message": "\u1243\u120d"
+  },
+  "dismiss_menu": {
+    "message": "\u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 \u121d\u1293\u120c\u1295 \u12a0\u1230\u1293\u1265\u1275"
+  },
+  "dk_dan_settings_page": {
+    "message": "\u12e8\u12f3\u1292\u123d\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "double_space_period": {
+    "message": "\u1290\u1325\u1265\u1295 \u1208\u1218\u1270\u12e8\u1265 \u1201\u1208\u1275 \u1263\u12f6 \u1266\u1273"
+  },
+  "down_arrow": {
+    "message": "\u12e8\u1273\u127d \u1240\u1235\u1275"
+  },
+  "ee_est_settings_page": {
+    "message": "\u12e8\u12a5\u1235\u1276\u1292\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "emoji_tab_emoticon": {
+    "message": "\u12e8\u1235\u121c\u1275 \u12a0\u12f6 \u12e8\u1235\u121c\u1275 \u1308\u120b\u132d \u121d\u1235\u120d \u121d\u12f5\u1265"
+  },
+  "emoji_tab_face": {
+    "message": "\u12e8\u134a\u1275 \u12e8\u1235\u121c\u1275 \u1308\u120b\u132d \u121d\u1235\u120d \u121d\u12f5\u1265"
+  },
+  "emoji_tab_hot": {
+    "message": "\u12e8\u1230\u121e\u1295\u129b \u12e8\u1235\u121c\u1275 \u1308\u120b\u132d \u121d\u1235\u120d \u121d\u12f5\u1265"
+  },
+  "emoji_tab_nature": {
+    "message": "\u12e8\u1270\u1348\u1325\u122e \u12e8\u1235\u121c\u1275 \u1308\u120b\u132d \u121d\u1235\u120d \u121d\u12f5\u1265"
+  },
+  "emoji_tab_object": {
+    "message": "\u12e8\u1290\u1308\u122d \u12e8\u1235\u121c\u1275 \u1308\u120b\u132d \u121d\u1235\u120d \u121d\u12f5\u1265"
+  },
+  "emoji_tab_place": {
+    "message": "\u12e8\u1266\u1273 \u12e8\u1235\u121c\u1275 \u1308\u120b\u132d \u121d\u1235\u120d \u121d\u12f5\u1265"
+  },
+  "emoji_tab_recent": {
+    "message": "\u12e8\u1245\u122d\u1265 \u130a\u12dc \u12e8\u1235\u121c\u1275 \u1308\u120b\u132d \u121d\u1235\u120d \u121d\u12f5\u1265"
+  },
+  "emoji_tab_symbol": {
+    "message": "\u12e8\u121d\u120d\u12ad\u1275 \u12e8\u1235\u121c\u1275 \u1308\u120b\u132d \u121d\u1235\u120d \u121d\u12f5\u1265"
+  },
+  "enable_capitalization": {
+    "message": "\u122b\u1235-\u1230\u122d \u12d3\u1262\u12ed \u1206\u1204 \u121b\u12f5\u1228\u130a\u12eb"
+  },
+  "enable_completion": {
+    "message": "\u121b\u1320\u1293\u1240\u1245\u1295 \u12a0\u1295\u1243"
+  },
+  "enable_prediction": {
+    "message": "\u12e8\u121a\u1240\u1325\u1208\u12cd \u1243\u120d\u1295 \u130d\u1218\u1273 \u12a0\u1295\u1243"
+  },
+  "enter": {
+    "message": "\u12a0\u1235\u1308\u1263"
+  },
+  "es_cat_cat_settings_page": {
+    "message": "\u12e8\u12ab\u1273\u120b\u1295\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "es_spa_settings_page": {
+    "message": "\u12e8\u1235\u1353\u1292\u123d\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "expand": {
+    "message": "\u12d8\u122d\u130b"
+  },
+  "expand_candidates": {
+    "message": "\u12e8\u12d5\u1329 \u12dd\u122d\u12dd\u122d\u1295 \u12d8\u122d\u130b"
+  },
+  "fi_fin_settings_page": {
+    "message": "\u12e8\u134a\u1295\u120b\u1295\u12f5\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "footer_emoji_button": {
+    "message": "\u12c8\u12f0 \u1235\u121c\u1275 \u1308\u120b\u132d \u12a0\u12f6 \u1240\u12ed\u122d"
+  },
+  "footer_handwriting_button": {
+    "message": "\u12c8\u12f0 \u12a5\u1305 \u133d\u1211\u134d \u1240\u12ed\u122d"
+  },
+  "footer_settings_button": {
+    "message": "\u12ad\u134d\u1275 \u12e8\u130d\u1264\u1275 \u1235\u120d\u1275 \u1245\u1295\u1265\u122e\u127d"
+  },
+  "fr_fra_settings_page": {
+    "message": "\u12e8\u1348\u1228\u1295\u1233\u12ed\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "fuzzy_pinyin": {
+    "message": "\u12eb\u120d\u1320\u122b-\u12e8\u1352\u1295\u12ea\u1295 \u1201\u1290\u1273\u1295 \u12eb\u1295\u1241"
+  },
+  "gb_dvorak_eng_settings_page": {
+    "message": "\u12e8\u12e9\u12ac Dvorak \u1241\u120d\u134d \u1230\u120c\u12f3 (\u12a5\u1295\u130d\u120a\u12dd\u129b) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "gb_extd_eng_settings_page": {
+    "message": "\u12e8\u12e9\u12ac \u1241\u120d\u134d \u1230\u120c\u12f3 (\u12a5\u1295\u130d\u120a\u12dd\u129b) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "ge_geo_settings_page": {
+    "message": "\u12e8\u1306\u122d\u1302\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "globe": {
+    "message": "\u12c8\u12f0 \u1240\u12f3\u121a\u12cd \u1241\u120d\u134d \u1230\u120c\u12f3 \u12ed\u1240\u12ed\u1229"
+  },
+  "got_it": {
+    "message": "\u1308\u1263\u129d"
+  },
+  "gr_gre_settings_page": {
+    "message": "\u12e8\u130d\u122a\u12ad\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "handwriting_back": {
+    "message": "\u1270\u1218\u1208\u1235"
+  },
+  "handwriting_netowrk_error": {
+    "message": "\u12ed\u1245\u122d\u1273\u1363 \u12a0\u12cd\u1273\u1228 \u1218\u1228\u1265 \u1235\u1208\u121b\u12ed\u1308\u129d \u12e8\u12a5\u1305 \u133d\u1211\u134d \u1218\u1320\u1240\u121d \u12a0\u12ed\u127d\u1209\u120d\u121d\u1362"
+  },
+  "handwriting_privacy_info": {
+    "message": "\u133d\u1211\u134d\u1295 \u1208\u12ed\u1276 \u1208\u121b\u12c8\u1245 \u1232\u1263\u120d \u12e8\u12a5\u122d\u1235\u12ce \u130d\u1264\u1275 \u12c8\u12f0 \u12e8Google \u12a0\u1308\u120d\u130b\u12ee\u127d \u12ed\u120b\u12ab\u120d"
+  },
+  "hide_keyboard": {
+    "message": "\u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 \u12f0\u1265\u1245"
+  },
+  "hr_scr_settings_page": {
+    "message": "\u12e8\u12ad\u122e\u123a\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "hu_hun_settings_page": {
+    "message": "\u12e8\u1203\u1295\u130b\u122a\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "ie_ga_settings_page": {
+    "message": "\u12e8\u1264\u120b\u1229\u1235\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "ignore_correction": {
+    "message": "\u1208\u121a\u12a8\u1270\u1208\u12cd \u12a5\u122d\u121b\u1276\u127d\u1295 \u127d\u120b \u1260\u120d"
+  },
+  "ignore_correction_short": {
+    "message": "\u12a5\u122d\u121b\u1271\u1295 \u127d\u120b \u1260\u120d"
+  },
+  "il_heb_settings_page": {
+    "message": "\u12e8\u12a5\u1265\u122b\u12ed\u1235\u1325 \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "init_lang": {
+    "message": "\u12e8\u1218\u1300\u1218\u122a\u12eb\u12cd \u12e8\u130d\u1265\u12d3\u1275 \u124b\u1295\u124b \u127b\u12ed\u1295\u129b \u1290\u12cd"
+  },
+  "init_punc": {
+    "message": "\u12e8\u1218\u1300\u1218\u122a\u12eb \u1235\u122d\u12d3\u1270 \u1290\u1325\u1265 \u1235\u134b\u1275 \u1219\u1209 \u1290\u12cd"
+  },
+  "init_sbc": {
+    "message": "\u12e8\u1218\u1300\u1218\u122a\u12eb \u1241\u121d\u134a \u1235\u134b\u1275 \u1219\u1209 \u1290\u12cd"
+  },
+  "input_hangul": {
+    "message": "\u12e8\u1203\u1295\u1309\u120d \u1201\u1290\u1273"
+  },
+  "input_hanja": {
+    "message": "\u12e8\u1203\u1295\u1303 \u1201\u1290\u1273"
+  },
+  "inputmethod_array": {
+    "message": "\u12e8\u12f5\u122d\u12f5\u122d \u12e8\u130d\u1264\u1275 \u1235\u120d\u1275"
+  },
+  "inputmethod_cangjie": {
+    "message": "\u12e8\u12ab\u1295\u130d\u1302 \u130d\u1264\u1275 \u1235\u120d\u1275"
+  },
+  "inputmethod_dayi": {
+    "message": "\u12e8\u12f3\u12ea \u130d\u1264\u1275 \u1235\u120d\u1275"
+  },
+  "inputmethod_hangul": {
+    "message": "\u12e8\u12ae\u122a\u12eb\u129b \u130d\u1264\u1275 \u1235\u120d\u1275"
+  },
+  "inputmethod_pinyin": {
+    "message": "\u12e8\u1352\u1295\u12ea\u1295 \u130d\u1264\u1275 \u1235\u120d\u1275"
+  },
+  "inputmethod_quick": {
+    "message": "\u1348\u1323\u1295 \u12e8\u130d\u1264\u1275 \u1235\u120d\u1275"
+  },
+  "inputmethod_traditional_pinyin": {
+    "message": "\u12e8\u1352\u1295\u12ea\u1295 \u130d\u1264\u1275 \u1235\u120d\u1275 \u1208\u1263\u1205\u120b\u12ca \u127b\u12ed\u1295\u129b"
+  },
+  "inputmethod_wubi": {
+    "message": "\u12e8\u12c9\u1262 \u130d\u1264\u1275 \u1235\u120d\u1275"
+  },
+  "inputmethod_zhuyin": {
+    "message": "\u12e8\u12e1\u12ea\u1295 \u130d\u1264\u1275 \u1235\u120d\u1275"
+  },
+  "is_ice_settings_page": {
+    "message": "\u12e8\u12a0\u12ed\u1235\u120b\u1295\u12f2\u12ad\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "it_ita_settings_page": {
+    "message": "\u12e8\u1323\u120d\u12eb\u1295\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "jp_jpn_settings_page": {
+    "message": "\u12e8\u1303\u1353\u1295\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "keyboard_arabic": {
+    "message": "\u12a0\u1228\u1265\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_armenian_phonetic": {
+    "message": "\u12e8\u12a0\u122d\u121c\u1292\u12eb\u129b \u12f5\u121d\u1345 \u12a0\u1290\u1263\u1260\u1265 \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_belarusian": {
+    "message": "\u12e8\u1264\u120b\u1229\u1235\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_belgian": {
+    "message": "\u12e8\u1264\u120d\u1302\u12e8\u121d \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_bengali_phonetic": {
+    "message": "\u12e8\u1264\u1295\u130b\u120d \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (\u134e\u1290\u1272\u12ad)"
+  },
+  "keyboard_brazilian": {
+    "message": "\u12e8\u1265\u122b\u12da\u120d\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_bulgarian": {
+    "message": "\u12e8\u1261\u120d\u130b\u122a\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_bulgarian_phonetic": {
+    "message": "\u12e8\u1261\u120d\u130b\u122a\u12eb\u129b \u12f5\u121d\u1345 \u12a0\u1290\u1263\u1260\u1265 \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_canadian_english": {
+    "message": "\u12e8\u12ab\u1293\u12f3 \u12a5\u1295\u130d\u120a\u12dd\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_canadian_french": {
+    "message": "\u12e8\u12ab\u1293\u12f3 \u1348\u1228\u1295\u1233\u12ed\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_canadian_multilingual": {
+    "message": "\u12e8\u12ab\u1293\u12f3 \u1265\u12dd\u1210 \u124b\u1295\u124b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_catalan": {
+    "message": "\u12e8\u12ab\u1273\u120b\u1295\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_croatian": {
+    "message": "\u12e8\u12ad\u122e\u123a\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_czech": {
+    "message": "\u12e8\u127c\u12ad\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_czech_qwerty": {
+    "message": "\u12e8\u127c\u12ad\u129b QWERTY \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_danish": {
+    "message": "\u12e8\u12f3\u1292\u123d\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_devanagari_phonetic": {
+    "message": "\u12e8\u12f4\u126b\u1293\u130b\u122a \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (\u134e\u1290\u1272\u12ad)"
+  },
+  "keyboard_estonian": {
+    "message": "\u12e8\u12a4\u1235\u1276\u1292\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_ethiopic": {
+    "message": "\u12e8\u130d\u12d5\u12dd \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_finnish": {
+    "message": "\u12e8\u134a\u1295\u120b\u12f5\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_french": {
+    "message": "\u12e8\u1348\u1228\u1295\u1233\u12ed\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_georgian": {
+    "message": "\u12e8\u1302\u12e9\u122d\u1302\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_german": {
+    "message": "\u12e8\u1300\u122d\u1218\u1295\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_german_neo_2": {
+    "message": "\u12e8\u1300\u122d\u1218\u1295\u129b Neo 2 \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_greek": {
+    "message": "\u12e8\u130d\u122a\u12ad\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_gujarati_phonetic": {
+    "message": "\u12e8\u1309\u1303\u122b\u1272 \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (\u134e\u1290\u1272\u12ad)"
+  },
+  "keyboard_hebrew": {
+    "message": "\u12e8\u12d5\u1265\u122b\u12ed\u1235\u1325 \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_hungarian": {
+    "message": "\u12e8\u1203\u1295\u130b\u122a\u129b \u1230\u120c\u12f3 \u1241\u120d\u134d"
+  },
+  "keyboard_icelandic": {
+    "message": "\u12e8\u12a0\u12ed\u1235\u120b\u1295\u12f5\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_inscript": {
+    "message": "\u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (InScript)"
+  },
+  "keyboard_irish": {
+    "message": "\u12e8\u12a0\u12ed\u122a\u123d \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_italian": {
+    "message": "\u12e8\u1323\u120d\u12eb\u1295\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_itrans": {
+    "message": "\u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (itrans)"
+  },
+  "keyboard_japanese": {
+    "message": "\u12e8\u1303\u1353\u1295\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_kannada_phonetic": {
+    "message": "\u12e8\u12ab\u1293\u12f3 \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (\u134e\u1290\u1272\u12ad)"
+  },
+  "keyboard_kedmanee": {
+    "message": "\u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (\u12a8\u12f5\u121b\u1292)"
+  },
+  "keyboard_khmer": {
+    "message": "\u12e8\u12ad\u1218\u122d \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_lao": {
+    "message": "\u12e8\u120b\u12a6 \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_latin_american": {
+    "message": "\u12e8\u120b\u1272\u1295 \u12a0\u121c\u122a\u12ab \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_latvian": {
+    "message": "\u12e8\u120b\u1275\u126a\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_lithuanian": {
+    "message": "\u12e8\u120a\u1271\u12cc\u1292\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_malayalam_phonetic": {
+    "message": "\u12e8\u121b\u120b\u12eb\u120b\u121d \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (\u134e\u1290\u1272\u12ad)"
+  },
+  "keyboard_maltese": {
+    "message": "\u12e8\u121b\u120d\u1274\u12dd\u129b \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_mongolian": {
+    "message": "\u12e8\u121e\u1295\u130e\u120a\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_myanmar": {
+    "message": "\u12e8\u121a\u12eb\u1295\u121b\u122d MM3 \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_myanmar_myansan": {
+    "message": "\u12e8\u121a\u12eb\u1295\u121b\u122d \u121a\u12eb\u1295\u1233\u1295 \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_nepali_inscript": {
+    "message": "\u12e8\u1294\u1353\u120a \u1241\u120d\u134d \u1230\u120c\u12f3 (\u12a2\u1295\u1235\u12ad\u122a\u1355\u1275)"
+  },
+  "keyboard_nepali_phonetic": {
+    "message": "\u12e8\u1294\u1353\u120a \u1241\u120d\u134d \u1230\u120c\u12f3 (\u134e\u1290\u1272\u12ad)"
+  },
+  "keyboard_netherlands": {
+    "message": "\u12e8\u1294\u12d8\u122d\u120b\u1295\u12f5 \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_none": {
+    "message": "\u12e8\u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_norwegian": {
+    "message": "\u12e8\u1296\u122d\u12cc\u12ed\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_pattachote": {
+    "message": "\u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (\u1353\u1273\u127e\u1275)"
+  },
+  "keyboard_persian": {
+    "message": "\u12e8\u134b\u122d\u1235 \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_phonetic": {
+    "message": "\u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (\u134e\u1290\u1272\u12ad)"
+  },
+  "keyboard_polish": {
+    "message": "\u12e8\u1356\u120b\u1295\u12f5\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_portuguese": {
+    "message": "\u12e8\u1356\u122d\u1271\u130b\u120d\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_romanian": {
+    "message": "\u12e8\u122e\u121b\u1292\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_romanian_standard": {
+    "message": "\u12e8\u122e\u121b\u1292\u12eb \u1218\u12f0\u1260\u129b \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_russian": {
+    "message": "\u12e8\u1229\u1232\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_russian_phonetic": {
+    "message": "\u12e8\u1229\u1232\u12eb\u129b \u12e8\u12f5\u121d\u1345 \u12a0\u1290\u1263\u1260\u1265 \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_russian_phonetic_aatseel": {
+    "message": "\u12e8\u1229\u1235\u12eb\u129b \u12f5\u121d\u1345 \u12a0\u1290\u1263\u1260\u1265 (AATSEEL) \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_russian_phonetic_yazhert": {
+    "message": "\u12e8\u1229\u1232\u12eb\u129b \u12e8\u12f5\u121d\u1345 \u12a0\u1290\u1263\u1260\u1265 (YaZHert) \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_serbian": {
+    "message": "\u12e8\u1230\u122d\u1262\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_sinhala": {
+    "message": "\u12e8\u1232\u1295\u1203\u120b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_slovakian": {
+    "message": "\u12e8\u1235\u120e\u126b\u12ad\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_slovenian": {
+    "message": "\u12e8\u1235\u120e\u126c\u1292\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_soranikurdish_ar": {
+    "message": "\u12e8\u1236\u122b\u1292 \u12a9\u122d\u12f5\u129b \u1260\u12a0\u1228\u1265\u129b \u120b\u12ed \u12e8\u1270\u1218\u1220\u1228\u1270 \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_soranikurdish_en": {
+    "message": "\u12e8\u1236\u122b\u1292 \u12a9\u122d\u12f5\u129b \u1260\u12a5\u1295\u130d\u120a\u12dd\u129b \u120b\u12ed \u12e8\u1270\u1218\u1220\u1228\u1270 \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_spanish": {
+    "message": "\u12e8\u1235\u1353\u1292\u123d\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_swedish": {
+    "message": "\u12e8\u1235\u12ca\u12f5\u1295\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_swiss": {
+    "message": "\u12e8\u1235\u12ca\u12dd \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_swiss_french": {
+    "message": "\u12e8\u1235\u12ca\u12dd \u1348\u1228\u1295\u1233\u12ed\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_tamil99": {
+    "message": "\u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (Tamil99)"
+  },
+  "keyboard_tamil_inscript": {
+    "message": "\u12e8\u1273\u121a\u120d \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (InScript)"
+  },
+  "keyboard_tamil_itrans": {
+    "message": "\u12e8\u1273\u121a\u120d \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (itrans)"
+  },
+  "keyboard_tamil_phonetic": {
+    "message": "\u12e8\u1273\u121a\u120d \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (\u134e\u1290\u1272\u12ad)"
+  },
+  "keyboard_tamil_tamil99": {
+    "message": "\u12e8\u1273\u121a\u120d \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (Tamil99)"
+  },
+  "keyboard_tamil_typewriter": {
+    "message": "\u12e8\u1273\u121a\u120d \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (\u1218\u1270\u12e8\u1262\u12eb)"
+  },
+  "keyboard_tcvn": {
+    "message": "\u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (TCVN)"
+  },
+  "keyboard_telex": {
+    "message": "\u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (\u1274\u120c\u12ad\u1235)"
+  },
+  "keyboard_telugu_phonetic": {
+    "message": "\u12e8\u1274\u1209\u1309 \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (\u134e\u1290\u1272\u12ad)"
+  },
+  "keyboard_thai_kedmanee": {
+    "message": "\u12e8\u1273\u12ed \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (\u12a8\u12f5\u121b\u1292)"
+  },
+  "keyboard_thai_pattachote": {
+    "message": "\u12e8\u1273\u12ed \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (\u1353\u1273\u127e\u1275)"
+  },
+  "keyboard_thai_tis": {
+    "message": "\u12e8\u1273\u12ed \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (TIS 820-2531)"
+  },
+  "keyboard_tis": {
+    "message": "\u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (TIS 820-2531)"
+  },
+  "keyboard_turkish": {
+    "message": "\u12e8\u1271\u122d\u12ad\u129b \u1230\u120c\u12f3 \u1241\u120d\u134d"
+  },
+  "keyboard_typewriter": {
+    "message": "\u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (\u1218\u1270\u12e8\u1262\u12eb)"
+  },
+  "keyboard_uk": {
+    "message": "\u12e8\u12e9\u12ac \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_uk_dvorak": {
+    "message": "\u12e8\u12e9\u12ac Dvorak \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_ukrainian": {
+    "message": "\u12e8\u12e9\u12ad\u122c\u12ed\u1295\u129b \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_us": {
+    "message": "\u12e8\u12a0\u121c\u122a\u12ab \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_us_colemak": {
+    "message": "\u12e8\u12a0\u121c\u122a\u12ab Colemak \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_us_dvorak": {
+    "message": "\u12e8\u12a0\u121c\u122a\u12ab Dvorak \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_us_extended": {
+    "message": "\u12e8\u12a0\u121c\u122a\u12ab \u12e8\u1270\u122b\u12d8\u1218 \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_us_international": {
+    "message": "\u12e8\u12a0\u121c\u122a\u12ab \u12d3\u1208\u121d \u12a0\u1240\u134d \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "keyboard_vietnamese_tcvn": {
+    "message": "\u12e8\u126a\u12ec\u1275\u1293\u121d\u129b \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (\u1272 \u1232 \u126a \u12a4\u1295)"
+  },
+  "keyboard_vietnamese_telex": {
+    "message": "\u12e8\u126a\u12ec\u1275\u1293\u121d\u129b \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (\u1274\u1208\u12ad\u1235)"
+  },
+  "keyboard_vietnamese_viqr": {
+    "message": "\u12e8\u126a\u12ec\u1275\u1293\u121d\u129b \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (\u126a \u12a0\u12ed \u12aa\u12e9 \u12a0\u122d)"
+  },
+  "keyboard_vietnamese_vni": {
+    "message": "\u12e8\u126a\u12ec\u1275\u1293\u121d\u129b \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (\u126a \u12a4\u129d \u12a0\u12ed)"
+  },
+  "keyboard_viqr": {
+    "message": "\u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (\u126a \u12a0\u12ed \u1242\u12e9 \u12a0\u122d)"
+  },
+  "keyboard_vni": {
+    "message": "\u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 (\u126a \u12a4\u1295 \u12a0\u12ed)"
+  },
+  "korean_hanja_display": {
+    "message": "\u12e8\u1203\u1295\u1303 \u12a5\u1329 \u1201\u1290\u1273"
+  },
+  "korean_keyboard_layout": {
+    "message": "\u12e8\u12ae\u122a\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u12a0\u1240\u121b\u1218\u1325"
+  },
+  "korean_settings_page": {
+    "message": "\u12e8\u12ae\u122a\u12eb\u129b \u130d\u1264\u1275 \u1235\u120d\u1275 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "korean_syllable_input": {
+    "message": "\u1260\u12a0\u1295\u12f5 \u130a\u12dc \u12a0\u1295\u12f5 \u12ad\u134d\u1208-\u1243\u120d \u12eb\u1235\u1308\u1261"
+  },
+  "latam_spa_settings_page": {
+    "message": "\u12e8\u120b\u1272\u1295 \u12a0\u121c\u122a\u12ab \u1241\u120d\u134d \u1230\u120c\u12f3 (\u1235\u1353\u1292\u123d\u129b) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "latin_settings_page": {
+    "message": "\u1245\u1295\u1265\u122e\u127d"
+  },
+  "left_arrow": {
+    "message": "\u12e8\u130d\u122b \u1240\u1235\u1275"
+  },
+  "lt_lit_settings_page": {
+    "message": "\u12e8\u1209\u1275\u12cc\u1295\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "lv_apostrophe_lav_settings_page": {
+    "message": "\u12e8\u120b\u1272\u126a\u12eb\u1295\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 (\u120b\u1272\u126a\u12eb\u1295\u129b\u1363 \u120c\u1272\u123d) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "menu_key": {
+    "message": "\u12ad\u134d\u1275 \u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 \u121d\u1293\u120c"
+  },
+  "mn_mon_settings_page": {
+    "message": "\u12e8\u121e\u1295\u130e\u120d\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "move_page_key_above": {
+    "message": "\u12e8\u12a5\u1329 \u12dd\u122d\u12dd\u122d \u120b\u12ed \u1308\u133d \u1208\u1218\u134d\u1320\u122d - \u12a5\u1293 = \u12ed\u1320\u1240\u1219"
+  },
+  "move_page_key_below": {
+    "message": "\u12e8\u12a5\u1329 \u12dd\u122d\u12dd\u122d \u120b\u12ed \u1308\u133d \u1208\u1218\u134d\u1320\u122d \u12e8 , \u12a5\u1293 . \u1241\u120d\u134e\u127d\u1295 \u12ed\u1320\u1240\u1219"
+  },
+  "never_auto_correct": {
+    "message": "\u1320\u134d\u1277\u120d"
+  },
+  "no_nob_settings_page": {
+    "message": "\u12e8\u1296\u122d\u12cc\u12ed\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "pause": {
+    "message": "\u120b\u134d\u1273 \u12a0\u1241\u121d"
+  },
+  "physical_auto_correction_level": {
+    "message": "\u122b\u1235-\u1230\u122d \u12a5\u122d\u121b\u1275"
+  },
+  "physical_enable_capitalization": {
+    "message": "\u122b\u1235-\u1230\u122d \u12d3\u1262\u12ed \u1206\u1204 \u121b\u12f5\u1228\u130a\u12eb"
+  },
+  "physical_keyboard": {
+    "message": "\u12a0\u12ab\u120b\u12ca \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "pinyin_settings_page": {
+    "message": "\u12e8\u1352\u1295\u12ea\u1295 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "pl_pol_settings_page": {
+    "message": "\u12e8\u1353\u120b\u1295\u12f5\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "pt_por_settings_page": {
+    "message": "\u12e8\u1356\u122d\u1271\u130b\u120d\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "right_arrow": {
+    "message": "\u12e8\u1240\u129d \u1240\u1235\u1275"
+  },
+  "ro_rum_settings_page": {
+    "message": "\u12e8\u122e\u121b\u1292\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "rs_srp_settings_page": {
+    "message": "\u12e8\u1230\u122d\u1262\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "ru_phonetic_rus_settings_page": {
+    "message": "\u12e8\u1229\u1232\u12eb\u129b \u12f5\u121d\u1345 \u12a0\u1290\u1263\u1260\u1265 \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "ru_rus_settings_page": {
+    "message": "\u12e8\u1229\u1232\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "se_swe_settings_page": {
+    "message": "\u12e8\u1235\u12ca\u12f2\u1295\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "settings": {
+    "message": "\u1245\u1295\u1265\u122e\u127d"
+  },
+  "shift": {
+    "message": "\u1218\u1240\u12e8\u122a\u12eb"
+  },
+  "shift_lock": {
+    "message": "\u1218\u1240\u12e8\u122a\u12eb \u1270\u1246\u120d\u134f\u120d"
+  },
+  "show_candidate_mode": {
+    "message": "\u12e8\u1270\u1246\u120d\u124b\u12ed \u1325\u1246\u121b \u121b\u12d8\u130a\u12eb"
+  },
+  "show_candidates_1000": {
+    "message": "\u12a81\u1230 \u1260\u128b\u120b \u1270\u1246\u120d\u124b\u12ed \u1325\u1246\u121b\u1295 \u12a0\u1233\u12ed"
+  },
+  "show_candidates_2000": {
+    "message": "\u12a82\u1230 \u1260\u128b\u120b \u1270\u1246\u120d\u124b\u12ed \u1325\u1246\u121b\u1295 \u12a0\u1233\u12ed"
+  },
+  "show_candidates_500": {
+    "message": "\u12a8500\u121a\u1230 \u1260\u128b\u120b \u1270\u1246\u120d\u124b\u12ed \u1325\u1246\u121b\u1295 \u12a0\u1233\u12ed"
+  },
+  "show_candidates_5000": {
+    "message": "\u12a85\u1230 \u1260\u128b\u120b \u1270\u1246\u120d\u124b\u12ed \u1325\u1246\u121b\u1295 \u12a0\u1233\u12ed"
+  },
+  "show_candidates_backspace": {
+    "message": "\u1260Backspace \u12e8\u1325\u1246\u121b \u1270\u1246\u120d\u124b\u12ed\u1295 \u12a0\u1233\u12ed"
+  },
+  "show_hangul_candidate": {
+    "message": "\u12a5\u1329\u12ce\u127d\u1295 \u1260\u1203\u1295\u1309\u120d \u1201\u1290\u1273 \u12eb\u1233\u12e9"
+  },
+  "shrink_candidates": {
+    "message": "\u12e8\u12d5\u1329 \u12dd\u122d\u12dd\u122d\u1295 \u12d8\u122d\u130b"
+  },
+  "si_slv_settings_page": {
+    "message": "\u12e8\u1235\u120e\u126b\u1295\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "sk_slo_settings_page": {
+    "message": "\u12e8\u1235\u120e\u126b\u12ad\u12eb\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "smiley": {
+    "message": "\u1348\u1308\u130d\u1274"
+  },
+  "sometimes_auto_correct": {
+    "message": "\u1218\u12ab\u12a8\u1208\u129b"
+  },
+  "sound_on_keypress": {
+    "message": "\u1260\u1241\u120d\u134d \u1218\u132b\u1295 \u12c8\u1245\u1275 \u12f5\u121d\u1345"
+  },
+  "space": {
+    "message": "\u12ad\u134d\u1270\u1275"
+  },
+  "switch_to": {
+    "message": "\u1240\u12ed\u122d \u12c8\u12f0 "
+  },
+  "switch_to_compact_layout": {
+    "message": "\u12c8\u12f0 \u12cd\u1231\u1295 \u12a0\u1240\u121b\u1218\u1325 \u1240\u12ed\u122d"
+  },
+  "switch_to_full_layout": {
+    "message": "\u12c8\u12f0 \u1219\u1209 \u12a0\u1240\u121b\u1218\u1325 \u1240\u12ed\u122d"
+  },
+  "switch_to_keyboard_prefix": {
+    "message": "\u1240\u12ed\u122d \u12c8\u12f0 "
+  },
+  "switched_to": {
+    "message": "\u1270\u1240\u12ed\u122f\u120d \u12c8\u12f0 "
+  },
+  "tab": {
+    "message": "\u1275\u122d"
+  },
+  "touch_keyboard": {
+    "message": "\u12e8\u121b\u12eb \u1308\u133d \u120b\u12ed \u1241\u120d\u134d \u1230\u120c\u12f3"
+  },
+  "tr_tur_settings_page": {
+    "message": "\u12e8\u1271\u122d\u12ad\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "transliteration_am": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (salam \u2192 \u1230\u120b\u121d)"
+  },
+  "transliteration_ar": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (marhaban \u2190 \u0645\u0631\u062d\u0628\u0627)"
+  },
+  "transliteration_be": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (pryvitannie \u2192 \u043f\u0440\u044b\u0432\u0456\u0442\u0430\u043d\u043d\u0435)"
+  },
+  "transliteration_bg": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (zdrasti \u2192 \u0437\u0434\u0440\u0430\u0441\u0442\u0438)"
+  },
+  "transliteration_bn": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (namaskar \u2192 \u09a8\u09ae\u09b8\u09cd\u0995\u09be\u09b0)"
+  },
+  "transliteration_el": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (geia \u2192 \u03b3\u03b5\u03b9\u03b1)"
+  },
+  "transliteration_fa": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (salam \u2190 \u0633\u0644\u0627\u0645)"
+  },
+  "transliteration_gu": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (namaste \u2192 \u0aa8\u0aae\u0ab8\u0acd\u0aa4\u0ac7)"
+  },
+  "transliteration_he": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (shalom \u2190 \u05e9\u05dc\u05d5\u05dd)"
+  },
+  "transliteration_hi": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_kn": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (namaskaram \u2192 \u0ca8\u0cae\u0cb8\u0ccd\u0c95\u0cbe\u0cb0)"
+  },
+  "transliteration_ml": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (namaskar \u2192 \u0d28\u0d2e\u0d38\u0d4d\u0d15\u0d3e\u0d30\u0d02)"
+  },
+  "transliteration_mr": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (namaste \u2192 \u0928\u092e\u0938\u094d\u0915\u093e\u0930)"
+  },
+  "transliteration_ne": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_or": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (mausam \u2192 \u0b28\u0b2e\u0b38\u0b4d\u0b24\u0b47)"
+  },
+  "transliteration_pa": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (mausam \u2192 \u0a2e\u0a4c\u0a38\u0a2e)"
+  },
+  "transliteration_ru": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (privet \u2192 \u043f\u0440\u0438\u0432\u0435\u0442)"
+  },
+  "transliteration_sa": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_si": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (halo \u2192 \u0dc4\u0dbd\u0ddd)"
+  },
+  "transliteration_sr": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (zdravo \u2192 \u0437\u0434\u0440\u0430\u0432\u043e)"
+  },
+  "transliteration_ta": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (vanakkam \u2192 \u0bb5\u0ba3\u0b95\u0bcd\u0b95\u0bae\u0bcd)"
+  },
+  "transliteration_te": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (emandi \u2192 \u0c0f\u0c2e\u0c02\u0c21\u0c40)"
+  },
+  "transliteration_ti": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (selam \u2192 \u1230\u120b\u121d)"
+  },
+  "transliteration_uk": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (pryvit \u2192 \u043f\u0440\u0438\u0432\u0456\u0442)"
+  },
+  "transliteration_ur": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (salam \u2190 \u0633\u0644\u0627\u0645)"
+  },
+  "transliteration_vi": {
+    "message": "\u1260\u124b\u1295\u124b \u134a\u12f0\u120d \u1218\u133b\u134d (chao \u2192 ch\u00e0o)"
+  },
+  "ua_ukr_settings_page": {
+    "message": "\u12e8\u12e9\u12ad\u122c\u1295\u129b \u1241\u120d\u134d \u1230\u120c\u12f3 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "up_arrow": {
+    "message": "\u12e8\u120b\u12ed \u1240\u1235\u1275"
+  },
+  "us_altgr_intl_eng_settings_page": {
+    "message": "\u12e8\u12a0\u121c\u122a\u12ab \u12e8\u1270\u122b\u12d8\u1218 \u1241\u120d\u134d \u1230\u120c\u12f3 (\u12a5\u1295\u130d\u120a\u12dd\u129b) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "us_colemak_eng_settings_page": {
+    "message": "\u12e8\u12a0\u121c\u122a\u12ab Colemak \u1241\u120d\u134d \u1230\u120c\u12f3 (\u12a5\u1295\u130d\u120a\u12dd\u129b) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "us_dvorak_eng_settings_page": {
+    "message": "\u12e8\u12a0\u121c\u122a\u12ab Dvorak \u1241\u120d\u134d \u1230\u120c\u12f3 (\u12a5\u1295\u130d\u120a\u12dd\u129b) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "us_eng_settings_page": {
+    "message": "\u12e8\u12a0\u121c\u122a\u12ab \u1241\u120d\u134d \u1230\u120c\u12f3 (\u12a5\u1295\u130d\u120a\u12dd\u129b) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "us_fil_settings_page": {
+    "message": "\u12e8\u12a0\u121c\u122a\u12ab \u1241\u120d\u134d \u1230\u120c\u12f3 (\u134a\u120a\u1352\u1295\u129b) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "us_ind_settings_page": {
+    "message": "\u12e8\u12a0\u121c\u122a\u12ab \u1241\u120d\u134d \u1230\u120c\u12f3 (\u12a2\u1295\u12f6\u1294\u12e5\u12eb\u129b) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "us_intl_eng_settings_page": {
+    "message": "\u12e8\u12a0\u121c\u122a\u12ab \u12d3\u1208\u121d \u12a0\u1240\u134d \u1241\u120d\u134d \u1230\u120c\u12f3 (\u12a5\u1295\u130d\u120a\u12dd\u129b) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "us_intl_nld_settings_page": {
+    "message": "\u12e8\u12a0\u121c\u122a\u12ab \u12d3\u1208\u121d \u12a0\u1240\u134d \u1241\u120d\u134d \u1230\u120c\u12f3 (\u12f0\u127d\u129b) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "us_intl_por_settings_page": {
+    "message": "\u12e8\u12a0\u121c\u122a\u12ab \u12d3\u1208\u121d \u12a0\u1240\u134d \u1241\u120d\u134d \u1230\u120c\u12f3 (\u12e8\u1265\u122b\u12da\u120d \u1356\u122d\u1271\u130b\u120d\u129b) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "us_msa_settings_page": {
+    "message": "\u12e8\u12a0\u121c\u122a\u12ab \u1241\u120d\u134d \u1230\u120c\u12f3 (\u121b\u120b\u12ed\u129b) \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  },
+  "user_dict": {
+    "message": "\u12e8\u130d\u120d \u1218\u12dd\u1308\u1260-\u1243\u120b\u1275\u1295 \u12a0\u1295\u1243"
+  },
+  "user_dict_add": {
+    "message": "\u12a0\u12ad\u120d"
+  },
+  "user_dict_clear": {
+    "message": "\u1201\u1209\u1295\u121d \u12a0\u133d\u12f3"
+  },
+  "user_dict_manage": {
+    "message": "\u12e8\u130d\u120d \u1218\u12dd\u1308\u1260-\u1243\u120b\u1275\u1295 \u12a0\u1240\u1293\u1265\u122d..."
+  },
+  "user_dict_new_word": {
+    "message": "\u12a0\u12f2\u1235 \u1243\u120d"
+  },
+  "user_dict_remove": {
+    "message": "\u12e8\u1270\u1218\u1228\u1321\u1275\u1295 \u12a0\u1235\u12c8\u130d\u12f5"
+  },
+  "user_dict_reset": {
+    "message": "\u1201\u1209\u1295\u121d \u12e8\u1218\u12dd\u1308\u1260-\u1243\u120b\u1275 \u130d\u1264\u1276\u127d\u1295 \u12f3\u130d\u121d \u12a0\u1235\u1300\u121d\u122d"
+  },
+  "user_dict_save": {
+    "message": "\u12a0\u1235\u1240\u121d\u1325"
+  },
+  "user_dict_sync": {
+    "message": "\u12e8\u130d\u120d \u12cd\u1202\u1265\u1295 \u12a0\u1218\u1233\u1235\u120d"
+  },
+  "user_dict_title": {
+    "message": "\u12e8\u130d\u120d \u1218\u12dd\u1308\u1260-\u1243\u120b\u1275"
+  },
+  "voice": {
+    "message": "\u12f5\u121d\u1345"
+  },
+  "voice_privacy_info": {
+    "message": "\u133d\u1211\u134d\u1295 \u1208\u12ed\u1276 \u1208\u121b\u12c8\u1245 \u1232\u1263\u120d \u12e8\u12a5\u122d\u1235\u12ce \u12e8\u12f5\u121d\u133d \u130d\u1264\u1275 \u12c8\u12f0 \u12e8Google \u12a0\u1308\u120d\u130b\u12ee\u127d \u12ed\u120b\u12ab\u120d"
+  },
+  "voice_turn_off": {
+    "message": "\u12e8\u12f5\u121d\u1345 \u130d\u1264\u1275 \u1218\u1223\u122a\u12eb\u1295 \u12a0\u1325\u134b"
+  },
+  "voice_turn_on": {
+    "message": "\u12e8\u12f5\u121d\u1345 \u130d\u1264\u1275 \u1218\u1223\u122a\u12eb\u1295 \u12a0\u1265\u122b"
+  },
+  "wait": {
+    "message": "\u1320\u1265\u1245"
+  },
+  "zhuyin_keyboard_layout": {
+    "message": "\u12e8\u1241\u120d\u134d \u1230\u120c\u12f3 \u12a0\u12ed\u1290\u1275"
+  },
+  "zhuyin_page_size": {
+    "message": "\u1260\u1308\u133d \u12e8\u121a\u1273\u12e9 \u12e8\u12a5\u1329\u12ce\u127d \u1265\u12db\u1275"
+  },
+  "zhuyin_select_keys": {
+    "message": "\u12e8\u121d\u122d\u132b \u1241\u120d\u134e\u127d"
+  },
+  "zhuyin_settings_page": {
+    "message": "\u12e8\u12e1\u12ea\u1295 \u1245\u1295\u1265\u122e\u127d \u1308\u133d"
+  }
+}

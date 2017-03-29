@@ -1,0 +1,13 @@
+{
+  "name": "chrome.experimental.dns",
+  "version": "0.1",
+  "description": "end-to-end browser test for chrome.experimental.dns API",
+  "app": {
+    "background": {
+      "scripts": ["background.js"]
+    }
+  },
+  "permissions": [
+    "dns"
+  ]
+}

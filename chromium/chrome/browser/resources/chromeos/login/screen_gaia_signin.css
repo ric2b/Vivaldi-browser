@@ -1,0 +1,286 @@
+/* Copyright (c) 2012 The Chromium Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+#gaia-signin {
+  height: 609px; /* Should be the same as #user-image.loading min-heigth. */
+  padding: 70px 17px 69px;    /* Screen has no controls. */
+  width: 722px; /* Should be the same as #user-image.loading width. */
+}
+
+#gaia-signin:not(.full-width).no-right-panel {
+  width: 522px;
+}
+
+.new-gaia-flow #gaia-signin {
+  height: 528px;
+  padding: 0 0 0;
+  width: 448px;
+}
+
+.new-gaia-flow .throbber {
+  display: none;
+}
+
+#inner-container:not(.new-gaia-flow) throbber-notice {
+  display: none;
+}
+
+#gaia-signin.full-width {
+  padding: 75px 0 0;
+}
+
+.new-gaia-flow #gaia-signin.full-width {
+  padding-top: 47px;
+  width: 562px;
+}
+
+#signin-right {
+  -webkit-margin-start: 30px;
+  margin-top: 80px;
+  top: 60px;
+  width: 200px;
+}
+
+#signin-right,
+#enterprise-info-container,
+#saml-info-container {
+  font-size: 12px;
+}
+
+/*  For touch-optimized UI, make the links bigger. */
+@media (pointer:coarse) {
+  #signin-right {
+    font-size: 14px;
+  }
+}
+
+.new-gaia-flow #signin-right,
+.no-right-panel #signin-right {
+  display: none;
+}
+
+#close-button-item,
+#back-button-item {
+  color: white;
+  position: absolute;
+  top: 10px;
+  z-index: 1;
+}
+
+#close-button-item[disabled],
+#back-button-item[disabled] {
+  color: rgb(127, 127, 127);
+}
+
+#close-button-item {
+  right: 10px;
+}
+
+#back-button-item {
+  left: 10px;
+}
+
+html[dir=rtl] #close-button-item {
+  left: 10px;
+  right: auto;
+}
+
+html[dir=rtl] #back-button-item {
+  -webkit-transform: scaleX(-1);
+  left: auto;
+  right: 10px;
+}
+
+.loading #close-button-item,
+.new-gaia-flow .full-width #close-button-item {
+  color: rgba(0, 0, 0, .54);
+}
+
+.new-gaia-flow .full-width #back-button-item {
+  display: none;
+}
+
+.loading.auth-completed #close-button-item {
+  display: none;
+}
+
+.signin-text {
+  color: #666;
+  margin-top: 20px;
+}
+
+.signin-link {
+  color: rgb(37, 79, 155);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.signin-link:focus {
+  -webkit-transition: outline-color 200ms;
+  /* Note: May use 1px solid here. */
+  outline-color: rgb(77, 144, 254);
+}
+
+#gaia-signin-form-container,
+#signin-frame {
+  height: 100%;
+}
+
+.new-gaia-flow #gaia-signin-form-container {
+  width: 100%;
+}
+
+.full-width #signin-frame,
+.full-width #gaia-signin-form-container {
+  width: 100%;
+}
+
+.signin-divider {
+  background: linear-gradient(
+                   to bottom,
+                   #e3e3e3,
+                   #cacaca 50%,
+                   #e3e3e3);
+  border: none;
+  width: 1px;
+}
+
+.gaia-signin .new-gaia-flow #step-logo,
+.gaia-signin .new-gaia-flow #gaia-signin-divider,
+.no-right-panel #gaia-signin-divider {
+  display: none;
+}
+
+#signin-frame {
+  background-color: transparent;
+  margin-left: -44px;
+  vertical-align: top;
+  width: 400px;
+}
+
+webview#signin-frame {
+  -webkit-transition: opacity 500ms ease-in;
+  display: block;
+  margin-left: 0;
+  opacity: 0;
+  overflow: hidden;
+  padding: 0;
+  width: 448px;
+}
+
+webview#signin-frame.show {
+  -webkit-transition: opacity 500ms ease-out;
+  opacity: 1;
+}
+
+/* Simpler alignment if no right panel. */
+.no-right-panel #signin-frame {
+  margin-left: 0;
+}
+
+/* Position to be aligned with the login box in iframe  */
+#login-box {
+  height: 31px;
+  position: absolute;
+  top: 77px;
+  visibility: hidden;
+  z-index: -1;
+}
+
+#enterprise-info-container {
+  bottom: 10px;
+  left: 0;
+  position: absolute;
+  right: 0;
+  text-align: center;
+}
+
+.new-gaia-flow #enterprise-info-container {
+  display: none;
+}
+
+#enterprise-info-container #enterprise-info {
+  display: inline-block;
+}
+
+#gaia-signin .step-contents {
+  -webkit-box-pack: center;
+  display: -webkit-box;
+  height: 100%;
+}
+
+#createSupervisedUserSeparator {
+  background-color: rgba(128, 128, 128, 0.3);
+  height: 1px;
+  width: 200px;
+}
+
+#createSupervisedUserLogo {
+  font-weight: bold;
+  margin-top: 16px;
+}
+
+#createSupervisedUserLogo img {
+  vertical-align: text-bottom;
+}
+
+#createSupervisedUserLogo span {
+  vertical-align: -10%;
+}
+
+#createSupervisedUserLinkPlaceholder,
+#createSupervisedUserNoManagerText {
+  margin-top: 10px;
+}
+
+#saml-notice-container {
+  left: 0;
+  position: absolute;
+  right: 0;
+  text-align: center;
+  top: 50px;
+}
+
+.new-gaia-flow  #saml-notice-container {
+  -webkit-margin-start: 19px;
+  text-align: start;
+  top: 15px;
+}
+
+#saml-notice-message {
+  margin: 0 auto;
+}
+
+.new-gaia-flow #saml-notice-message {
+  color: rgb(106, 106, 106);
+  font-size: 13px;
+}
+
+#gaia-whitelist-error {
+  bottom: 0;
+  display: none;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+.new-gaia-flow #gaia-whitelist-error {
+  display: block;
+  visibility: hidden;
+}
+
+.new-gaia-flow .whitelist-error #gaia-whitelist-error {
+  visibility: visible;
+}
+
+.new-gaia-flow #gaia-signin.whitelist-error .step-contents {
+  visibility: hidden;
+}
+
+.new-gaia-flow #gaia-signin.whitelist-error .step-loading {
+  visibility: hidden;
+}
+

@@ -1,0 +1,3337 @@
+{
+  "add_to_dictionary": {
+    "message": "Kuongeza kwenye kamusi"
+  },
+  "add_to_personal_dictionary": {
+    "message": "Ongeza kwenye kamusi ya binafsi"
+  },
+  "add_word_to_dictionary": {
+    "message": "Kuongeza \"$1\" kwenye kamusi",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "advanced": {
+    "message": "Mipangilio ya kina"
+  },
+  "alt": {
+    "message": "alter"
+  },
+  "altgr": {
+    "message": "Alt Graphic"
+  },
+  "always_auto_correct": {
+    "message": "Wakati wote"
+  },
+  "am_phonetic_arm_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Fonetiki ya Armenia"
+  },
+  "appnamejpkeyboard": {
+    "message": "Uingizaji wa Kijapani kwenye Google (kwa kibodi ya Kijapani)"
+  },
+  "appnameuskeyboard": {
+    "message": "Uingizaji wa Kijapani kwenye Google (kwa kibodi ya Marekani)"
+  },
+  "auto_correction_level": {
+    "message": "Usahihishaji kiotomatiki"
+  },
+  "backspace": {
+    "message": "backspace"
+  },
+  "basic": {
+    "message": "Mambo Msingi"
+  },
+  "be_fra_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi (Kifaransa) ya Kibelgiji"
+  },
+  "be_ger_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi (Kijerumani) ya Kibelgiji"
+  },
+  "be_nld_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi (Kidachi) ya Kibelgiji"
+  },
+  "bg_bul_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kibulgaria"
+  },
+  "bg_phonetic_bul_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Fonetiki ya Kibulgaria"
+  },
+  "br_por_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi (Kireno cha Brazil) ya Kibrazil"
+  },
+  "by_bel_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kibelarusi"
+  },
+  "ca_eng_eng_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi (Kiingereza) ya Kiingereza cha Kanada"
+  },
+  "ca_fra_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi (Kifaransa) ya Kikanada"
+  },
+  "ca_multix_fra_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi (Kifaransa) ya Lugha Nyingi ya Kikanada"
+  },
+  "capital": {
+    "message": "herufi kubwa"
+  },
+  "capslock": {
+    "message": "capslock"
+  },
+  "ch_fr_fra_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi (Kifaransa) ya Kifaransa cha Kiswizi"
+  },
+  "ch_ger_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi (Kijerumani) ya Kiswizi"
+  },
+  "chos_inputtool_description": {
+    "message": "Zana za Kuingiza za Google za Mfumo wa Uendeshaji wa Chrome hukuruhusu kuchapa katika lugha yako uipendayo kwenye Mfumo wa Uendeshaji wa Chrome."
+  },
+  "chos_inputtool_title": {
+    "message": "Zana za Kuingiza Data kwenye Google"
+  },
+  "compositionmodedirect": {
+    "message": "Uingizaji wa moja kwa moja"
+  },
+  "compositionmodefullascii": {
+    "message": "Wide Latin"
+  },
+  "compositionmodefullkatakana": {
+    "message": "Kikatakana"
+  },
+  "compositionmodehalfascii": {
+    "message": "Kilatini"
+  },
+  "compositionmodehalfkatakana": {
+    "message": "Kikatakana nusu upana"
+  },
+  "compositionmodehiragana": {
+    "message": "Kihiragana"
+  },
+  "configbasicstitle": {
+    "message": "Mambo Msingi"
+  },
+  "configclearhistory": {
+    "message": "Futa data ya ugeuzaji unaokufaa..."
+  },
+  "configclearhistorycancelbutton": {
+    "message": "Ghairi"
+  },
+  "configclearhistoryconversionhistory": {
+    "message": "Historia ya ubadilishaji"
+  },
+  "configclearhistorymessage": {
+    "message": "Futa vipengee vinavyofuata:"
+  },
+  "configclearhistoryokbutton": {
+    "message": "Futa data ya ugeuzaji unaokufaa"
+  },
+  "configclearhistorysuggestionhistory": {
+    "message": "Historia ya mapendekezo"
+  },
+  "configclearhistorytitle": {
+    "message": "Futa data ya ugeuzaji unaokufaa"
+  },
+  "configcreditsdescription": {
+    "message": "Hakimiliki \u00a9 2013 Google Inc. Haki Zote Zimehifadhiwa."
+  },
+  "configdialogcancel": {
+    "message": "Ghairi"
+  },
+  "configdialogok": {
+    "message": "SAWA"
+  },
+  "configdictionarytoolbutton": {
+    "message": "Dhibiti kamusi ya mtumiaji..."
+  },
+  "configdictionarytooldescription": {
+    "message": "Ongeza maneno yako mwenyewe kwenye kamusi ya mtumiaji ili ugeuze wagombea wa ubadilishaji wakufae."
+  },
+  "configdictionarytooltitle": {
+    "message": "Kamusi za watumiaji"
+  },
+  "configincognitomode": {
+    "message": "Zima ubadilishaji na mapendekezo yaliyogeuzwa ili yakufae na pia kamusi ya mtumiaji"
+  },
+  "configinputassistancetitle": {
+    "message": "Usaidizi wa uingizaji"
+  },
+  "configosscreditsdescription": {
+    "message": "Programu hii inawezeshwa na <a href=\"./credits_en.html\">programu ya chanzo huria</a>."
+  },
+  "configpreeditmethod": {
+    "message": "Hali ya uingizaji:"
+  },
+  "configpreeditmethodkana": {
+    "message": "Kikana"
+  },
+  "configpreeditmethodromaji": {
+    "message": "Kiromaji"
+  },
+  "configprivacytitle": {
+    "message": "Faragha"
+  },
+  "configpunctuationmethod": {
+    "message": "Mtindo wa vituo vya maandishi:"
+  },
+  "configselectionshortcut": {
+    "message": "Njia ya mkato ya uchaguzi:"
+  },
+  "configselectionshortcutno": {
+    "message": "Hakuna njia ya mkato"
+  },
+  "configsessionkeymap": {
+    "message": "Mtindo wa ramani msingi:"
+  },
+  "configsessionkeymapatok": {
+    "message": "ATOK"
+  },
+  "configsessionkeymapchromeos": {
+    "message": "Chrome OS"
+  },
+  "configsessionkeymapcustom": {
+    "message": "Ramani msingi maalum"
+  },
+  "configsessionkeymapkotoeri": {
+    "message": "Kikotoeri"
+  },
+  "configsessionkeymapmsime": {
+    "message": "MS-IME"
+  },
+  "configsettingstitle": {
+    "message": "Mipangilio ya uingizaji wa Kijapani"
+  },
+  "configshiftkeymodeswitch": {
+    "message": "Ubadilishaji wa hali ya kitufe cha Shift:"
+  },
+  "configshiftkeymodeswitchalphanumeric": {
+    "message": "Inayojumuisha herufi na nambari"
+  },
+  "configshiftkeymodeswitchkatakana": {
+    "message": "Kikatakana"
+  },
+  "configshiftkeymodeswitchoff": {
+    "message": "Imezimwa"
+  },
+  "configspacecharacterform": {
+    "message": "Mtindo wa uingizaji nafasi:"
+  },
+  "configspacecharacterformfollow": {
+    "message": "Fuata hali ya uingizaji"
+  },
+  "configspacecharacterformfull": {
+    "message": "Upana kamili"
+  },
+  "configspacecharacterformhalf": {
+    "message": "Nusu upana"
+  },
+  "configsuggestionssize": {
+    "message": "Idadi ya mapendekezo:"
+  },
+  "configsuggesttitle": {
+    "message": "Pendekeza"
+  },
+  "configsymbolmethod": {
+    "message": "Mtindo wa ishara:"
+  },
+  "configuploadusagestats": {
+    "message": "Tuma takwimu za matumizi na ripoti za kuacha kufanya kazi kwa Google kiotomatiki."
+  },
+  "configuseautoimeturnoff": {
+    "message": "Nenda kwenye nusu upana kiotomatiki"
+  },
+  "configusedictionarysuggest": {
+    "message": "Tumia kamusi ya mfumo"
+  },
+  "configusehistorysuggest": {
+    "message": "Tumia historia ya uingizaji"
+  },
+  "ctrl": {
+    "message": "ctrl"
+  },
+  "current_keyboard_prefix": {
+    "message": "kibodi ya sasa iliyochaguliwa "
+  },
+  "current_lang": {
+    "message": "Lugha ingizo ni Kichina"
+  },
+  "current_punc": {
+    "message": "Upana wa uakifishaji Umejaa"
+  },
+  "current_sbc": {
+    "message": "Upana wa herufi Umejaa"
+  },
+  "cz_cze_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kicheki"
+  },
+  "cz_qwerty_cze_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Qwerty ya Kicheki"
+  },
+  "d83c_dc04": {
+    "message": "kigae cha Mahjong"
+  },
+  "d83c_dccf": {
+    "message": "kadi ya Jokari"
+  },
+  "d83c_dd70": {
+    "message": "aina ya damu A"
+  },
+  "d83c_dd71": {
+    "message": "aina ya damu B"
+  },
+  "d83c_dd7e": {
+    "message": "aina ya damu O"
+  },
+  "d83c_dd7f": {
+    "message": "maegesho"
+  },
+  "d83c_dd8e": {
+    "message": "aina ya damu AB"
+  },
+  "d83c_dd91": {
+    "message": "CL"
+  },
+  "d83c_dd92": {
+    "message": "baridi"
+  },
+  "d83c_dd93": {
+    "message": "bila malipo"
+  },
+  "d83c_dd94": {
+    "message": "Kitambulisho"
+  },
+  "d83c_dd95": {
+    "message": "Mpya"
+  },
+  "d83c_dd96": {
+    "message": "NG"
+  },
+  "d83c_dd97": {
+    "message": "SAWA"
+  },
+  "d83c_dd98": {
+    "message": "SOS"
+  },
+  "d83c_dd99": {
+    "message": "JUU!"
+  },
+  "d83c_dd9a": {
+    "message": "dhidi ya"
+  },
+  "d83c_de01": {
+    "message": "Neno la Kijapani \u00e2\u20ac\u02dchapa\u00e2\u20ac\u2122"
+  },
+  "d83c_de02": {
+    "message": "Neno la Kijapani \u00e2\u20ac\u02dchuduma\u00e2\u20ac\u2122"
+  },
+  "d83c_de1a": {
+    "message": "Neno la Kijapani 'bila malipo'"
+  },
+  "d83c_de2f": {
+    "message": "Neno la Kijapani 'imehifadhiwa'"
+  },
+  "d83c_de32": {
+    "message": "Neno la Kijapani \u00e2\u20ac\u02dcmarufuku\u00e2\u20ac\u2122"
+  },
+  "d83c_de33": {
+    "message": "Neno la Kichina 'nafasi inapatikana'"
+  },
+  "d83c_de34": {
+    "message": "Neno la Kichina 'pita'"
+  },
+  "d83c_de35": {
+    "message": "Neno la Kichina 'imejaa'"
+  },
+  "d83c_de36": {
+    "message": "Neno la Kijapani 'ada'"
+  },
+  "d83c_de37": {
+    "message": "Neno la Kijapani 'kila mwezi'"
+  },
+  "d83c_de38": {
+    "message": "Neno la Kichina 'programu'"
+  },
+  "d83c_de39": {
+    "message": "Neno la Kijapani 'punguzo'"
+  },
+  "d83c_de3a": {
+    "message": "Neno la Kichina 'katika biashara'"
+  },
+  "d83c_de50": {
+    "message": "Neno la Kijapani 'faida'"
+  },
+  "d83c_de51": {
+    "message": "Neno la Kichina 'imedhinishwa'"
+  },
+  "d83c_df00": {
+    "message": "kimbunga"
+  },
+  "d83c_df01": {
+    "message": "ukungu"
+  },
+  "d83c_df02": {
+    "message": "mwavuli"
+  },
+  "d83c_df03": {
+    "message": "nyota za usiku"
+  },
+  "d83c_df04": {
+    "message": "macheo juu ya milima"
+  },
+  "d83c_df05": {
+    "message": "macheo"
+  },
+  "d83c_df06": {
+    "message": "jiji wakati wa giza"
+  },
+  "d83c_df07": {
+    "message": "machweo"
+  },
+  "d83c_df08": {
+    "message": "upinde wa mvua"
+  },
+  "d83c_df09": {
+    "message": "daraja la usiku"
+  },
+  "d83c_df0a": {
+    "message": "wimbi"
+  },
+  "d83c_df0b": {
+    "message": "volkano"
+  },
+  "d83c_df0c": {
+    "message": "Kilimia"
+  },
+  "d83c_df0d": {
+    "message": "Ulaya-Afrika ya dunia"
+  },
+  "d83c_df0e": {
+    "message": "Amerika ya dunia"
+  },
+  "d83c_df0f": {
+    "message": "Asia-Australia ya dunia"
+  },
+  "d83c_df10": {
+    "message": "dunia yenye meridiani"
+  },
+  "d83c_df11": {
+    "message": "mwezi mpya"
+  },
+  "d83c_df12": {
+    "message": "mwezi mwandamo wenye mng'aro"
+  },
+  "d83c_df13": {
+    "message": "mwezi wa robo ya kwanza"
+  },
+  "d83c_df14": {
+    "message": "mwezi wenye mng`aro"
+  },
+  "d83c_df15": {
+    "message": "mwezi mpevu"
+  },
+  "d83c_df16": {
+    "message": "mwezi unaopungua"
+  },
+  "d83c_df17": {
+    "message": "mwezi wa robo ya mwisho"
+  },
+  "d83c_df18": {
+    "message": "mwezi mwandamo unaopungua"
+  },
+  "d83c_df19": {
+    "message": "mwezi mwandamo"
+  },
+  "d83c_df1a": {
+    "message": "uso wa mwezi mpya"
+  },
+  "d83c_df1b": {
+    "message": "uso wa mwezi wa robo ya kwanza"
+  },
+  "d83c_df1c": {
+    "message": "uso wa mwezi wa robo ya mwisho"
+  },
+  "d83c_df1d": {
+    "message": "uso wa mwezi mpevu"
+  },
+  "d83c_df1e": {
+    "message": "uso wa jua"
+  },
+  "d83c_df1f": {
+    "message": "nyota inayometameta"
+  },
+  "d83c_df20": {
+    "message": "kimondo"
+  },
+  "d83c_df30": {
+    "message": "kaanga ya hudhurungi"
+  },
+  "d83c_df31": {
+    "message": "mmea mchanga"
+  },
+  "d83c_df32": {
+    "message": "mti wa kijani"
+  },
+  "d83c_df33": {
+    "message": "mti unaodondosha majani"
+  },
+  "d83c_df34": {
+    "message": "mtende"
+  },
+  "d83c_df35": {
+    "message": "dungusi kakati"
+  },
+  "d83c_df37": {
+    "message": "mtakawa"
+  },
+  "d83c_df38": {
+    "message": "maua ya mcheri yaliyochanua"
+  },
+  "d83c_df39": {
+    "message": "waridi"
+  },
+  "d83c_df3a": {
+    "message": "haibiskasi"
+  },
+  "d83c_df3b": {
+    "message": "alizeti"
+  },
+  "d83c_df3c": {
+    "message": "maua mengi"
+  },
+  "d83c_df3d": {
+    "message": "nafaka"
+  },
+  "d83c_df3e": {
+    "message": "mpunga"
+  },
+  "d83c_df3f": {
+    "message": "mitishamba"
+  },
+  "d83c_df40": {
+    "message": "klova ya majani manne"
+  },
+  "d83c_df41": {
+    "message": "jani la maple"
+  },
+  "d83c_df42": {
+    "message": "majani yanayoanguka"
+  },
+  "d83c_df43": {
+    "message": "jani katika upepo"
+  },
+  "d83c_df44": {
+    "message": "uyoga"
+  },
+  "d83c_df45": {
+    "message": "nyanya"
+  },
+  "d83c_df46": {
+    "message": "mbilingani"
+  },
+  "d83c_df47": {
+    "message": "zabibu"
+  },
+  "d83c_df48": {
+    "message": "tikiti"
+  },
+  "d83c_df49": {
+    "message": "tikitimaji"
+  },
+  "d83c_df4a": {
+    "message": "chenza"
+  },
+  "d83c_df4b": {
+    "message": "limau"
+  },
+  "d83c_df4c": {
+    "message": "ndizi"
+  },
+  "d83c_df4d": {
+    "message": "nanasi"
+  },
+  "d83c_df4e": {
+    "message": "tofaha jekundu"
+  },
+  "d83c_df4f": {
+    "message": "tofaha la kijani"
+  },
+  "d83c_df50": {
+    "message": "pea"
+  },
+  "d83c_df51": {
+    "message": "pichi"
+  },
+  "d83c_df52": {
+    "message": "cheri"
+  },
+  "d83c_df53": {
+    "message": "stroberi"
+  },
+  "d83c_df54": {
+    "message": "hambaga"
+  },
+  "d83c_df55": {
+    "message": "slesi ya piza"
+  },
+  "d83c_df56": {
+    "message": "nyama"
+  },
+  "d83c_df57": {
+    "message": "mguu wa kuku"
+  },
+  "d83c_df58": {
+    "message": "biskuti ya mchele"
+  },
+  "d83c_df59": {
+    "message": "mchele mweupe wa Kijapani"
+  },
+  "d83c_df5a": {
+    "message": "wali"
+  },
+  "d83c_df5b": {
+    "message": "mchuzi wa viungo na mchele"
+  },
+  "d83c_df5c": {
+    "message": "rameni"
+  },
+  "d83c_df5d": {
+    "message": "tambi"
+  },
+  "d83c_df5e": {
+    "message": "mkate"
+  },
+  "d83c_df5f": {
+    "message": "vibanzi"
+  },
+  "d83c_df60": {
+    "message": "viazi vilivyochomwa"
+  },
+  "d83c_df61": {
+    "message": "mochi"
+  },
+  "d83c_df62": {
+    "message": "odeni"
+  },
+  "d83c_df63": {
+    "message": "sushi"
+  },
+  "d83c_df64": {
+    "message": "uduvi aliyekaangwa"
+  },
+  "d83c_df65": {
+    "message": "keki ya samaki"
+  },
+  "d83c_df66": {
+    "message": "aiskrimu laini"
+  },
+  "d83c_df67": {
+    "message": "jangwa lenye barafu"
+  },
+  "d83c_df68": {
+    "message": "aiskrimu"
+  },
+  "d83c_df69": {
+    "message": "donati"
+  },
+  "d83c_df6a": {
+    "message": "kuki"
+  },
+  "d83c_df6b": {
+    "message": "chokoleti"
+  },
+  "d83c_df6c": {
+    "message": "pipi"
+  },
+  "d83c_df6d": {
+    "message": "peremende kijiti"
+  },
+  "d83c_df6e": {
+    "message": "faluda"
+  },
+  "d83c_df6f": {
+    "message": "chungu cha asali"
+  },
+  "d83c_df70": {
+    "message": "keki fupi"
+  },
+  "d83c_df71": {
+    "message": "bento"
+  },
+  "d83c_df72": {
+    "message": "kitoweo"
+  },
+  "d83c_df73": {
+    "message": "kikaango"
+  },
+  "d83c_df74": {
+    "message": "uma na kisu"
+  },
+  "d83c_df75": {
+    "message": "kikombe cha chai"
+  },
+  "d83c_df76": {
+    "message": "mvinyo wa mchele"
+  },
+  "d83c_df77": {
+    "message": "mvinyo"
+  },
+  "d83c_df78": {
+    "message": "kokteli"
+  },
+  "d83c_df79": {
+    "message": "kinywaji cha kitropiki"
+  },
+  "d83c_df7a": {
+    "message": "bia"
+  },
+  "d83c_df7b": {
+    "message": "majagi ya bia"
+  },
+  "d83c_df7c": {
+    "message": "chupa ya mtoto"
+  },
+  "d83c_df80": {
+    "message": "utepe"
+  },
+  "d83c_df81": {
+    "message": "zawadi"
+  },
+  "d83c_df82": {
+    "message": "keki ya siku ya kuzaliwa"
+  },
+  "d83c_df83": {
+    "message": "jack-o-lantern"
+  },
+  "d83c_df84": {
+    "message": "mti wa krismasi"
+  },
+  "d83c_df85": {
+    "message": "santa"
+  },
+  "d83c_df86": {
+    "message": "baruti"
+  },
+  "d83c_df87": {
+    "message": "Kinachong`aa"
+  },
+  "d83c_df88": {
+    "message": "puto"
+  },
+  "d83c_df89": {
+    "message": "kilipuzi cha sherehe"
+  },
+  "d83c_df8a": {
+    "message": "karatasi zinazorushwa katika sherehe"
+  },
+  "d83c_df8b": {
+    "message": "mti na mistari ya karatasi"
+  },
+  "d83c_df8c": {
+    "message": "bendera zilizochorwa msalaba"
+  },
+  "d83c_df8d": {
+    "message": "mapambo ya msonobari"
+  },
+  "d83c_df8e": {
+    "message": "wanasesere"
+  },
+  "d83c_df8f": {
+    "message": "mapambo ya kambare mamba"
+  },
+  "d83c_df90": {
+    "message": "kengele ya upepo"
+  },
+  "d83c_df91": {
+    "message": "kuangalia mwezi"
+  },
+  "d83c_df92": {
+    "message": "mkoba wa shuleni"
+  },
+  "d83c_df93": {
+    "message": "kofia ya mahafali"
+  },
+  "d83c_dfa0": {
+    "message": "bembea"
+  },
+  "d83c_dfa1": {
+    "message": "gurudumu la kuangalilia"
+  },
+  "d83c_dfa2": {
+    "message": "bustani ya kuvutia"
+  },
+  "d83c_dfa3": {
+    "message": "uvuvi"
+  },
+  "d83c_dfa4": {
+    "message": "maikrofoni"
+  },
+  "d83c_dfa5": {
+    "message": "kamera ya filamu"
+  },
+  "d83c_dfa6": {
+    "message": "filamu"
+  },
+  "d83c_dfa7": {
+    "message": "vifaa vya kusikizia masikioni"
+  },
+  "d83c_dfa8": {
+    "message": "kibao cha kuchanganyia rangi"
+  },
+  "d83c_dfa9": {
+    "message": "kofia ya juu"
+  },
+  "d83c_dfaa": {
+    "message": "sarakasi"
+  },
+  "d83c_dfab": {
+    "message": "tiketi"
+  },
+  "d83c_dfac": {
+    "message": "bodi ya kutoa mlio"
+  },
+  "d83c_dfad": {
+    "message": "barakoa ya usoni"
+  },
+  "d83c_dfae": {
+    "message": "mchezo wa video"
+  },
+  "d83c_dfaf": {
+    "message": "eneo lengwa"
+  },
+  "d83c_dfb0": {
+    "message": "mashine ya kupanga"
+  },
+  "d83c_dfb1": {
+    "message": "biliadi"
+  },
+  "d83c_dfb2": {
+    "message": "mchezo wa kufa"
+  },
+  "d83c_dfb3": {
+    "message": "mchezo wa kuviringisha tufe"
+  },
+  "d83c_dfb4": {
+    "message": "kadi ya kucheza"
+  },
+  "d83c_dfb5": {
+    "message": "maelezo ya muziki"
+  },
+  "d83c_dfb6": {
+    "message": "maelezo ya muziki"
+  },
+  "d83c_dfb7": {
+    "message": "Saksafoni"
+  },
+  "d83c_dfb8": {
+    "message": "gitaa"
+  },
+  "d83c_dfb9": {
+    "message": "piano"
+  },
+  "d83c_dfba": {
+    "message": "tarumbeta"
+  },
+  "d83c_dfbb": {
+    "message": "fidla"
+  },
+  "d83c_dfbc": {
+    "message": "alama ya muziki"
+  },
+  "d83c_dfbd": {
+    "message": "shati la kuendeshea"
+  },
+  "d83c_dfbe": {
+    "message": "tenisi"
+  },
+  "d83c_dfbf": {
+    "message": "skii"
+  },
+  "d83c_dfc0": {
+    "message": "mpira wa kikapu"
+  },
+  "d83c_dfc1": {
+    "message": "bendera ya mirabamiraba"
+  },
+  "d83c_dfc2": {
+    "message": "mchezaji wa katika theluji"
+  },
+  "d83c_dfc3": {
+    "message": "mkimbiaji"
+  },
+  "d83c_dfc4": {
+    "message": "mchezo wa kuteleza katika mawimbi meupe"
+  },
+  "d83c_dfc6": {
+    "message": "kombe"
+  },
+  "d83c_dfc7": {
+    "message": "mbio za farasi"
+  },
+  "d83c_dfc8": {
+    "message": "soka ya Marekani"
+  },
+  "d83c_dfc9": {
+    "message": "soka"
+  },
+  "d83c_dfca": {
+    "message": "mwogeleaji"
+  },
+  "d83c_dfe0": {
+    "message": "nyumba"
+  },
+  "d83c_dfe1": {
+    "message": "nyumbani"
+  },
+  "d83c_dfe2": {
+    "message": "jengo la ofisi"
+  },
+  "d83c_dfe3": {
+    "message": "posta ya Japani"
+  },
+  "d83c_dfe4": {
+    "message": "posta ya Ulaya"
+  },
+  "d83c_dfe5": {
+    "message": "hospitali"
+  },
+  "d83c_dfe6": {
+    "message": "benki"
+  },
+  "d83c_dfe7": {
+    "message": "ATM"
+  },
+  "d83c_dfe8": {
+    "message": "hoteli"
+  },
+  "d83c_dfe9": {
+    "message": "hoteli ya upendo"
+  },
+  "d83c_dfea": {
+    "message": "hifadhi ya urahisishaji"
+  },
+  "d83c_dfeb": {
+    "message": "shule"
+  },
+  "d83c_dfec": {
+    "message": "hifadhi ya idara"
+  },
+  "d83c_dfed": {
+    "message": "kiwanda"
+  },
+  "d83c_dfee": {
+    "message": "taa nyekundu"
+  },
+  "d83c_dfef": {
+    "message": "ngome ya Japani"
+  },
+  "d83c_dff0": {
+    "message": "ngome ya Ulaya"
+  },
+  "d83d_dc00": {
+    "message": "Panya"
+  },
+  "d83d_dc01": {
+    "message": "Kipanya"
+  },
+  "d83d_dc02": {
+    "message": "Ng`ombe wa kufugwa"
+  },
+  "d83d_dc03": {
+    "message": "nyati wa majini"
+  },
+  "d83d_dc04": {
+    "message": "ng'ombe"
+  },
+  "d83d_dc06": {
+    "message": "chui"
+  },
+  "d83d_dc07": {
+    "message": "sungura"
+  },
+  "d83d_dc08": {
+    "message": "paka"
+  },
+  "d83d_dc09": {
+    "message": "joka"
+  },
+  "d83d_dc0a": {
+    "message": "mamba"
+  },
+  "d83d_dc0b": {
+    "message": "nyangumi"
+  },
+  "d83d_dc0c": {
+    "message": "konokono"
+  },
+  "d83d_dc0d": {
+    "message": "nyoka"
+  },
+  "d83d_dc0e": {
+    "message": "farasi"
+  },
+  "d83d_dc0f": {
+    "message": "kondoo dume"
+  },
+  "d83d_dc10": {
+    "message": "mbuzi"
+  },
+  "d83d_dc11": {
+    "message": "kondoo"
+  },
+  "d83d_dc12": {
+    "message": "tumbili"
+  },
+  "d83d_dc13": {
+    "message": "jogoo"
+  },
+  "d83d_dc14": {
+    "message": "kuku"
+  },
+  "d83d_dc15": {
+    "message": "mbwa"
+  },
+  "d83d_dc16": {
+    "message": "nguruwe"
+  },
+  "d83d_dc17": {
+    "message": "ngiri"
+  },
+  "d83d_dc18": {
+    "message": "tembo"
+  },
+  "d83d_dc19": {
+    "message": "pweza"
+  },
+  "d83d_dc1a": {
+    "message": "gamba"
+  },
+  "d83d_dc1b": {
+    "message": "mdudu"
+  },
+  "d83d_dc1c": {
+    "message": "chungu"
+  },
+  "d83d_dc1d": {
+    "message": "nyuki wa asali"
+  },
+  "d83d_dc1e": {
+    "message": "mbawakawa"
+  },
+  "d83d_dc1f": {
+    "message": "samaki"
+  },
+  "d83d_dc20": {
+    "message": "samaki wa kitropiki"
+  },
+  "d83d_dc21": {
+    "message": "samaki anayepanua mwili"
+  },
+  "d83d_dc22": {
+    "message": "kasa"
+  },
+  "d83d_dc23": {
+    "message": "kuangua kifaranga"
+  },
+  "d83d_dc24": {
+    "message": "uso wa kifaranga"
+  },
+  "d83d_dc25": {
+    "message": "kifaranga"
+  },
+  "d83d_dc26": {
+    "message": "ndege"
+  },
+  "d83d_dc27": {
+    "message": "ngwini"
+  },
+  "d83d_dc28": {
+    "message": "koala"
+  },
+  "d83d_dc29": {
+    "message": "mbwa"
+  },
+  "d83d_dc2a": {
+    "message": "ngamia mwenye nundu moja"
+  },
+  "d83d_dc2b": {
+    "message": "ngamia mwenye nundu mbili"
+  },
+  "d83d_dc2c": {
+    "message": "pomboo"
+  },
+  "d83d_dc2d": {
+    "message": "uso wa panya"
+  },
+  "d83d_dc2e": {
+    "message": "uso wa ng`ombe"
+  },
+  "d83d_dc2f": {
+    "message": "uso wa simbamarara"
+  },
+  "d83d_dc30": {
+    "message": "uso wa sungura"
+  },
+  "d83d_dc31": {
+    "message": "uso wa paka"
+  },
+  "d83d_dc32": {
+    "message": "uso wa joka"
+  },
+  "d83d_dc33": {
+    "message": "nyangumi anayechuruza"
+  },
+  "d83d_dc34": {
+    "message": "uso wa farasi"
+  },
+  "d83d_dc35": {
+    "message": "uso wa tumbili"
+  },
+  "d83d_dc36": {
+    "message": "uso wa mbwa"
+  },
+  "d83d_dc37": {
+    "message": "uso wa nguruwe"
+  },
+  "d83d_dc38": {
+    "message": "uso wa chura"
+  },
+  "d83d_dc39": {
+    "message": "uso wa buku"
+  },
+  "d83d_dc3a": {
+    "message": "uso wa mbwa mwitu"
+  },
+  "d83d_dc3b": {
+    "message": "uso wa dubu"
+  },
+  "d83d_dc3c": {
+    "message": "uso wa panda"
+  },
+  "d83d_dc3d": {
+    "message": "pua ya nguruwe"
+  },
+  "d83d_dc3e": {
+    "message": "wayo wa mnyama mwenye kucha"
+  },
+  "d83d_dc40": {
+    "message": "macho"
+  },
+  "d83d_dc42": {
+    "message": "sikio"
+  },
+  "d83d_dc43": {
+    "message": "pua"
+  },
+  "d83d_dc44": {
+    "message": "mdomo"
+  },
+  "d83d_dc45": {
+    "message": "ulimi"
+  },
+  "d83d_dc46": {
+    "message": "kidole juu"
+  },
+  "d83d_dc47": {
+    "message": "kidole chini"
+  },
+  "d83d_dc48": {
+    "message": "kidole kushoto"
+  },
+  "d83d_dc49": {
+    "message": "kidole kulia"
+  },
+  "d83d_dc4a": {
+    "message": "ngumi iliyokunjwa"
+  },
+  "d83d_dc4b": {
+    "message": "kupunga mkono"
+  },
+  "d83d_dc4c": {
+    "message": "Ishara ya mkono ya SAWA"
+  },
+  "d83d_dc4d": {
+    "message": "bomba"
+  },
+  "d83d_dc4e": {
+    "message": "vibaya"
+  },
+  "d83d_dc4f": {
+    "message": "mikono inapiga makofi"
+  },
+  "d83d_dc50": {
+    "message": "mikono iliyo wazi"
+  },
+  "d83d_dc51": {
+    "message": "taji"
+  },
+  "d83d_dc52": {
+    "message": "kofia ya mwanamke"
+  },
+  "d83d_dc53": {
+    "message": "miwani"
+  },
+  "d83d_dc54": {
+    "message": "tai"
+  },
+  "d83d_dc55": {
+    "message": "Shatitao"
+  },
+  "d83d_dc56": {
+    "message": "suruali"
+  },
+  "d83d_dc57": {
+    "message": "vazi"
+  },
+  "d83d_dc58": {
+    "message": "kimono"
+  },
+  "d83d_dc59": {
+    "message": "bikini"
+  },
+  "d83d_dc5a": {
+    "message": "nguo za wanawake"
+  },
+  "d83d_dc5b": {
+    "message": "mkwiji"
+  },
+  "d83d_dc5c": {
+    "message": "mkoba"
+  },
+  "d83d_dc5d": {
+    "message": "pochi"
+  },
+  "d83d_dc5e": {
+    "message": "kiatu cha mwanamume"
+  },
+  "d83d_dc5f": {
+    "message": "kiatu cha riadha"
+  },
+  "d83d_dc60": {
+    "message": "vyatu vyenye visigino virefu"
+  },
+  "d83d_dc61": {
+    "message": "ndara za wanawake"
+  },
+  "d83d_dc62": {
+    "message": "buti la wanawake"
+  },
+  "d83d_dc63": {
+    "message": "nyayo"
+  },
+  "d83d_dc64": {
+    "message": "kivuli cha mtu"
+  },
+  "d83d_dc65": {
+    "message": "vivuli vya watu"
+  },
+  "d83d_dc66": {
+    "message": "mvulana"
+  },
+  "d83d_dc67": {
+    "message": "msichana"
+  },
+  "d83d_dc68": {
+    "message": "mtu"
+  },
+  "d83d_dc69": {
+    "message": "mwanamke"
+  },
+  "d83d_dc6a": {
+    "message": "familia"
+  },
+  "d83d_dc6b": {
+    "message": "mwanamume na mwanamke"
+  },
+  "d83d_dc6c": {
+    "message": "wanaume wawili"
+  },
+  "d83d_dc6d": {
+    "message": "wanawake wawili"
+  },
+  "d83d_dc6e": {
+    "message": "ofisa wa polisi"
+  },
+  "d83d_dc6f": {
+    "message": "msichana sungura"
+  },
+  "d83d_dc70": {
+    "message": "bibi harusi"
+  },
+  "d83d_dc71": {
+    "message": "mtu mwenye nywele nyeupe"
+  },
+  "d83d_dc72": {
+    "message": "mwanamume mwenye gua pi mao"
+  },
+  "d83d_dc73": {
+    "message": "mwanamume mwenye kilemba"
+  },
+  "d83d_dc74": {
+    "message": "mwanamume mzee"
+  },
+  "d83d_dc75": {
+    "message": "mwanamke mzee"
+  },
+  "d83d_dc76": {
+    "message": "mtoto"
+  },
+  "d83d_dc77": {
+    "message": "mfanyakazi wa ujenzi"
+  },
+  "d83d_dc78": {
+    "message": "binti mfalme"
+  },
+  "d83d_dc79": {
+    "message": "zimwi"
+  },
+  "d83d_dc7a": {
+    "message": "mbilikimo"
+  },
+  "d83d_dc7b": {
+    "message": "pepo"
+  },
+  "d83d_dc7c": {
+    "message": "malaika"
+  },
+  "d83d_dc7d": {
+    "message": "mgeni"
+  },
+  "d83d_dc7e": {
+    "message": "mgeni jitu"
+  },
+  "d83d_dc7f": {
+    "message": "imp"
+  },
+  "d83d_dc80": {
+    "message": "fuvu"
+  },
+  "d83d_dc81": {
+    "message": "eneo la maelezo"
+  },
+  "d83d_dc82": {
+    "message": "bawabu"
+  },
+  "d83d_dc83": {
+    "message": "mchezaji ngoma"
+  },
+  "d83d_dc84": {
+    "message": "rangi ya mdomo"
+  },
+  "d83d_dc85": {
+    "message": "utunzaji wa kucha"
+  },
+  "d83d_dc86": {
+    "message": "ukandaji wa uso"
+  },
+  "d83d_dc87": {
+    "message": "kunyoa nywele"
+  },
+  "d83d_dc88": {
+    "message": "kinyozi"
+  },
+  "d83d_dc89": {
+    "message": "risasi"
+  },
+  "d83d_dc8a": {
+    "message": "kidonge"
+  },
+  "d83d_dc8b": {
+    "message": "alama ya busu"
+  },
+  "d83d_dc8c": {
+    "message": "barua ya mapenzi"
+  },
+  "d83d_dc8d": {
+    "message": "pete"
+  },
+  "d83d_dc8e": {
+    "message": "kito johari"
+  },
+  "d83d_dc8f": {
+    "message": "busu"
+  },
+  "d83d_dc90": {
+    "message": "shada la maua"
+  },
+  "d83d_dc91": {
+    "message": "wanandoa"
+  },
+  "d83d_dc92": {
+    "message": "kanisa dogo la harusi"
+  },
+  "d83d_dc93": {
+    "message": "moyo unaopwita"
+  },
+  "d83d_dc94": {
+    "message": "vunja moyo"
+  },
+  "d83d_dc95": {
+    "message": "mioyo miwili"
+  },
+  "d83d_dc96": {
+    "message": "moyo unaometameta"
+  },
+  "d83d_dc97": {
+    "message": "moyo unaobadilika"
+  },
+  "d83d_dc98": {
+    "message": "moyo na mshale"
+  },
+  "d83d_dc99": {
+    "message": "moyo wa samawati"
+  },
+  "d83d_dc9a": {
+    "message": "moyo wa kijani"
+  },
+  "d83d_dc9b": {
+    "message": "moyo wa njano"
+  },
+  "d83d_dc9c": {
+    "message": "moyo wa zambarau"
+  },
+  "d83d_dc9d": {
+    "message": "moyo wenye utepe"
+  },
+  "d83d_dc9e": {
+    "message": "mioyo inayozunguka"
+  },
+  "d83d_dc9f": {
+    "message": "mapambo moyo"
+  },
+  "d83d_dca0": {
+    "message": "petali ya ua"
+  },
+  "d83d_dca1": {
+    "message": "tunguu la mwangaza"
+  },
+  "d83d_dca2": {
+    "message": "hasira"
+  },
+  "d83d_dca3": {
+    "message": "bomu"
+  },
+  "d83d_dca4": {
+    "message": "alama ya kulala"
+  },
+  "d83d_dca5": {
+    "message": "mgongano"
+  },
+  "d83d_dca6": {
+    "message": "kutoka jasho"
+  },
+  "d83d_dca7": {
+    "message": "joto baridi"
+  },
+  "d83d_dca8": {
+    "message": "kuharakisha"
+  },
+  "d83d_dca9": {
+    "message": "kuzama"
+  },
+  "d83d_dcaa": {
+    "message": "shavu la mkono"
+  },
+  "d83d_dcab": {
+    "message": "kizunguzungu"
+  },
+  "d83d_dcac": {
+    "message": "puto ya matamshi"
+  },
+  "d83d_dcad": {
+    "message": "mawazo ya puto"
+  },
+  "d83d_dcae": {
+    "message": "muhuri wa ua"
+  },
+  "d83d_dcaf": {
+    "message": "alama kamili"
+  },
+  "d83d_dcb0": {
+    "message": "mkoba wa pesa"
+  },
+  "d83d_dcb1": {
+    "message": "ubadilishaji wa sarafu"
+  },
+  "d83d_dcb2": {
+    "message": "alama ya dola"
+  },
+  "d83d_dcb3": {
+    "message": "kadi ya mkopo"
+  },
+  "d83d_dcb4": {
+    "message": "noti ya yen"
+  },
+  "d83d_dcb5": {
+    "message": "noti ya dola"
+  },
+  "d83d_dcb6": {
+    "message": "Noti ya yuro"
+  },
+  "d83d_dcb7": {
+    "message": "Noti ya pauni"
+  },
+  "d83d_dcb8": {
+    "message": "pesa zinazopuruka"
+  },
+  "d83d_dcb9": {
+    "message": "soko linalopanuka"
+  },
+  "d83d_dcba": {
+    "message": "kiti"
+  },
+  "d83d_dcbb": {
+    "message": "PC"
+  },
+  "d83d_dcbc": {
+    "message": "mkoba wa ngozi"
+  },
+  "d83d_dcbd": {
+    "message": "diski ndogo"
+  },
+  "d83d_dcbe": {
+    "message": "disketi"
+  },
+  "d83d_dcbf": {
+    "message": "muundo wa blu-ray"
+  },
+  "d83d_dcc0": {
+    "message": "DVD"
+  },
+  "d83d_dcc1": {
+    "message": "folda ya faili"
+  },
+  "d83d_dcc2": {
+    "message": "folda iliyo wazi"
+  },
+  "d83d_dcc3": {
+    "message": "hati"
+  },
+  "d83d_dcc4": {
+    "message": "hati"
+  },
+  "d83d_dcc5": {
+    "message": "kalenda"
+  },
+  "d83d_dcc6": {
+    "message": "kalenda ya kurarua"
+  },
+  "d83d_dcc7": {
+    "message": "faharasa ya kadi"
+  },
+  "d83d_dcc8": {
+    "message": "mwelekeo wa juu"
+  },
+  "d83d_dcc9": {
+    "message": "mwelekeo wa chini"
+  },
+  "d83d_dcca": {
+    "message": "grafu ya upau"
+  },
+  "d83d_dccb": {
+    "message": "ubao klipu"
+  },
+  "d83d_dccc": {
+    "message": "pini ya kusukuma iliyo duara"
+  },
+  "d83d_dccd": {
+    "message": "pini ya kusukuma iliyo duara"
+  },
+  "d83d_dcce": {
+    "message": "klipu ya karatasi"
+  },
+  "d83d_dccf": {
+    "message": "rula wima"
+  },
+  "d83d_dcd0": {
+    "message": "rula ya pembetatu"
+  },
+  "d83d_dcd1": {
+    "message": "vichupo vya alamisho"
+  },
+  "d83d_dcd2": {
+    "message": "leja"
+  },
+  "d83d_dcd3": {
+    "message": "daftari"
+  },
+  "d83d_dcd4": {
+    "message": "daftari lililopambwa"
+  },
+  "d83d_dcd5": {
+    "message": "kitabu kilichofungwa"
+  },
+  "d83d_dcd6": {
+    "message": "kitabu kilicho wazi"
+  },
+  "d83d_dcd7": {
+    "message": "kitabu cha kijani"
+  },
+  "d83d_dcd8": {
+    "message": "kitabu"
+  },
+  "d83d_dcd9": {
+    "message": "kitabu cha chungwa"
+  },
+  "d83d_dcda": {
+    "message": "vitabu"
+  },
+  "d83d_dcdb": {
+    "message": "jina la beji"
+  },
+  "d83d_dcdc": {
+    "message": "sogeza"
+  },
+  "d83d_dcdd": {
+    "message": "memo"
+  },
+  "d83d_dcde": {
+    "message": "simu"
+  },
+  "d83d_dcdf": {
+    "message": "peja"
+  },
+  "d83d_dce0": {
+    "message": "faksi"
+  },
+  "d83d_dce1": {
+    "message": "dishi ya setilaiti"
+  },
+  "d83d_dce2": {
+    "message": "kipaza sauti"
+  },
+  "d83d_dce3": {
+    "message": "kikuza sauti"
+  },
+  "d83d_dce4": {
+    "message": "barua zitokazo"
+  },
+  "d83d_dce5": {
+    "message": "Kikasha"
+  },
+  "d83d_dce6": {
+    "message": "kifurushi"
+  },
+  "d83d_dce7": {
+    "message": "anwani ya barua pepe"
+  },
+  "d83d_dce8": {
+    "message": "barua inayoingia"
+  },
+  "d83d_dce9": {
+    "message": "barua inayotoka"
+  },
+  "d83d_dcea": {
+    "message": "kikasha barua kilichofungwa bendera ikiwa chini"
+  },
+  "d83d_dceb": {
+    "message": "kikasha barua kilichofungwa bendera ikiwa juu"
+  },
+  "d83d_dcec": {
+    "message": "kikasha barua kilicho wazi bendera ikiwa juu"
+  },
+  "d83d_dced": {
+    "message": "kikasha barua kilicho wazi bendera ikiwa chini"
+  },
+  "d83d_dcee": {
+    "message": "sanduku la posta"
+  },
+  "d83d_dcef": {
+    "message": "pembe ya posta"
+  },
+  "d83d_dcf0": {
+    "message": "gazeti"
+  },
+  "d83d_dcf1": {
+    "message": "simu ya mkononi"
+  },
+  "d83d_dcf2": {
+    "message": "simu ya mkononi yenye mshale"
+  },
+  "d83d_dcf3": {
+    "message": "hali ya mtetemo"
+  },
+  "d83d_dcf4": {
+    "message": "zima simu"
+  },
+  "d83d_dcf5": {
+    "message": "simu ya mkononi hairuhusiwi"
+  },
+  "d83d_dcf6": {
+    "message": "ishara za kifaa cha mkononi"
+  },
+  "d83d_dcf7": {
+    "message": "kamera"
+  },
+  "d83d_dcf9": {
+    "message": "kamera ya video"
+  },
+  "d83d_dcfa": {
+    "message": "Televisheni"
+  },
+  "d83d_dcfb": {
+    "message": "redio"
+  },
+  "d83d_dcfc": {
+    "message": "mkanda wa video"
+  },
+  "d83d_dd00": {
+    "message": "mishale iliyochorwa msalaba"
+  },
+  "d83d_dd01": {
+    "message": "mishale ya mwendo wa saa"
+  },
+  "d83d_dd02": {
+    "message": "mishale ya mwendo wa saa"
+  },
+  "d83d_dd03": {
+    "message": "pakia upya"
+  },
+  "d83d_dd04": {
+    "message": "mishale ya kinyume cha mwendo wa saa"
+  },
+  "d83d_dd05": {
+    "message": "mwangaza wa chini"
+  },
+  "d83d_dd06": {
+    "message": "mwangaza wa juu"
+  },
+  "d83d_dd07": {
+    "message": "hairuhusiwi kuongea"
+  },
+  "d83d_dd08": {
+    "message": "spika"
+  },
+  "d83d_dd09": {
+    "message": "spika yenye sauti ya chini"
+  },
+  "d83d_dd0a": {
+    "message": "spika yenye sauti ya juu"
+  },
+  "d83d_dd0b": {
+    "message": "betri"
+  },
+  "d83d_dd0c": {
+    "message": "plagi ya umeme"
+  },
+  "d83d_dd0d": {
+    "message": "kioo cha kukuza kilichoelekezwa kushoto"
+  },
+  "d83d_dd0e": {
+    "message": "kioo cha kukuza kilichoelekezwa kulia"
+  },
+  "d83d_dd0f": {
+    "message": "funga kwa kalamu ya wimo"
+  },
+  "d83d_dd10": {
+    "message": "kufuli limefungwa kwa ufunguo"
+  },
+  "d83d_dd11": {
+    "message": "ufunguo"
+  },
+  "d83d_dd12": {
+    "message": "kufuli limefungwa"
+  },
+  "d83d_dd13": {
+    "message": "kufuli liko wazi"
+  },
+  "d83d_dd14": {
+    "message": "kengele"
+  },
+  "d83d_dd15": {
+    "message": "hakuna kengele"
+  },
+  "d83d_dd16": {
+    "message": "alamisho"
+  },
+  "d83d_dd17": {
+    "message": "ishara ya kiungo"
+  },
+  "d83d_dd18": {
+    "message": "kitufe cha redio"
+  },
+  "d83d_dd19": {
+    "message": "nyuma"
+  },
+  "d83d_dd1a": {
+    "message": "mwisho"
+  },
+  "d83d_dd1b": {
+    "message": "mshale wa KUWAKA"
+  },
+  "d83d_dd1c": {
+    "message": "Ishara ya hivi karibuni"
+  },
+  "d83d_dd1d": {
+    "message": "Ishara ya juu"
+  },
+  "d83d_dd1e": {
+    "message": "Hairuhusiwi kwa chini ya miaka 18"
+  },
+  "d83d_dd20": {
+    "message": "herufi kubwa"
+  },
+  "d83d_dd21": {
+    "message": "herufi ndogo"
+  },
+  "d83d_dd22": {
+    "message": "nambari"
+  },
+  "d83d_dd23": {
+    "message": "alama"
+  },
+  "d83d_dd24": {
+    "message": "Alfabeti ya Kilatini"
+  },
+  "d83d_dd25": {
+    "message": "moto"
+  },
+  "d83d_dd26": {
+    "message": "tochi"
+  },
+  "d83d_dd27": {
+    "message": "bisibisi"
+  },
+  "d83d_dd28": {
+    "message": "nyundo"
+  },
+  "d83d_dd29": {
+    "message": "nati na komeo"
+  },
+  "d83d_dd2a": {
+    "message": "kisu cha kupika"
+  },
+  "d83d_dd2b": {
+    "message": "bunduki"
+  },
+  "d83d_dd2c": {
+    "message": "hadubini"
+  },
+  "d83d_dd2d": {
+    "message": "darubini"
+  },
+  "d83d_dd2e": {
+    "message": "mpira wa kioo"
+  },
+  "d83d_dd2f": {
+    "message": "nyota yenye pembe sita"
+  },
+  "d83d_dd30": {
+    "message": "jani la kijani na njano"
+  },
+  "d83d_dd31": {
+    "message": "ishara ya mkuki"
+  },
+  "d83d_dd32": {
+    "message": "kitufe cha mraba wa fremu ngumu"
+  },
+  "d83d_dd33": {
+    "message": "kitufe cha mraba wa fremu iliyoanishwa"
+  },
+  "d83d_dd34": {
+    "message": "mduara mkubwa mwekundu"
+  },
+  "d83d_dd35": {
+    "message": "mduara mkubwa wa samawati"
+  },
+  "d83d_dd36": {
+    "message": "almasi kubwa ya chungwa"
+  },
+  "d83d_dd37": {
+    "message": "almasi kubwa ya samawati"
+  },
+  "d83d_dd38": {
+    "message": "almasi ndogo ya chungwa"
+  },
+  "d83d_dd39": {
+    "message": "almasi ndogo ya samawati"
+  },
+  "d83d_dd3a": {
+    "message": "pembetatu juu"
+  },
+  "d83d_dd3b": {
+    "message": "pembetatu chini"
+  },
+  "d83d_dd3c": {
+    "message": "kitufe cha pembetatu juu"
+  },
+  "d83d_dd3d": {
+    "message": "kitufe cha pembetatu chini"
+  },
+  "d83d_dd50": {
+    "message": "saa 1 kamili"
+  },
+  "d83d_dd51": {
+    "message": "saa nane kamili"
+  },
+  "d83d_dd52": {
+    "message": "saa tisa kamili"
+  },
+  "d83d_dd53": {
+    "message": "saa 4 kamili"
+  },
+  "d83d_dd54": {
+    "message": "saa 5 kamili"
+  },
+  "d83d_dd55": {
+    "message": "saa 6 kamili"
+  },
+  "d83d_dd56": {
+    "message": "saa 7 kamili"
+  },
+  "d83d_dd57": {
+    "message": "saa 8 kamili"
+  },
+  "d83d_dd58": {
+    "message": "saa 9 kamili"
+  },
+  "d83d_dd59": {
+    "message": "saa 10 kamili"
+  },
+  "d83d_dd5a": {
+    "message": "saa 11 kamili"
+  },
+  "d83d_dd5b": {
+    "message": "saa 12 kamili"
+  },
+  "d83d_dd5c": {
+    "message": "saa saba na nusu"
+  },
+  "d83d_dd5d": {
+    "message": "saa nane na nusu"
+  },
+  "d83d_dd5e": {
+    "message": "saa tisa na nusu"
+  },
+  "d83d_dd5f": {
+    "message": "saa kumi na nusu"
+  },
+  "d83d_dd60": {
+    "message": "saa kumi na moja na nusu"
+  },
+  "d83d_dd61": {
+    "message": "saa kumi na mbili na nusu"
+  },
+  "d83d_dd62": {
+    "message": "saa saba na nusu"
+  },
+  "d83d_dd63": {
+    "message": "saa mbili na nusu"
+  },
+  "d83d_dd64": {
+    "message": "saa tatu na nusu"
+  },
+  "d83d_dd65": {
+    "message": "saa nne na nusu"
+  },
+  "d83d_dd66": {
+    "message": "saa tano na nusu"
+  },
+  "d83d_dd67": {
+    "message": "saa sita na nusu"
+  },
+  "d83d_ddfb": {
+    "message": "Mlima Fuji"
+  },
+  "d83d_ddfc": {
+    "message": "Mnara wa Tokyo"
+  },
+  "d83d_ddfd": {
+    "message": "Mnara wa Uhuru"
+  },
+  "d83d_ddfe": {
+    "message": "Ramani ya Japani"
+  },
+  "d83d_ddff": {
+    "message": "sanamu ya Moyai"
+  },
+  "d83d_de00": {
+    "message": "kicheko"
+  },
+  "d83d_de01": {
+    "message": " macho yenye tabasamu"
+  },
+  "d83d_de02": {
+    "message": "machozi ya furaha"
+  },
+  "d83d_de03": {
+    "message": "midomo wazi yenye tabasamu"
+  },
+  "d83d_de04": {
+    "message": "midomo wazi yenye macho yanayotabasamu"
+  },
+  "d83d_de05": {
+    "message": "tabasamu ya joto la baridi"
+  },
+  "d83d_de06": {
+    "message": " tabasamu midomoni macho yakiwa yamefumbwa"
+  },
+  "d83d_de07": {
+    "message": "tabasamu kwa mwangaza"
+  },
+  "d83d_de08": {
+    "message": "tabasamu kwa pembe"
+  },
+  "d83d_de09": {
+    "message": "kukonyeza macho"
+  },
+  "d83d_de0a": {
+    "message": "tabasamu"
+  },
+  "d83d_de0b": {
+    "message": "uso mtamu"
+  },
+  "d83d_de0c": {
+    "message": "uso uliotulia"
+  },
+  "d83d_de0d": {
+    "message": "uso wenye tabasamu"
+  },
+  "d83d_de0e": {
+    "message": "baridi"
+  },
+  "d83d_de0f": {
+    "message": "Kenua"
+  },
+  "d83d_de10": {
+    "message": "uso usio na hisia"
+  },
+  "d83d_de11": {
+    "message": "bila hisia"
+  },
+  "d83d_de12": {
+    "message": "hujashangzwa"
+  },
+  "d83d_de13": {
+    "message": "joto baridi"
+  },
+  "d83d_de14": {
+    "message": "uso wenye mawazo"
+  },
+  "d83d_de15": {
+    "message": "uso uliochanganyikiwa"
+  },
+  "d83d_de16": {
+    "message": "uso uliofadhaika"
+  },
+  "d83d_de17": {
+    "message": "uso unaovutia"
+  },
+  "d83d_de18": {
+    "message": "mabusu"
+  },
+  "d83d_de19": {
+    "message": "busu na tabasamu"
+  },
+  "d83d_de1a": {
+    "message": "kubusu"
+  },
+  "d83d_de1b": {
+    "message": "uli nje"
+  },
+  "d83d_de1c": {
+    "message": "ulimi nje na kukonyeza jicho"
+  },
+  "d83d_de1d": {
+    "message": "chukiza"
+  },
+  "d83d_de1e": {
+    "message": "kutamaushwa"
+  },
+  "d83d_de1f": {
+    "message": "wasiwasi"
+  },
+  "d83d_de20": {
+    "message": "hasira"
+  },
+  "d83d_de21": {
+    "message": "nung`unika"
+  },
+  "d83d_de22": {
+    "message": "kilio"
+  },
+  "d83d_de23": {
+    "message": "shindwa"
+  },
+  "d83d_de24": {
+    "message": "tafuta ushindi"
+  },
+  "d83d_de25": {
+    "message": "do!"
+  },
+  "d83d_de26": {
+    "message": "uso unaojikunja"
+  },
+  "d83d_de27": {
+    "message": "huzunika"
+  },
+  "d83d_de28": {
+    "message": "kuogofya"
+  },
+  "d83d_de29": {
+    "message": "kuchoka"
+  },
+  "d83d_de2a": {
+    "message": "usingizi"
+  },
+  "d83d_de2b": {
+    "message": "uchovu"
+  },
+  "d83d_de2c": {
+    "message": "kukunja uso"
+  },
+  "d83d_de2d": {
+    "message": "kulia kwa sauti"
+  },
+  "d83d_de2e": {
+    "message": "uso wa mdomo ulio wazi"
+  },
+  "d83d_de2f": {
+    "message": "uso uliotulia"
+  },
+  "d83d_de30": {
+    "message": "uso unaokimbia"
+  },
+  "d83d_de31": {
+    "message": "uso wa kuogofya"
+  },
+  "d83d_de32": {
+    "message": "uso ulioshangazwa"
+  },
+  "d83d_de33": {
+    "message": "sisimka"
+  },
+  "d83d_de34": {
+    "message": "kulala"
+  },
+  "d83d_de35": {
+    "message": "kizunguzungu"
+  },
+  "d83d_de36": {
+    "message": "hakuna uso wa mdomo"
+  },
+  "d83d_de37": {
+    "message": "uso wenye barakoa"
+  },
+  "d83d_de38": {
+    "message": "uso wa paka wenye kicheko"
+  },
+  "d83d_de39": {
+    "message": "machozi ya uso wa paka wenye furaha"
+  },
+  "d83d_de3a": {
+    "message": "uso wa paka wenye tabasamu"
+  },
+  "d83d_de3b": {
+    "message": "uso wa paka wenye tabasamu"
+  },
+  "d83d_de3c": {
+    "message": "uso wa paka uliokerwa"
+  },
+  "d83d_de3d": {
+    "message": "kubusu paka"
+  },
+  "d83d_de3e": {
+    "message": "uso wa paka unaonung`unika"
+  },
+  "d83d_de3f": {
+    "message": "uso wa paka unaolia"
+  },
+  "d83d_de40": {
+    "message": "uso wa paka wenye uchovu"
+  },
+  "d83d_de45": {
+    "message": "Hakuna ishara nzuri"
+  },
+  "d83d_de46": {
+    "message": "ishara ya SAWA"
+  },
+  "d83d_de47": {
+    "message": "samahani"
+  },
+  "d83d_de48": {
+    "message": "usione maovu"
+  },
+  "d83d_de49": {
+    "message": "usisikie maovu"
+  },
+  "d83d_de4a": {
+    "message": "usiseme maovu"
+  },
+  "d83d_de4b": {
+    "message": "mtu mwenye furaha"
+  },
+  "d83d_de4c": {
+    "message": "riboribo!"
+  },
+  "d83d_de4d": {
+    "message": "mtu anayekunja uso"
+  },
+  "d83d_de4e": {
+    "message": "nung`unika"
+  },
+  "d83d_de4f": {
+    "message": "mikono iliyokunjwa"
+  },
+  "d83d_de80": {
+    "message": "roketi"
+  },
+  "d83d_de81": {
+    "message": "helikopta"
+  },
+  "d83d_de82": {
+    "message": "garimoshi linalotumia mvuke"
+  },
+  "d83d_de83": {
+    "message": "treni"
+  },
+  "d83d_de84": {
+    "message": "treni yenye kasi ya juu"
+  },
+  "d83d_de85": {
+    "message": "treni yenye kasi ya juu  iliyo na pua ya risasi"
+  },
+  "d83d_de86": {
+    "message": "treni"
+  },
+  "d83d_de87": {
+    "message": "reli za chini ya ardhi"
+  },
+  "d83d_de88": {
+    "message": "reli yenye taa za trafiki"
+  },
+  "d83d_de89": {
+    "message": "kituo cha treni"
+  },
+  "d83d_de8a": {
+    "message": "tramu"
+  },
+  "d83d_de8b": {
+    "message": "gari la tramu"
+  },
+  "d83d_de8c": {
+    "message": "basi"
+  },
+  "d83d_de8d": {
+    "message": "basi linalokuja"
+  },
+  "d83d_de8e": {
+    "message": "basi la umeme unaotoka kwenye magurudumu ya toroli"
+  },
+  "d83d_de8f": {
+    "message": "kituo cha basi"
+  },
+  "d83d_de90": {
+    "message": "basi la abiria"
+  },
+  "d83d_de91": {
+    "message": "ambyulensi"
+  },
+  "d83d_de92": {
+    "message": "gari la zimamoto"
+  },
+  "d83d_de93": {
+    "message": "gari la polisi"
+  },
+  "d83d_de94": {
+    "message": "gari la polisi linalokuja"
+  },
+  "d83d_de95": {
+    "message": "teksi"
+  },
+  "d83d_de96": {
+    "message": "teki inayokuja"
+  },
+  "d83d_de97": {
+    "message": "gari"
+  },
+  "d83d_de98": {
+    "message": "gari linalokuja"
+  },
+  "d83d_de99": {
+    "message": "RV"
+  },
+  "d83d_de9a": {
+    "message": "lori la kuwasilisha bidhaa na huduma"
+  },
+  "d83d_de9b": {
+    "message": "lori"
+  },
+  "d83d_de9c": {
+    "message": "trekta"
+  },
+  "d83d_de9d": {
+    "message": "reli moja"
+  },
+  "d83d_de9e": {
+    "message": "reli ya mlimani"
+  },
+  "d83d_de9f": {
+    "message": "reli moja iliyojengwa juu"
+  },
+  "d83d_dea0": {
+    "message": "usafirishaji bidhaa kwa kutumia kebo milimani"
+  },
+  "d83d_dea1": {
+    "message": "gari linalotumia kebo"
+  },
+  "d83d_dea2": {
+    "message": "meli"
+  },
+  "d83d_dea3": {
+    "message": "mtumbwi wa makasia"
+  },
+  "d83d_dea4": {
+    "message": "mashua ya kasi"
+  },
+  "d83d_dea5": {
+    "message": "taa za trafiki mlalo"
+  },
+  "d83d_dea6": {
+    "message": "taa za trafiki wima"
+  },
+  "d83d_dea7": {
+    "message": "inajengwa"
+  },
+  "d83d_dea8": {
+    "message": "taa inayozunguka"
+  },
+  "d83d_dea9": {
+    "message": "bendera ya mahali"
+  },
+  "d83d_deaa": {
+    "message": "mlango"
+  },
+  "d83d_deab": {
+    "message": "Ishara ya hairuhusiwi kuingia"
+  },
+  "d83d_deac": {
+    "message": "ishara ya kuvuta sigara"
+  },
+  "d83d_dead": {
+    "message": "ishara ya usivute sigara"
+  },
+  "d83d_deae": {
+    "message": "ishara ya jalala"
+  },
+  "d83d_deaf": {
+    "message": "ishara ya usitupe taka"
+  },
+  "d83d_deb0": {
+    "message": "maji ya kunywa"
+  },
+  "d83d_deb1": {
+    "message": "maji yasiyo ya kunywa"
+  },
+  "d83d_deb2": {
+    "message": "baiskeli"
+  },
+  "d83d_deb3": {
+    "message": "hakuna baiskeli"
+  },
+  "d83d_deb4": {
+    "message": "mwendeshaji baiskeli"
+  },
+  "d83d_deb5": {
+    "message": "mwendeshaji baiskeli milimani"
+  },
+  "d83d_deb6": {
+    "message": "mtembea kwa miguu"
+  },
+  "d83d_deb7": {
+    "message": "hakuna watembea kwa miguu"
+  },
+  "d83d_deb8": {
+    "message": "watoto wanavuka"
+  },
+  "d83d_deb9": {
+    "message": "Ishara ya wanaume"
+  },
+  "d83d_deba": {
+    "message": "Ishara ya wanawake"
+  },
+  "d83d_debb": {
+    "message": "ishara ya msala"
+  },
+  "d83d_debc": {
+    "message": "ishara ya watoto"
+  },
+  "d83d_debd": {
+    "message": "msala"
+  },
+  "d83d_debe": {
+    "message": "msala wenye maji"
+  },
+  "d83d_debf": {
+    "message": "bafu"
+  },
+  "d83d_dec0": {
+    "message": "hamamu"
+  },
+  "d83d_dec1": {
+    "message": "hodhi"
+  },
+  "d83d_dec2": {
+    "message": "kudhibiti pasipoti"
+  },
+  "d83d_dec3": {
+    "message": "forodha"
+  },
+  "d83d_dec4": {
+    "message": "madai ya mizigo"
+  },
+  "d83d_dec5": {
+    "message": "mizigo iliyoachwa"
+  },
+  "de_ger_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kijerumani"
+  },
+  "de_neo_ger_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Neo 2 ya Kijerumani"
+  },
+  "dictionarytoolcategorytitle": {
+    "message": "Aina"
+  },
+  "dictionarytoolcommentnewinput": {
+    "message": "Toa maoni"
+  },
+  "dictionarytoolcommenttitle": {
+    "message": "Toa maoni"
+  },
+  "dictionarytooldeletedictionaryconfirm": {
+    "message": "Unataka kufuta [object Object]?"
+  },
+  "dictionarytooldeletedictionarytitle": {
+    "message": "Futa kamusi"
+  },
+  "dictionarytooldictionarylisttitle": {
+    "message": "Kamusi"
+  },
+  "dictionarytooldictionaryname": {
+    "message": "Jina la Kamusi"
+  },
+  "dictionarytooldonebutton": {
+    "message": "Nimemaliza"
+  },
+  "dictionarytoolexportbutton": {
+    "message": "Hamisha"
+  },
+  "dictionarytoolimportbutton": {
+    "message": "Ingiza..."
+  },
+  "dictionarytoolmenutitle": {
+    "message": "Udhibiti wa kamusi"
+  },
+  "dictionarytoolnewdictionarynameplaceholder": {
+    "message": "Kamusi mpya"
+  },
+  "dictionarytoolpagetitle": {
+    "message": "Kamusi za watumiaji"
+  },
+  "dictionarytoolreadingnewinput": {
+    "message": "Kusoma kupya"
+  },
+  "dictionarytoolreadingtitle": {
+    "message": "Kusoma"
+  },
+  "dictionarytoolstatuserrordictionarynamecontainsinvalidcharacter": {
+    "message": "Jina lina herufi zisizo sahihi."
+  },
+  "dictionarytoolstatuserrordictionarynameduplicated": {
+    "message": "Jina tayari lipo."
+  },
+  "dictionarytoolstatuserrordictionarynameempty": {
+    "message": "Tafadhali charaza jina la faili."
+  },
+  "dictionarytoolstatuserrordictionarynametoolong": {
+    "message": "Jina hili ni refu sana."
+  },
+  "dictionarytoolstatuserrordictionarysizelimitexceeded": {
+    "message": "Haiwezi kuunda kamusi nyingine zaidi."
+  },
+  "dictionarytoolstatuserroremptyfile": {
+    "message": "Faili ni tupu."
+  },
+  "dictionarytoolstatuserrorentrysizelimitexceeded": {
+    "message": "Haiwezi kuunda uingizaji mwingine zaidi katika kamusi hii."
+  },
+  "dictionarytoolstatuserrorfilenotfound": {
+    "message": "Haikufungua faili."
+  },
+  "dictionarytoolstatuserrorfilesizelimitexceeded": {
+    "message": "Ukubwa wa data unazidi kiwango kinachokubaliwa."
+  },
+  "dictionarytoolstatuserrorgeneral": {
+    "message": "Kitendo hakijafaulu."
+  },
+  "dictionarytoolstatuserrorimportinvalidentries": {
+    "message": "Baadhi ya maneno hayakuingizwa."
+  },
+  "dictionarytoolstatuserrorimporttoomanywords": {
+    "message": "Chanzo cha kuingiza kina maneno mengi sana."
+  },
+  "dictionarytoolstatuserrorinvalidfileformat": {
+    "message": "Haikusoma faili."
+  },
+  "dictionarytoolstatuserrornoundohistory": {
+    "message": "Hakuna kitendo zaidi kinachoweza kutenduliwa."
+  },
+  "dictionarytoolstatuserrorreadingcontainsinvalidcharacter": {
+    "message": "Kusoma kuna herufi zisizo sahihi. Unaweza kutumia herufi za ASCII, Kihiragana, alama iliyotiwa sauti(\u309b), alama iliyotiwa nusu sauti(\u309c), nukta ya katikati(\u30fb), alama ya sauti iliyorefushwa(\u30fc), koma ya Kijapani(\u3001), nukta ya Kijapani(\u3002), mabano ya Kijapani(\u300c\u300d\u300e\u300f) na kistariwimbi cha Kijapani(\u301c) katika kusoma."
+  },
+  "dictionarytoolstatuserrorreadingempty": {
+    "message": "Tafadhali charaza kusoma."
+  },
+  "dictionarytoolstatuserrorreadingtoolong": {
+    "message": "Kusoma ni kurefu sana."
+  },
+  "dictionarytoolstatuserrortitleaddentry": {
+    "message": "Ongeza hitilafu ya uingizaji"
+  },
+  "dictionarytoolstatuserrortitlecreatedictionary": {
+    "message": "Unda hitilafu ya kamusi"
+  },
+  "dictionarytoolstatuserrortitledeletedictionary": {
+    "message": "Futa hitilafu ya kamusi"
+  },
+  "dictionarytoolstatuserrortitledeleteentry": {
+    "message": "Futa hitilafu ya uingizaji"
+  },
+  "dictionarytoolstatuserrortitleeditentry": {
+    "message": "Badilisha hitilafu ya uingizaji"
+  },
+  "dictionarytoolstatuserrortitleimportdata": {
+    "message": "Ingiza hitilafu"
+  },
+  "dictionarytoolstatuserrortitlerenamedictionary": {
+    "message": "Hitilafu ya kubadilisha jina la kamusi"
+  },
+  "dictionarytoolstatuserrorwordcontainsinvalidcharacter": {
+    "message": "Neno lina herufi zisizo sahihi."
+  },
+  "dictionarytoolstatuserrorwordempty": {
+    "message": "Tafadhali charaza neno."
+  },
+  "dictionarytoolstatuserrorwordtoolong": {
+    "message": "Neno ni refu sana."
+  },
+  "dictionarytoolwordnewinput": {
+    "message": "Neno jipya"
+  },
+  "dictionarytoolwordtitle": {
+    "message": "Neno"
+  },
+  "dismiss_menu": {
+    "message": "ondoa menyu ya kibodi"
+  },
+  "dk_dan_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kideni"
+  },
+  "double_space_period": {
+    "message": "Weka nafasi mbili ili kucharaza kitone"
+  },
+  "down_arrow": {
+    "message": "kishale chini"
+  },
+  "ee_est_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kiestonia"
+  },
+  "emoji_tab_emoticon": {
+    "message": "Aina ya emoji ni kikaragosi"
+  },
+  "emoji_tab_face": {
+    "message": "Aina ya emoji ni uso"
+  },
+  "emoji_tab_hot": {
+    "message": "Aina ya emoji ni moto"
+  },
+  "emoji_tab_nature": {
+    "message": "Aina ya emoji ni maumbile"
+  },
+  "emoji_tab_object": {
+    "message": "Aina ya emoji ni kipengele"
+  },
+  "emoji_tab_place": {
+    "message": "Aina ya emoji ni eneo"
+  },
+  "emoji_tab_recent": {
+    "message": "Aina ya emoji ni hivi karibuni"
+  },
+  "emoji_tab_symbol": {
+    "message": "Aina ya emoji ni alama"
+  },
+  "enable_capitalization": {
+    "message": "Uandikaji herufi kubwa kiotomatiki"
+  },
+  "enable_completion": {
+    "message": "Washa ukamilishaji kiotomatiki"
+  },
+  "enable_prediction": {
+    "message": "Washa utabiri wa neno linalofuata"
+  },
+  "enter": {
+    "message": "ingiza"
+  },
+  "es_cat_cat_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kikatalani"
+  },
+  "es_spa_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kihispania"
+  },
+  "expand": {
+    "message": "Panua"
+  },
+  "expand_candidates": {
+    "message": "panua orodha ya maneno yanayopendekezwa"
+  },
+  "fi_fin_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kifini"
+  },
+  "footer_emoji_button": {
+    "message": "badilisha kuenda kwenye emoji"
+  },
+  "footer_handwriting_button": {
+    "message": "badilisha kuenda kwenye mwandiko"
+  },
+  "footer_settings_button": {
+    "message": "fungua mipangilio ya mbinu ya uingizaji"
+  },
+  "fr_fra_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kifaransa"
+  },
+  "fuzzy_pinyin": {
+    "message": "Washa hali ya Pinyin isiyio bayana"
+  },
+  "gb_dvorak_eng_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi (Kiingereza) ya Drovak ya Uingereza"
+  },
+  "gb_extd_eng_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi (Kiingereza) ya Uingereza"
+  },
+  "ge_geo_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kijojia"
+  },
+  "globe": {
+    "message": "badili hadi kibodi ya awali"
+  },
+  "got_it": {
+    "message": "Nimeelewa"
+  },
+  "gr_gre_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kigiriki"
+  },
+  "handwriting_back": {
+    "message": "Nyuma"
+  },
+  "handwriting_netowrk_error": {
+    "message": "Samahani, huwezi kutumia mwandiko, kwa sababu mtandao haupatikani."
+  },
+  "handwriting_privacy_info": {
+    "message": "Uingizaji wako utatumwa kwenye seva za Google ili kuyatambua maandishi."
+  },
+  "hide_keyboard": {
+    "message": "ficha kibodi"
+  },
+  "hr_scr_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kikorasia"
+  },
+  "hu_hun_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kihungaria"
+  },
+  "ie_ga_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kiairishi"
+  },
+  "ignore_correction": {
+    "message": "Puuza usahihishaji wa neno"
+  },
+  "ignore_correction_short": {
+    "message": "Puuza usahihishaji wa neno"
+  },
+  "il_heb_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kiyahudi"
+  },
+  "init_lang": {
+    "message": "Lugha ingizo ya kwanza ni Kichina"
+  },
+  "init_punc": {
+    "message": "Upana wa uakifishaji wa kwanza Umejaa"
+  },
+  "init_sbc": {
+    "message": "Upana wa herufi ya kwanza Umejaa"
+  },
+  "input_hangul": {
+    "message": "Hali ya Hangul"
+  },
+  "input_hanja": {
+    "message": "Hali ya Hanja"
+  },
+  "inputmethod_array": {
+    "message": "Mbinu ya uingizaji wa data ya Array"
+  },
+  "inputmethod_cangjie": {
+    "message": "Mbinu ya uingizaji wa data ya Cangjie"
+  },
+  "inputmethod_dayi": {
+    "message": "Mbinu ya uingizaji wa data ya Dayi"
+  },
+  "inputmethod_hangul": {
+    "message": "Mbinu ya Kikorea ya kuingiza data"
+  },
+  "inputmethod_pinyin": {
+    "message": "Mbinu ya uingizaji wa data ya Pinyin"
+  },
+  "inputmethod_quick": {
+    "message": "Mbinu ya uingizaji wa data ya Quick"
+  },
+  "inputmethod_traditional_pinyin": {
+    "message": "Mbinu ya uingizaji wa Pinyin kwa Kichina cha asili"
+  },
+  "inputmethod_wubi": {
+    "message": "Mbinu ya uingizaji wa data ya Wubi"
+  },
+  "inputmethod_zhuyin": {
+    "message": "Mbinu ya uingizaji wa data ya Zhuyin"
+  },
+  "is_ice_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kiislandi"
+  },
+  "it_ita_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kiitaliano"
+  },
+  "jp_jpn_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kijapani"
+  },
+  "keyboard_arabic": {
+    "message": "Kibodi ya Kiarabu"
+  },
+  "keyboard_armenian_phonetic": {
+    "message": "Kibodi ya Fonetiki ya Kiarmenia"
+  },
+  "keyboard_belarusian": {
+    "message": "Kibodi ya Kibelarusi"
+  },
+  "keyboard_belgian": {
+    "message": "Kibodi ya Kibelgiji"
+  },
+  "keyboard_bengali_phonetic": {
+    "message": "Kibodi ya Bengali (Fonetiki)"
+  },
+  "keyboard_brazilian": {
+    "message": "Kibodi ya Kibrazil"
+  },
+  "keyboard_bulgarian": {
+    "message": "Kibodi ya Kibulgaria"
+  },
+  "keyboard_bulgarian_phonetic": {
+    "message": "Kibodi ya fonetiki ya Kibulgaria"
+  },
+  "keyboard_canadian_english": {
+    "message": "Kibodi ya Kiingereza cha Kanada"
+  },
+  "keyboard_canadian_french": {
+    "message": "Kibodi ya Kifaransa cha Kanada"
+  },
+  "keyboard_canadian_multilingual": {
+    "message": "Kibodi ya Lugha nyingi ya Kanada"
+  },
+  "keyboard_catalan": {
+    "message": "Kibodi ya Kikatalani"
+  },
+  "keyboard_croatian": {
+    "message": "Kibodi ya Kikorasia"
+  },
+  "keyboard_czech": {
+    "message": "Kibodi ya Kicheki"
+  },
+  "keyboard_czech_qwerty": {
+    "message": "Kibodi ya QWERTY ya Kicheki"
+  },
+  "keyboard_danish": {
+    "message": "Kibodi ya Kideni"
+  },
+  "keyboard_devanagari_phonetic": {
+    "message": "Kibodi ya Devanagari (Fonetiki)"
+  },
+  "keyboard_estonian": {
+    "message": "Kibodi ya Kiestonia"
+  },
+  "keyboard_ethiopic": {
+    "message": "Kibodi ya Kiethiopia"
+  },
+  "keyboard_finnish": {
+    "message": "Kibodi ya Kifini"
+  },
+  "keyboard_french": {
+    "message": "Kibodi ya Kifaransa"
+  },
+  "keyboard_georgian": {
+    "message": "Kibodi ya Kijojia"
+  },
+  "keyboard_german": {
+    "message": "Kibodi ya Kijerumani"
+  },
+  "keyboard_german_neo_2": {
+    "message": "Kibodi ya Neo 2 ya Kijerumani"
+  },
+  "keyboard_greek": {
+    "message": "Kibodi ya Kigiriki"
+  },
+  "keyboard_gujarati_phonetic": {
+    "message": "Kibodi ya Gujarati (Fonetiki)"
+  },
+  "keyboard_hebrew": {
+    "message": "Kibodi ya Kiyahudi"
+  },
+  "keyboard_hungarian": {
+    "message": "Kibodi ya Kihungaria"
+  },
+  "keyboard_icelandic": {
+    "message": "Kibodi ya Kiisilandi"
+  },
+  "keyboard_inscript": {
+    "message": "Kibodi (InScript)"
+  },
+  "keyboard_irish": {
+    "message": "Kibodi ya Kiayalandi"
+  },
+  "keyboard_italian": {
+    "message": "Kibodi ya Kiitaliano"
+  },
+  "keyboard_itrans": {
+    "message": "Kibodi (itrans)"
+  },
+  "keyboard_japanese": {
+    "message": "Kibodi ya Kijapani"
+  },
+  "keyboard_kannada_phonetic": {
+    "message": "Kibodi ya Kannada (Fonetiki)"
+  },
+  "keyboard_kedmanee": {
+    "message": "Kibodi (Kedmanee)"
+  },
+  "keyboard_khmer": {
+    "message": "Kibodi ya Kikambodia"
+  },
+  "keyboard_lao": {
+    "message": "Kibodi ya Kilao"
+  },
+  "keyboard_latin_american": {
+    "message": "Kibodi ya Amerika ya Kusini"
+  },
+  "keyboard_latvian": {
+    "message": "Kibodi ya Kilatvia"
+  },
+  "keyboard_lithuanian": {
+    "message": "Kibodi ya Kilithuania"
+  },
+  "keyboard_malayalam_phonetic": {
+    "message": "Kibodi ya Malayalam (Fonetiki)"
+  },
+  "keyboard_maltese": {
+    "message": "Kibodi ya Kimalta"
+  },
+  "keyboard_mongolian": {
+    "message": "Kibodi ya Kimongolia"
+  },
+  "keyboard_myanmar": {
+    "message": "Kibodi ya Myanmar MM3"
+  },
+  "keyboard_myanmar_myansan": {
+    "message": "Kibodi ya Myanmar Myansan"
+  },
+  "keyboard_nepali_inscript": {
+    "message": "Kibodi ya Kinepali (InScript)"
+  },
+  "keyboard_nepali_phonetic": {
+    "message": "Kibodi ya Kinepali (Fonetiki)"
+  },
+  "keyboard_netherlands": {
+    "message": "Kibodi ya Uholanzi"
+  },
+  "keyboard_none": {
+    "message": "Kibodi"
+  },
+  "keyboard_norwegian": {
+    "message": "Kibodi ya Kinorwe"
+  },
+  "keyboard_pattachote": {
+    "message": "Kibodi (Pattachote)"
+  },
+  "keyboard_persian": {
+    "message": "Kibodi ya Kiajemi"
+  },
+  "keyboard_phonetic": {
+    "message": "Kibodi (Fonetiki)"
+  },
+  "keyboard_polish": {
+    "message": "Kibodi ya Kipolandi"
+  },
+  "keyboard_portuguese": {
+    "message": "Kibodi ya Kireno"
+  },
+  "keyboard_romanian": {
+    "message": "Kibodi ya Kiromania"
+  },
+  "keyboard_romanian_standard": {
+    "message": "Kibodi wastani ya Kiromania"
+  },
+  "keyboard_russian": {
+    "message": "Kibodi ya Kirusi"
+  },
+  "keyboard_russian_phonetic": {
+    "message": "Kibodi ya fonetiki ya Kirusi"
+  },
+  "keyboard_russian_phonetic_aatseel": {
+    "message": "Kibodi ya fonetiki (AATSEEL) ya Kirusi"
+  },
+  "keyboard_russian_phonetic_yazhert": {
+    "message": "Kibodi ya fonetiki (YaZHert) ya Kirusi"
+  },
+  "keyboard_serbian": {
+    "message": "Kibodi ya Kiserbia"
+  },
+  "keyboard_sinhala": {
+    "message": "Kibodi ya Kisinhala"
+  },
+  "keyboard_slovakian": {
+    "message": "Kibodi ya Kislovakia"
+  },
+  "keyboard_slovenian": {
+    "message": "Kibodi ya Kislovania"
+  },
+  "keyboard_soranikurdish_ar": {
+    "message": "Kibodi inayolingana na Kiarabu cha Kurdu ya Sorani"
+  },
+  "keyboard_soranikurdish_en": {
+    "message": "Kibodi inayolingana na Kiingereza cha Kurdu ya Sorani"
+  },
+  "keyboard_spanish": {
+    "message": "Kibodi ya Kihispania"
+  },
+  "keyboard_swedish": {
+    "message": "Kibodi ya Kiswidi"
+  },
+  "keyboard_swiss": {
+    "message": "Kibodi ya Kiswizi"
+  },
+  "keyboard_swiss_french": {
+    "message": "Kibodi ya Kifaransa cha Uswizi"
+  },
+  "keyboard_tamil99": {
+    "message": "Kibodi (Tamil99)"
+  },
+  "keyboard_tamil_inscript": {
+    "message": "Kibodi ya Kitamil (InScript)"
+  },
+  "keyboard_tamil_itrans": {
+    "message": "Kibodi ya Kitamil (itrans)"
+  },
+  "keyboard_tamil_phonetic": {
+    "message": "Kibodi ya Kitamil (Fonetiki)"
+  },
+  "keyboard_tamil_tamil99": {
+    "message": "Kibodi ya Kitamil (Tamil99)"
+  },
+  "keyboard_tamil_typewriter": {
+    "message": "Kibodi ya Kitamil (Taipureta)"
+  },
+  "keyboard_tcvn": {
+    "message": "Kibodi (TCVN)"
+  },
+  "keyboard_telex": {
+    "message": "Kibodi (Telex)"
+  },
+  "keyboard_telugu_phonetic": {
+    "message": "Kibodi ya Kitelugu (Fonetiki)"
+  },
+  "keyboard_thai_kedmanee": {
+    "message": "Kibodi ya Kithai (Kedmanee)"
+  },
+  "keyboard_thai_pattachote": {
+    "message": "Kibodi ya Kithai (Pattachote)"
+  },
+  "keyboard_thai_tis": {
+    "message": "Kibodi ya Kithai (TIS 820-2531)"
+  },
+  "keyboard_tis": {
+    "message": "Kibodi (TIS 820-2531)"
+  },
+  "keyboard_turkish": {
+    "message": "Kibodi ya Kituruki"
+  },
+  "keyboard_typewriter": {
+    "message": "Kibodi (Taipureta)"
+  },
+  "keyboard_uk": {
+    "message": "Kibodi ya Uingereza"
+  },
+  "keyboard_uk_dvorak": {
+    "message": "Kibodi ya Dvorak ya Uingereza"
+  },
+  "keyboard_ukrainian": {
+    "message": "Kibodi ya Kiukreni"
+  },
+  "keyboard_us": {
+    "message": "Kibodi ya Marekani"
+  },
+  "keyboard_us_colemak": {
+    "message": "Kibodi ya Colemak ya Marekani"
+  },
+  "keyboard_us_dvorak": {
+    "message": "Kibodi ya Dvorak ya Marekani"
+  },
+  "keyboard_us_extended": {
+    "message": "Kibodi pana ya Marekani"
+  },
+  "keyboard_us_international": {
+    "message": "Kibodi ya kimataifa ya Marekani"
+  },
+  "keyboard_vietnamese_tcvn": {
+    "message": "Kibodi ya Kivietinamu (TCVN)"
+  },
+  "keyboard_vietnamese_telex": {
+    "message": "Kibodi ya Kivietinamu (Telex)"
+  },
+  "keyboard_vietnamese_viqr": {
+    "message": "Kibodi ya Kivietinamu (VIQR)"
+  },
+  "keyboard_vietnamese_vni": {
+    "message": "Kibodi ya Kivietinamu (VNI)"
+  },
+  "keyboard_viqr": {
+    "message": "Kibodi (VIQR)"
+  },
+  "keyboard_vni": {
+    "message": "Kibodi (VNI)"
+  },
+  "korean_hanja_display": {
+    "message": "Hali ya Mgombea wa Hanja"
+  },
+  "korean_keyboard_layout": {
+    "message": "Muundo wa Kibodi ya Kikorea"
+  },
+  "korean_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Mbinu ya Kikorea ya Kuingiza Data"
+  },
+  "korean_syllable_input": {
+    "message": "Weka silabi moja kwa wakati"
+  },
+  "latam_spa_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi (Kihispania) ya Amerika ya Kusini"
+  },
+  "latin_settings_page": {
+    "message": "Mipangilio"
+  },
+  "left_arrow": {
+    "message": "kishale kushoto"
+  },
+  "lt_lit_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kilithuania"
+  },
+  "lv_apostrophe_lav_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi (Kilatvia)"
+  },
+  "menu_key": {
+    "message": "fungua menyu ya kibodi"
+  },
+  "mn_mon_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kimongolia"
+  },
+  "move_page_key_above": {
+    "message": "Tumia vitufe vya - na = ili kuandika ukurasa wa wagombea"
+  },
+  "move_page_key_below": {
+    "message": "Tumia vitufe vya , na . ili kuandika ukurasa wa wagombea"
+  },
+  "never_auto_correct": {
+    "message": "Umezimwa"
+  },
+  "no_nob_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kinorwe"
+  },
+  "pause": {
+    "message": "Sitisha"
+  },
+  "physical_auto_correction_level": {
+    "message": "Usahihishaji kiotomatiki"
+  },
+  "physical_enable_capitalization": {
+    "message": "Uandikaji herufi kubwa kiotomatiki"
+  },
+  "physical_keyboard": {
+    "message": "Kibodi halisi"
+  },
+  "pinyin_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Pinyin"
+  },
+  "pl_pol_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kipolandi"
+  },
+  "pt_por_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kijapani"
+  },
+  "right_arrow": {
+    "message": "kishale kulia"
+  },
+  "ro_rum_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kiromania"
+  },
+  "rs_srp_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kiserbia"
+  },
+  "ru_phonetic_rus_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Fonetiki ya Kirusi"
+  },
+  "ru_rus_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kirusi"
+  },
+  "se_swe_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kiswidi"
+  },
+  "settings": {
+    "message": "Mipangilio"
+  },
+  "shift": {
+    "message": "shift"
+  },
+  "shift_lock": {
+    "message": "Shift Imefungwa"
+  },
+  "show_candidate_mode": {
+    "message": "Ucheleweshaji wa menyu kunjuzi"
+  },
+  "show_candidates_1000": {
+    "message": "Onyesha menyu kunjuzi ya mapendekezo baada ya sekunde 1"
+  },
+  "show_candidates_2000": {
+    "message": "Onyesha menyu kunjuzi ya mapendekezo baada ya sekunde 2"
+  },
+  "show_candidates_500": {
+    "message": "Onyesha menyu kunjuzi ya mapendekezo baada ya ms 500"
+  },
+  "show_candidates_5000": {
+    "message": "Onyesha menyu kunjuzi ya mapendekezo baada ya sekunde 5"
+  },
+  "show_candidates_backspace": {
+    "message": "Onyesha menyu kunjuzi ya mapendekezo kwa kutumia Backspace"
+  },
+  "show_hangul_candidate": {
+    "message": "Onyesha maneno yanayopendekezwa katika hali ya Hangul"
+  },
+  "shrink_candidates": {
+    "message": "punguza orodha ya maneno yanayopendekezwa"
+  },
+  "si_slv_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kislovania"
+  },
+  "sk_slo_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kislovakia"
+  },
+  "smiley": {
+    "message": "kicheshi"
+  },
+  "sometimes_auto_correct": {
+    "message": "Wastani"
+  },
+  "sound_on_keypress": {
+    "message": "Sauti inasikika kwa kubonyeza kitufe"
+  },
+  "space": {
+    "message": "nafasi"
+  },
+  "switch_to": {
+    "message": "nenda kwenye mpangilio mpya "
+  },
+  "switch_to_compact_layout": {
+    "message": "Badilisha kuenda kwenye muundo wa kushikamana"
+  },
+  "switch_to_full_layout": {
+    "message": "Badilisha kuenda kwenye muundo kamili"
+  },
+  "switch_to_keyboard_prefix": {
+    "message": "badilisha kuenda kwenye kibodi mpya "
+  },
+  "switched_to": {
+    "message": "imeenda kwenye mpangilio mpya "
+  },
+  "tab": {
+    "message": "kichupo"
+  },
+  "touch_keyboard": {
+    "message": "Kibodi ya skrini"
+  },
+  "tr_tur_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kituruki"
+  },
+  "transliteration_am": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (salam \u2192 \u1230\u120b\u121d)"
+  },
+  "transliteration_ar": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (marhaban \u2190 \u0645\u0631\u062d\u0628\u0627)"
+  },
+  "transliteration_be": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (pryvitannie \u2192 \u043f\u0440\u044b\u0432\u0456\u0442\u0430\u043d\u043d\u0435)"
+  },
+  "transliteration_bg": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (zdrasti \u2192 \u0437\u0434\u0440\u0430\u0441\u0442\u0438)"
+  },
+  "transliteration_bn": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (namaskar \u2192 \u09a8\u09ae\u09b8\u09cd\u0995\u09be\u09b0)"
+  },
+  "transliteration_el": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (geia \u2192 \u03b3\u03b5\u03b9\u03b1)"
+  },
+  "transliteration_fa": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (salam \u2190 \u0633\u0644\u0627\u0645)"
+  },
+  "transliteration_gu": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (namaste \u2192 \u0aa8\u0aae\u0ab8\u0acd\u0aa4\u0ac7)"
+  },
+  "transliteration_he": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (shalom \u2190 \u05e9\u05dc\u05d5\u05dd)"
+  },
+  "transliteration_hi": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_kn": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (namaskaram \u2192 \u0ca8\u0cae\u0cb8\u0ccd\u0c95\u0cbe\u0cb0)"
+  },
+  "transliteration_ml": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (namaskar \u2192 \u0d28\u0d2e\u0d38\u0d4d\u0d15\u0d3e\u0d30\u0d02)"
+  },
+  "transliteration_mr": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (namaste \u2192 \u0928\u092e\u0938\u094d\u0915\u093e\u0930)"
+  },
+  "transliteration_ne": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_or": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (mausam \u2192 \u0b28\u0b2e\u0b38\u0b4d\u0b24\u0b47)"
+  },
+  "transliteration_pa": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (mausam \u2192 \u0a2e\u0a4c\u0a38\u0a2e)"
+  },
+  "transliteration_ru": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (privet \u2192 \u043f\u0440\u0438\u0432\u0435\u0442)"
+  },
+  "transliteration_sa": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_si": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (halo \u2192 \u0dc4\u0dbd\u0ddd)"
+  },
+  "transliteration_sr": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (zdravo \u2192 \u0437\u0434\u0440\u0430\u0432\u043e)"
+  },
+  "transliteration_ta": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (vanakkam \u2192 \u0bb5\u0ba3\u0b95\u0bcd\u0b95\u0bae\u0bcd)"
+  },
+  "transliteration_te": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (emandi \u2192 \u0c0f\u0c2e\u0c02\u0c21\u0c40)"
+  },
+  "transliteration_ti": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (selam \u2192 \u1230\u120b\u121d)"
+  },
+  "transliteration_uk": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (pryvit \u2192 \u043f\u0440\u0438\u0432\u0456\u0442)"
+  },
+  "transliteration_ur": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (salam \u2190 \u0633\u0644\u0627\u0645)"
+  },
+  "transliteration_vi": {
+    "message": "Tafsiri ya herufi kwa alfabeti nyingine (chao \u2192 ch\u00e0o)"
+  },
+  "ua_ukr_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ya Kiukreni"
+  },
+  "up_arrow": {
+    "message": "kishale juu"
+  },
+  "us_altgr_intl_eng_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi (Kiingereza) Pana ya Marekani"
+  },
+  "us_colemak_eng_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi (Kiingereza) ya Colemak ya Marekani"
+  },
+  "us_dvorak_eng_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi (Kiingereza) ya Dvorak ya Marekani"
+  },
+  "us_eng_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi (Kiingereza) ya Marekani"
+  },
+  "us_fil_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi (Kifilipino) ya Marekani"
+  },
+  "us_ind_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi (Kiindonesia) ya Marekani"
+  },
+  "us_intl_eng_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi (Kiingereza) ya Kimataifa ya Marekani"
+  },
+  "us_intl_nld_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi ( Kidachi) ya Kimataifa ya Marekani"
+  },
+  "us_intl_por_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi (Kireno cha Brazil) ya Kimataifa ya Marekani"
+  },
+  "us_msa_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Kibodi (Kimalei) ya Marekani"
+  },
+  "user_dict": {
+    "message": "Washa kamusi binafsi"
+  },
+  "user_dict_add": {
+    "message": "Ongeza"
+  },
+  "user_dict_clear": {
+    "message": "Ondoa Wote"
+  },
+  "user_dict_manage": {
+    "message": "Dhibiti kamusi ya binafsi..."
+  },
+  "user_dict_new_word": {
+    "message": "Neno jipya"
+  },
+  "user_dict_remove": {
+    "message": "Ondoa Uliochaguliwa"
+  },
+  "user_dict_reset": {
+    "message": "Weka Upya Mabadiliko Yote ya Kamusi"
+  },
+  "user_dict_save": {
+    "message": "Hifadhi"
+  },
+  "user_dict_sync": {
+    "message": "Sawazisha kamusi ya binafsi"
+  },
+  "user_dict_title": {
+    "message": "Kamusi ya Binafsi"
+  },
+  "voice": {
+    "message": "Sauti"
+  },
+  "voice_privacy_info": {
+    "message": "Kuweka kwako data kwa kutamka kutatumwa kwenye seva za Google ili kutambua maandishi."
+  },
+  "voice_turn_off": {
+    "message": "zima zana ya kuweka data kwa kutamka"
+  },
+  "voice_turn_on": {
+    "message": "washa zana ya kuweka data kwa kutamka"
+  },
+  "wait": {
+    "message": "Subiri"
+  },
+  "zhuyin_keyboard_layout": {
+    "message": "Aina ya kibodi"
+  },
+  "zhuyin_page_size": {
+    "message": "Idadi ya wagombea wa kuonyesha katika kila ukurasa"
+  },
+  "zhuyin_select_keys": {
+    "message": "Vitufe vya uteuzi"
+  },
+  "zhuyin_settings_page": {
+    "message": "Ukurasa wa Mipangilio ya Zhuyin"
+  }
+}

@@ -1,0 +1,23 @@
+per-file common_param_traits.cc=set noparent
+per-file common_param_traits.cc=tsepez@chromium.org
+
+per-file *param_traits*.h=set noparent
+per-file *param_traits*.h=dcheng@chromium.org
+per-file *param_traits*.h=inferno@chromium.org
+per-file *param_traits*.h=jln@chromium.org
+per-file *param_traits*.h=jschuh@chromium.org
+per-file *param_traits*.h=kenrb@chromium.org
+per-file *param_traits*.h=mkwst@chromium.org
+per-file *param_traits*.h=nasko@chromium.org
+per-file *param_traits*.h=palmer@chromium.org
+per-file *param_traits*.h=tsepez@chromium.org
+per-file *param_traits*.h=wfh@chromium.org
+
+# DirectWrite
+per-file dwrite_font_platform_win.h=shrikant@chromium.org
+per-file dwrite_font_platform_win.h=scottmg@chromium.org
+
+# Changes to Mojo interfaces require a security review to avoid
+# introducing new sandbox escapes.
+per-file *.mojom=set noparent
+per-file *.mojom=tsepez@chromium.org

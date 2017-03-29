@@ -1,0 +1,13 @@
+{
+  "name": "chrome.serial",
+  "version": "0.1",
+  "description": "end-to-end browser test for chrome.serial API",
+  "app": {
+    "background": {
+      "scripts": ["background.js"]
+    }
+  },
+  "permissions": [
+    "serial"
+  ]
+}

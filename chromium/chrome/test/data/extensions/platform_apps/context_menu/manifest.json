@@ -1,0 +1,12 @@
+{
+  "name" : "Platform App Context Menus Test Extension",
+  "version" : "0.1",
+  "permissions": [
+    "contextMenus"
+  ],
+  "app": {
+    "background": {
+      "scripts": ["test.js"]
+    }
+  }
+}

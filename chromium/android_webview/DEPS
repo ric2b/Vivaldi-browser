@@ -1,0 +1,22 @@
+# Please include torne@ and (erikwright@) on the review for any changes
+# to DEPS files under android_webview/
+
+# Do not add any includes under chrome/ anywhere in android_webview.
+
+include_rules = [
+  # lib is the top-level target, and must remain a leaf in the dependency tree.
+  "-android_webview/lib",
+
+  "+components/data_reduction_proxy",
+  "+components/devtools_discovery",
+  "+content/public/common",
+  "+crypto",
+  "+gpu",
+  "+jni",
+  "+net",
+  "+skia",
+  "+third_party/skia/include",
+  "+ui/android",
+  "+ui/base",
+  "+ui/gfx",
+]

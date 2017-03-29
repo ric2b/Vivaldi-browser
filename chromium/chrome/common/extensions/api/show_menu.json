@@ -1,0 +1,94 @@
+//
+// Copyright (c) 2014-2015 Vivaldi Technologies AS. All rights reserved.
+//
+
+[
+  {
+    "namespace": "showMenu",
+    "description": "Use the <code>vivaldi.showMenu</code> API to show a popup-menu.",
+    "types": [
+      {
+        "id": "MenuItem",
+        "type": "object",
+        "description": "One menu item.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Text in item."
+          },
+          "id": {
+            "type": "integer",
+            "description": "The unique id of item"
+          },
+          "items": {
+            "type": "array",
+            "optional": true,
+            "items": {"$ref": "MenuItem"},
+            "description": "Child menu items"
+          },
+          "visible": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Whether this menu item is visible or not. Defaults to true."
+          },
+          "type": {
+            "type": "string",
+            "optional": true,
+            "description": "'normal' or 'checkbox'. Defaults to 'normal'."
+          },
+          "checked": {
+            "type": "boolean",
+            "optional": true,
+            "description": "true if the checkbox is checked, otherwise false. Only applies for type='checkbox'"
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "create",
+        "type": "function",
+        "description": "Creates a new context menu.",
+        "parameters": [
+          {
+            "type": "object",
+            "name": "createProperties",
+            "properties": {
+                "left": {"type": "integer", "description": "Left position of menu, screen coordinates."},
+                "top": {"type": "integer", "description": "Top position of menu, screen coordinates."},
+                "items": {"type": "array", "items": {"$ref": "MenuItem"}, "description": "Menu items with string label. When clicked a callback is called with a zero based index."}
+            }
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "type": "integer",
+                "name": "menuID",
+                "description": "0 based index of clicked item."
+              }
+            ]
+          }
+
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onMainMenuCommand",
+        "type": "function",
+        "description": "Fired when a main menu command is selected.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "commandId",
+            "minimum": 0,
+            "description":"id of the command selected."
+          }
+        ]
+      }
+    ]
+  }
+]

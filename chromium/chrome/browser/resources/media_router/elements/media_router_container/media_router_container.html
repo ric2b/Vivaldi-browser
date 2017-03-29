@@ -1,0 +1,89 @@
+<link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/hardware-icons.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/iron-icons.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-item/paper-item.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-menu/paper-menu.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-toolbar/paper-toolbar.html">
+<link rel="import" href="../issue_banner/issue_banner.html">
+<link rel="import" href="../route_details/route_details.html">
+<dom-module id="media-router-container">
+  <link rel="import" type="css" href="media_router_container.css">
+  <template>
+    <paper-toolbar id="container-header"
+        class$="[[currentView_]]"
+        hidden$="[[computeHeaderHidden_(currentView_, issue)]]">
+      <div id="header-text">
+        <span
+            hidden$="[[computeSinkListViewHidden_(currentView_, issue)]]"
+            >[[headerText]]</span>
+        <span hidden$="[[computeCastModeHidden_(currentView_)]]"
+            >[[selectCastModeHeaderText_]]</span>
+      </div>
+      <paper-icon-button icon="[[computeArrowDropIcon_(currentView_)]]"
+          on-click="toggleCastModeHidden_">
+      </paper-icon-button>
+      <paper-icon-button icon="close" on-click="onCloseButtonClick_">
+      </paper-icon-button>
+    </paper-toolbar>
+    <issue-banner id="issue-banner" issue="[[issue]]"
+        hidden$="[[computeIssueBannerHidden_(currentView_, issue)]]">
+    </issue-banner>
+    <paper-menu id="cast-mode-list"
+        hidden$="[[computeCastModeHidden_(currentView_)]]">
+      <template is="dom-repeat" id="castModeList" items="[[castModeList]]">
+        <paper-item class="cast-mode" on-click="onCastModeClick_">
+          <!-- TODO(apacible): Show icon based on cast mode. -->
+          <iron-icon icon="tab"></iron-icon>
+          <div>
+            <span>[[item.description]]</span>
+          </div>
+        </paper-item>
+      </template>
+    </paper-menu>
+    <route-details id="route-details" route="[[currentRoute_]]"
+        sink="[[computeSinkForCurrentRoute_(currentRoute_)]]"
+        on-back-click="showSinkList_"
+        on-close-route-click="showSinkList_"
+        hidden$="[[computeRouteDetailsHidden_(currentView_, issue)]]">
+    </route-details>
+    <!-- TODO(kdresner): Don't show this until we've given a little
+    bit of time to actually discover devices. Maybe show a spinner
+    during this time. -->
+    <div hidden$="[[computeSinkListViewHidden_(currentView_, issue)]]">
+      <div id="device-missing"
+           hidden$="[[!computeSinkListHidden_(sinkList)]]">
+        <span>[[deviceMissingText_]]</span>
+      </div>
+      <paper-menu id="sink-list"
+          hidden$="[[computeSinkListHidden_(currentView_, issue)]]">
+        <template is="dom-repeat" id="sinkList" items="[[sinkList]]">
+          <paper-item class="sink" on-click="onSinkClick_">
+            <div class="sink-content">
+              <div>
+                <!-- TODO(apacible): Show device icon based on device type. -->
+                <iron-icon icon="hardware:tv"
+                    class$="[[computeSinkIconClass_(item.id, sinkToRouteMap_)]]">
+                </iron-icon>
+              </div>
+              <div>
+                <div class="sink-text">
+                  <span>[[item.name]]</span>
+                </div>
+                <div class="sink-text route"
+                     hidden$="[[computeRouteInSinkListHidden_(item.id,
+                     sinkToRouteMap_)]]">
+                  <span>[[
+                      computeRouteInSinkListValue_(item.id, sinkToRouteMap_)
+                          ]]</span>
+                </div>
+              </div>
+            </div>
+          </paper-item>
+        </template>
+      </paper-menu>
+    </div>
+  </template>
+  <script src="media_router_container.js"></script>
+</dom-module>

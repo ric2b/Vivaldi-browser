@@ -1,0 +1,21 @@
+{
+  "name": "Platform App fileSystem.getDisplayPath test",
+  "version": "1",
+  "file_handlers": {
+    "text": {
+      "types": [
+        "text/*"
+      ]
+    }
+  },
+  "permissions": [
+    {
+      "fileSystem": []
+    }
+  ],
+  "app": {
+    "background": {
+      "scripts": ["test.js"]
+    }
+  }
+}

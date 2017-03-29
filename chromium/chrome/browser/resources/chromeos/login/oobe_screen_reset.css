@@ -1,0 +1,96 @@
+/* Copyright 2013 The Chromium Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+#reset {
+  display: flex;
+  flex-flow: column;
+  font-size: 16px;
+  min-height: 423px;
+  padding: 40px 17px 80px;
+  text-align: center;
+  width: 722px;
+}
+
+#reset #reset-controls {
+  bottom: 40px;
+  justify-content: center;
+  margin-top: auto;
+}
+
+#reset-controls button {
+  margin: 0 10px;
+}
+
+#reset #reset-warning-icon {
+  height: 112px;
+}
+
+#reset #reset-warning-msg,
+#reset #powerwash-warning-msg,
+#reset #powerwash-and-rollback-warning-msg {
+  color: #606060;
+  font-size: 22px;
+  padding: 5px 45px 30px;
+}
+
+.reset-text {
+  color: #606060;
+}
+
+#reset #reset-warning-details,
+#reset #reset-revert-promise-msg {
+  padding: 20px 40px 0;
+}
+
+#reset #reset-warning-restart {
+  padding: 30px 40px 0;
+}
+
+#reset #rollback {
+  padding: 30px 40px 10px;
+}
+
+#reset #reset-revert-spinner-message {
+  display: inline-block;
+  padding: 25px 0;
+  vertical-align: middle;
+}
+
+#reset #reset-revert-spinner {
+  margin-top: 0;
+  vertical-align: middle;
+}
+
+.powerwash-proposal-specific,
+.rollback-proposal-specific,
+.revert-promise-specific,
+.restart-required-specific {
+  display: none;
+}
+
+.powerwash-proposal-view .powerwash-proposal-specific,
+.rollback-proposal-view .rollback-proposal-specific,
+.restart-required-view .restart-required-specific,
+.revert-promise-view .revert-promise-specific {
+  display: block;
+}
+
+#reset-restart-button,
+#reset-button,
+#reset-toconfirm-button,
+#reset-cancel-button,
+.revert-promise-view #reset-controls {
+  display: none;
+}
+
+.restart-required-view #reset-restart-button,
+.powerwash-proposal-view #reset-toconfirm-button,
+.rollback-proposal-view #reset-toconfirm-button,
+.restart-required-view #reset-cancel-button,
+.powerwash-proposal-view #reset-cancel-button,
+.rollback-proposal-view #reset-cancel-button {
+  display: inline-block;
+}
+

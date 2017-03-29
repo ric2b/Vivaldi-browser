@@ -1,0 +1,65 @@
+{
+  "key": "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDZkVvA5GwPYgY0TLcWEuM3yp/SnK7aZul39rvMTTAXd8YUgd1CpoFSoparbHO9qcrp2o4dzKDuIlJchAZhd8Rc2BgC9YVceW8s0VkhbPxuECKPWjb+VzxV1u9f6OhD6oNtrkaKBEJRFQVHe29P+vaOwiFLuR9pkCo62vYnMK8fGwIDAQAB",
+  "manifest_version": 2,
+  "name": "Vivaldi",
+  "minimum_chrome_version": "32.0.1700.0",
+  "default_locale":"en",
+  "version": "1.5",
+  "icons": {
+    "16": "resources/icon_16.png",
+    "128": "resources/icon_128.png"
+  },
+  "app": {
+    "background": {
+      "scripts": ["background-bundle.js"]
+    },
+    "content_security_policy": "script-src 'self' http://localhost:35729/; object-src 'self'"
+  },
+  "display_in_launcher": true,
+  "display_in_new_tab_page": true,
+  "offline_enabled": true,
+  "permissions": [
+    "webview", "<all_urls>", "bookmarks", "showMenu",
+    "importData","cookies","contentSettings",
+    "contextMenus",
+    "storage", "unlimitedStorage", {"fileSystem": ["write"]},
+    "history",
+    "management",
+    "declarativeWebRequest",
+    "notifications",
+    "topSites",
+    "sessions",
+    "tabs",
+    "downloads", "downloads.open", "downloads.shelf",
+    "videoCapture", "audioCapture",
+    "notes",
+    "autoUpdate",
+    "editcommand",
+    "geolocation","savedpasswords","app.window.fullscreen.overrideEsc","privacy","settings",
+    "clipboardRead","uizoom",
+    "chrome://favicon/", "commandLinePrivate",
+    "extensionActionUtils","bookmarkManagerPrivate",
+    "thumbnails",
+    "utilities",
+    {"socket": ["tcp-connect:*:*"]}
+  ],
+  "webview" : {
+    "partitions" : [
+      {
+        "name" : "storage",
+        "accessible_resources" : [
+          "browser.html",
+          "components/thumbnail/capture.html",
+          "components/startpage/startpage.html",
+          "components/settings/settings.html",
+          "components/mail/mail.html",
+          "style/*",
+          "resources/*",
+          "defaultsPlatformSpecific.js",
+          "defaults.js",
+          "bundle.js"
+        ]
+      }
+    ]
+  }
+}

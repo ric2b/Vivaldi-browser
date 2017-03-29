@@ -1,0 +1,94 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef COMPONENTS_HTML_VIEWER_MEDIA_FACTORY_H_
+#define COMPONENTS_HTML_VIEWER_MEDIA_FACTORY_H_
+
+#include "base/macros.h"
+#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_ptr.h"
+#include "base/threading/thread.h"
+#include "media/audio/fake_audio_log_factory.h"
+#include "media/base/audio_hardware_config.h"
+#include "mojo/application/public/interfaces/service_provider.mojom.h"
+
+namespace base {
+class SingleThreadTaskRunner;
+}
+
+namespace blink {
+class WebContentDecryptionModule;
+class WebEncryptedMediaClient;
+class WebMediaPlayer;
+class WebLocalFrame;
+class WebURL;
+class WebMediaPlayerClient;
+}
+
+namespace media {
+class AudioManager;
+class AudioRendererSink;
+class CdmFactory;
+class MediaPermission;
+class WebEncryptedMediaClientImpl;
+}
+
+namespace mojo {
+class ServiceProvider;
+class Shell;
+}
+
+namespace html_viewer {
+
+// Helper class used to create blink::WebMediaPlayer objects.
+// This class stores the "global state" shared across all WebMediaPlayer
+// instances.
+class MediaFactory {
+ public:
+  MediaFactory(
+      const scoped_refptr<base::SingleThreadTaskRunner>& compositor_task_runner,
+      mojo::Shell* shell);
+  ~MediaFactory();
+
+  blink::WebMediaPlayer* CreateMediaPlayer(
+      blink::WebLocalFrame* frame,
+      const blink::WebURL& url,
+      blink::WebMediaPlayerClient* client,
+      blink::WebContentDecryptionModule* initial_cdm,
+      mojo::Shell* shell);
+
+  blink::WebEncryptedMediaClient* GetEncryptedMediaClient();
+
+ private:
+  mojo::ServiceProvider* GetMediaServiceProvider();
+  media::MediaPermission* GetMediaPermission();
+  media::CdmFactory* GetCdmFactory();
+
+#if !defined(OS_ANDROID)
+  const media::AudioHardwareConfig& GetAudioHardwareConfig();
+  scoped_refptr<media::AudioRendererSink> CreateAudioRendererSink();
+  scoped_refptr<base::SingleThreadTaskRunner> GetMediaThreadTaskRunner();
+
+  base::Thread media_thread_;
+  media::FakeAudioLogFactory fake_audio_log_factory_;
+  scoped_ptr<media::AudioManager> audio_manager_;
+  media::AudioHardwareConfig audio_hardware_config_;
+#endif
+
+  const bool enable_mojo_media_renderer_;
+  scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner_;
+  mojo::Shell* shell_;
+
+  // Lazily initialized objects.
+  mojo::ServiceProviderPtr media_service_provider_;
+  scoped_ptr<media::WebEncryptedMediaClientImpl> web_encrypted_media_client_;
+  scoped_ptr<media::MediaPermission> media_permission_;
+  scoped_ptr<media::CdmFactory> cdm_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(MediaFactory);
+};
+
+}  // namespace html_viewer
+
+#endif  // COMPONENTS_HTML_VIEWER_MEDIA_FACTORY_H_

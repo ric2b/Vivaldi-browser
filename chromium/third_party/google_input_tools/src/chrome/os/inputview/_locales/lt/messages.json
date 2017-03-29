@@ -1,0 +1,3337 @@
+{
+  "add_to_dictionary": {
+    "message": "Prid\u0117ti \u012f \u017eodyn\u0105"
+  },
+  "add_to_personal_dictionary": {
+    "message": "Prid\u0117ti prie asmeninio \u017eodyno"
+  },
+  "add_word_to_dictionary": {
+    "message": "Prid\u0117ti \u017eod\u012f \u201e$1\u201c \u012f \u017eodyn\u0105",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "advanced": {
+    "message": "I\u0161pl\u0117stiniai"
+  },
+  "alt": {
+    "message": "klavi\u0161as \u201ealt\u201c"
+  },
+  "altgr": {
+    "message": "klavi\u0161as \u201ealtgr\u201c"
+  },
+  "always_auto_correct": {
+    "message": "Grie\u017etas"
+  },
+  "am_phonetic_arm_settings_page": {
+    "message": "Arm\u0117ni\u0161kos fonetin\u0117s klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "appnamejpkeyboard": {
+    "message": "\u201eGoogle\u201c \u012fvestis japon\u0173 k. (skirta japoni\u0161kai klaviat\u016brai)"
+  },
+  "appnameuskeyboard": {
+    "message": "\u201eGoogle\u201c \u012fvestis japon\u0173 k. (skirta JAV klaviat\u016brai)"
+  },
+  "auto_correction_level": {
+    "message": "Automatinis taisymas"
+  },
+  "backspace": {
+    "message": "naikinimo klavi\u0161as"
+  },
+  "basic": {
+    "message": "Pagrindiniai"
+  },
+  "be_fra_settings_page": {
+    "message": "Belgi\u0161kos klaviat\u016bros (pranc\u016bz\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "be_ger_settings_page": {
+    "message": "Belgi\u0161kos klaviat\u016bros (vokie\u010di\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "be_nld_settings_page": {
+    "message": "Belgi\u0161kos klaviat\u016bros (oland\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "bg_bul_settings_page": {
+    "message": "Bulgari\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "bg_phonetic_bul_settings_page": {
+    "message": "Bulgari\u0161kos fonetin\u0117s klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "br_por_settings_page": {
+    "message": "Brazili\u0161kos klaviat\u016bros (Brazilijos portugal\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "by_bel_settings_page": {
+    "message": "Baltarusi\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "ca_eng_eng_settings_page": {
+    "message": "Kanados angli\u0161kos klaviat\u016bros (angl\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "ca_fra_settings_page": {
+    "message": "Kanados pranc\u016bzi\u0161kos klaviat\u016bros (pranc\u016bz\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "ca_multix_fra_settings_page": {
+    "message": "Kanados keli\u0173 kalb\u0173 klaviat\u016bros (pranc\u016bz\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "capital": {
+    "message": "did\u017eioji raid\u0117"
+  },
+  "capslock": {
+    "message": "did\u017ei\u0173j\u0173 raid\u017ei\u0173 klavi\u0161as"
+  },
+  "ch_fr_fra_settings_page": {
+    "message": "\u0160veicarijos pranc\u016bzi\u0161kos klaviat\u016bros (pranc\u016bz\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "ch_ger_settings_page": {
+    "message": "\u0160veicari\u0161kos klaviat\u016bros (vokie\u010di\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "chos_inputtool_description": {
+    "message": "Naudodami \u201eGoogle\u201c \u012fvesties \u012frankius, skirtus \u201eChrome\u201c OS, galite pageidaujama kalba \u012fvesti tekst\u0105 \u201eChrome\u201c OS."
+  },
+  "chos_inputtool_title": {
+    "message": "\u201eGoogle\u201c \u012fvesties \u012frankiai"
+  },
+  "compositionmodedirect": {
+    "message": "Tiesiogin\u0117 \u012fvestis"
+  },
+  "compositionmodefullascii": {
+    "message": "Viso plo\u010dio lotyn\u0173 k."
+  },
+  "compositionmodefullkatakana": {
+    "message": "Katakana"
+  },
+  "compositionmodehalfascii": {
+    "message": "Lotyn\u0173 k."
+  },
+  "compositionmodehalfkatakana": {
+    "message": "Pus\u0117s plo\u010dio katakana"
+  },
+  "compositionmodehiragana": {
+    "message": "Hiragana"
+  },
+  "configbasicstitle": {
+    "message": "Pagrindai"
+  },
+  "configclearhistory": {
+    "message": "I\u0161valyti suasmeninimo duomenis..."
+  },
+  "configclearhistorycancelbutton": {
+    "message": "At\u0161aukti"
+  },
+  "configclearhistoryconversionhistory": {
+    "message": "Konversij\u0173 istorija"
+  },
+  "configclearhistorymessage": {
+    "message": "Sunaikinti \u0161iuos elementus:"
+  },
+  "configclearhistoryokbutton": {
+    "message": "I\u0161valyti suasmeninimo duomenis"
+  },
+  "configclearhistorysuggestionhistory": {
+    "message": "Pasi\u016blym\u0173 istorija"
+  },
+  "configclearhistorytitle": {
+    "message": "I\u0161valyti suasmeninimo duomenis"
+  },
+  "configcreditsdescription": {
+    "message": "\u00a9 \u201eGoogle Inc.\u201c, 2013 m. Visos teis\u0117s saugomos."
+  },
+  "configdialogcancel": {
+    "message": "At\u0161aukti"
+  },
+  "configdialogok": {
+    "message": "Gerai"
+  },
+  "configdictionarytoolbutton": {
+    "message": "Tvarkyti naudotojo \u017eodyn\u0105..."
+  },
+  "configdictionarytooldescription": {
+    "message": "Prid\u0117kite savo \u017eod\u017ei\u0173 prie naudotojo \u017eodyno, kad gal\u0117tum\u0117te tinkinti konversij\u0173 kandidatus."
+  },
+  "configdictionarytooltitle": {
+    "message": "Naudotoj\u0173 \u017eodynai"
+  },
+  "configincognitomode": {
+    "message": "I\u0161jungti suasmenintas konversijas, pasi\u016blymus ir naudotojo \u017eodyn\u0105"
+  },
+  "configinputassistancetitle": {
+    "message": "\u012evesties pagalba"
+  },
+  "configosscreditsdescription": {
+    "message": "This software is made possible by <a href=\"./credits_en.html\">open source software</a>."
+  },
+  "configpreeditmethod": {
+    "message": "\u012evesties re\u017eimas:"
+  },
+  "configpreeditmethodkana": {
+    "message": "Kana"
+  },
+  "configpreeditmethodromaji": {
+    "message": "Romaji"
+  },
+  "configprivacytitle": {
+    "message": "Privatumas"
+  },
+  "configpunctuationmethod": {
+    "message": "Skyrybos \u017eenkl\u0173 stilius:"
+  },
+  "configselectionshortcut": {
+    "message": "Pasirinkimo spartusis klavi\u0161as:"
+  },
+  "configselectionshortcutno": {
+    "message": "N\u0117ra joki\u0173 spar\u010di\u0173j\u0173 klavi\u0161\u0173"
+  },
+  "configsessionkeymap": {
+    "message": "Klavi\u0161\u0173 i\u0161d\u0117stymo stilius:"
+  },
+  "configsessionkeymapatok": {
+    "message": "ATOK"
+  },
+  "configsessionkeymapchromeos": {
+    "message": "\u201eChrome\u201c OS"
+  },
+  "configsessionkeymapcustom": {
+    "message": "Tinkintas klavi\u0161\u0173 i\u0161d\u0117stymas"
+  },
+  "configsessionkeymapkotoeri": {
+    "message": "Kotoeri"
+  },
+  "configsessionkeymapmsime": {
+    "message": "MS-IME"
+  },
+  "configsettingstitle": {
+    "message": "\u012evesties japon\u0173 k. nustatymai"
+  },
+  "configshiftkeymodeswitch": {
+    "message": "Re\u017eimo perjungimas klavi\u0161u \u201eShift\u201c:"
+  },
+  "configshiftkeymodeswitchalphanumeric": {
+    "message": "Raidiniai skaitmeniniai simboliai"
+  },
+  "configshiftkeymodeswitchkatakana": {
+    "message": "Katakana"
+  },
+  "configshiftkeymodeswitchoff": {
+    "message": "I\u0161jungti"
+  },
+  "configspacecharacterform": {
+    "message": "Tarpo \u012fvesties stilius:"
+  },
+  "configspacecharacterformfollow": {
+    "message": "Steb\u0117ti \u012fvesties re\u017eim\u0105"
+  },
+  "configspacecharacterformfull": {
+    "message": "Viso plo\u010dio"
+  },
+  "configspacecharacterformhalf": {
+    "message": "Pus\u0117s plo\u010dio"
+  },
+  "configsuggestionssize": {
+    "message": "Pasi\u016blym\u0173 skai\u010dius:"
+  },
+  "configsuggesttitle": {
+    "message": "Si\u016blyti"
+  },
+  "configsymbolmethod": {
+    "message": "Simboli\u0173 stilius:"
+  },
+  "configuploadusagestats": {
+    "message": "Automati\u0161kai si\u0173sti naudojimo statistik\u0105 ir strig\u010di\u0173 ataskaitas \u012f sistem\u0105 \u201eGoogle\u201c"
+  },
+  "configuseautoimeturnoff": {
+    "message": "Automati\u0161kai perjungti \u012f pus\u0117s plo\u010dio re\u017eim\u0105"
+  },
+  "configusedictionarysuggest": {
+    "message": "Naudoti sistemos \u017eodyn\u0105"
+  },
+  "configusehistorysuggest": {
+    "message": "Naudoti \u012fvesties istorij\u0105"
+  },
+  "ctrl": {
+    "message": "klavi\u0161as \u201ectrl\u201c"
+  },
+  "current_keyboard_prefix": {
+    "message": "dabartin\u0117 pasirinkta klaviat\u016bra "
+  },
+  "current_lang": {
+    "message": "\u012evesties kalba yra kin\u0173 k."
+  },
+  "current_punc": {
+    "message": "Skyrybos \u017eenklo plotis yra viso dyd\u017eio"
+  },
+  "current_sbc": {
+    "message": "Simbolio plotis yra viso dyd\u017eio"
+  },
+  "cz_cze_settings_page": {
+    "message": "\u010ceki\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "cz_qwerty_cze_settings_page": {
+    "message": "\u010ceki\u0161kos \u201eQwerty\u201c klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "d83c_dc04": {
+    "message": "\u201eMahjong\u201c plytel\u0117"
+  },
+  "d83c_dccf": {
+    "message": "juokdario korta"
+  },
+  "d83c_dd70": {
+    "message": "A kraujo grup\u0117"
+  },
+  "d83c_dd71": {
+    "message": "B kraujo grup\u0117"
+  },
+  "d83c_dd7e": {
+    "message": "O kraujo grup\u0117"
+  },
+  "d83c_dd7f": {
+    "message": "stov\u0117jimo vieta"
+  },
+  "d83c_dd8e": {
+    "message": "AB kraujo grup\u0117"
+  },
+  "d83c_dd91": {
+    "message": "CL"
+  },
+  "d83c_dd92": {
+    "message": "\u0161aunus"
+  },
+  "d83c_dd93": {
+    "message": "laisva"
+  },
+  "d83c_dd94": {
+    "message": "ID"
+  },
+  "d83c_dd95": {
+    "message": "naujiena"
+  },
+  "d83c_dd96": {
+    "message": "NG"
+  },
+  "d83c_dd97": {
+    "message": "gerai"
+  },
+  "d83c_dd98": {
+    "message": "SOS"
+  },
+  "d83c_dd99": {
+    "message": "\u012e vir\u0161\u0173!"
+  },
+  "d83c_dd9a": {
+    "message": "prie\u0161"
+  },
+  "d83c_de01": {
+    "message": "japoni\u0161kas \u017eodis \u201e\u00e2\u20ac\u02dchere\u00e2\u20ac\u2122\u201c"
+  },
+  "d83c_de02": {
+    "message": "japoni\u0161kas \u017eodis \u201e\u00e2\u20ac\u02dcservice\u00e2\u20ac\u2122\u201c"
+  },
+  "d83c_de1a": {
+    "message": "japoni\u0161kas \u017eodis \u201enemokama\u201c"
+  },
+  "d83c_de2f": {
+    "message": "japoni\u0161kas \u017eodis \u201erezervuota\u201c"
+  },
+  "d83c_de32": {
+    "message": "japoni\u0161kas \u017eodis \u201e\u00e2\u20ac\u02dcprohibited\u00e2\u20ac\u2122\u201c"
+  },
+  "d83c_de33": {
+    "message": "kinieti\u0161kas \u017eodis \u201eviet\u0173 yra\u201c"
+  },
+  "d83c_de34": {
+    "message": "kinieti\u0161kas \u017eodis \u201epraeiti\u201c"
+  },
+  "d83c_de35": {
+    "message": "kinieti\u0161kas \u017eodis \u201eu\u017eimta\u201c"
+  },
+  "d83c_de36": {
+    "message": "japoni\u0161kas \u017eodis \u201emokes\u010diai\u201c"
+  },
+  "d83c_de37": {
+    "message": "japoni\u0161kas \u017eodis \u201em\u0117nesinis\u201c"
+  },
+  "d83c_de38": {
+    "message": "kinieti\u0161kas \u017eodis \u201eprograma\u201c"
+  },
+  "d83c_de39": {
+    "message": "japoni\u0161kas \u017eodis \u201enuolaida\u201c"
+  },
+  "d83c_de3a": {
+    "message": "kinieti\u0161kas \u017eodis \u201evykdantis versl\u0105\u201c"
+  },
+  "d83c_de50": {
+    "message": "japoni\u0161kas \u017eodis \u201eprana\u0161umas\u201c"
+  },
+  "d83c_de51": {
+    "message": "kinieti\u0161kas \u017eodis \u201epatvirtinta\u201c"
+  },
+  "d83c_df00": {
+    "message": "ciklonas"
+  },
+  "d83c_df01": {
+    "message": "\u016bkanotas"
+  },
+  "d83c_df02": {
+    "message": "sk\u0117tis"
+  },
+  "d83c_df03": {
+    "message": "\u017evaig\u017ed\u0117ta naktis"
+  },
+  "d83c_df04": {
+    "message": "saul\u0117tekis vir\u0161 kaln\u0173"
+  },
+  "d83c_df05": {
+    "message": "saul\u0117tekis"
+  },
+  "d83c_df06": {
+    "message": "miestas prietemoje"
+  },
+  "d83c_df07": {
+    "message": "saul\u0117lydis"
+  },
+  "d83c_df08": {
+    "message": "vaivoryk\u0161t\u0117"
+  },
+  "d83c_df09": {
+    "message": "tiltas nakt\u012f"
+  },
+  "d83c_df0a": {
+    "message": "banga"
+  },
+  "d83c_df0b": {
+    "message": "ugnikalnis"
+  },
+  "d83c_df0c": {
+    "message": "Pauk\u0161\u010di\u0173 takas"
+  },
+  "d83c_df0d": {
+    "message": "Europos ir Afrikos gaublys"
+  },
+  "d83c_df0e": {
+    "message": "\u0160iaur\u0117s ir Piet\u0173 Amerikos gaublys"
+  },
+  "d83c_df0f": {
+    "message": "Azijos ir Australijos gaublys"
+  },
+  "d83c_df10": {
+    "message": "gaublys su dienovidiniais"
+  },
+  "d83c_df11": {
+    "message": "naujas m\u0117nulis"
+  },
+  "d83c_df12": {
+    "message": "piln\u0117jantis pusm\u0117nulis"
+  },
+  "d83c_df13": {
+    "message": "pirmo ketvir\u010dio m\u0117nulis"
+  },
+  "d83c_df14": {
+    "message": "piln\u0117jantis m\u0117nulis"
+  },
+  "d83c_df15": {
+    "message": "pilnas m\u0117nulis"
+  },
+  "d83c_df16": {
+    "message": "dylantis m\u0117nulis"
+  },
+  "d83c_df17": {
+    "message": "paskutinio ketvir\u010dio m\u0117nulis"
+  },
+  "d83c_df18": {
+    "message": "dylantis pusm\u0117nulis"
+  },
+  "d83c_df19": {
+    "message": "pusm\u0117nulis"
+  },
+  "d83c_df1a": {
+    "message": "naujo m\u0117nulio formos veidas"
+  },
+  "d83c_df1b": {
+    "message": "pirmo ketvir\u010dio m\u0117nulio formos veidas"
+  },
+  "d83c_df1c": {
+    "message": "paskutinio ketvir\u010dio m\u0117nulio formos veidas"
+  },
+  "d83c_df1d": {
+    "message": "pilno m\u0117nulio formos veidas"
+  },
+  "d83c_df1e": {
+    "message": "saul\u0117s formos veidas"
+  },
+  "d83c_df1f": {
+    "message": "\u0161vytinti \u017evaig\u017ed\u0117"
+  },
+  "d83c_df20": {
+    "message": "krentanti \u017evaig\u017ed\u0117"
+  },
+  "d83c_df30": {
+    "message": "ka\u0161tonas"
+  },
+  "d83c_df31": {
+    "message": "jaunas augalas"
+  },
+  "d83c_df32": {
+    "message": "spygliuotis"
+  },
+  "d83c_df33": {
+    "message": "medis su lapais"
+  },
+  "d83c_df34": {
+    "message": "palm\u0117"
+  },
+  "d83c_df35": {
+    "message": "kaktusas"
+  },
+  "d83c_df37": {
+    "message": "tulp\u0117"
+  },
+  "d83c_df38": {
+    "message": "vy\u0161nios \u017eiedas"
+  },
+  "d83c_df39": {
+    "message": "ro\u017e\u0117"
+  },
+  "d83c_df3a": {
+    "message": "kinro\u017e\u0117"
+  },
+  "d83c_df3b": {
+    "message": "saul\u0117gr\u0105\u017ea"
+  },
+  "d83c_df3c": {
+    "message": "g\u0117l\u0117s \u017eiedas"
+  },
+  "d83c_df3d": {
+    "message": "javai"
+  },
+  "d83c_df3e": {
+    "message": "ry\u017eis"
+  },
+  "d83c_df3f": {
+    "message": "\u017eolel\u0117"
+  },
+  "d83c_df40": {
+    "message": "keturlapis dobilas"
+  },
+  "d83c_df41": {
+    "message": "klevo lapas"
+  },
+  "d83c_df42": {
+    "message": "krentantys lapai"
+  },
+  "d83c_df43": {
+    "message": "lapas v\u0117jyje"
+  },
+  "d83c_df44": {
+    "message": "grybas"
+  },
+  "d83c_df45": {
+    "message": "pomidoras"
+  },
+  "d83c_df46": {
+    "message": "bakla\u017eanas"
+  },
+  "d83c_df47": {
+    "message": "vynuog\u0117s"
+  },
+  "d83c_df48": {
+    "message": "melionas"
+  },
+  "d83c_df49": {
+    "message": "arb\u016bzas"
+  },
+  "d83c_df4a": {
+    "message": "mandarinas"
+  },
+  "d83c_df4b": {
+    "message": "citrina"
+  },
+  "d83c_df4c": {
+    "message": "bananas"
+  },
+  "d83c_df4d": {
+    "message": "ananasas"
+  },
+  "d83c_df4e": {
+    "message": "raudonas obuolys"
+  },
+  "d83c_df4f": {
+    "message": "\u017ealias obuolys"
+  },
+  "d83c_df50": {
+    "message": "kriau\u0161\u0117"
+  },
+  "d83c_df51": {
+    "message": "persikas"
+  },
+  "d83c_df52": {
+    "message": "vy\u0161nia"
+  },
+  "d83c_df53": {
+    "message": "bra\u0161k\u0117"
+  },
+  "d83c_df54": {
+    "message": "m\u0117sainis"
+  },
+  "d83c_df55": {
+    "message": "picos gabal\u0117lis"
+  },
+  "d83c_df56": {
+    "message": "m\u0117sa"
+  },
+  "d83c_df57": {
+    "message": "vi\u0161tos blauzdel\u0117"
+  },
+  "d83c_df58": {
+    "message": "ry\u017ei\u0173 traputis"
+  },
+  "d83c_df59": {
+    "message": "ry\u017ei\u0173 rutuliukas"
+  },
+  "d83c_df5a": {
+    "message": "virti ry\u017eiai"
+  },
+  "d83c_df5b": {
+    "message": "a\u0161trus tro\u0161kinys su ry\u017eiais"
+  },
+  "d83c_df5c": {
+    "message": "ramen"
+  },
+  "d83c_df5d": {
+    "message": "spage\u010diai"
+  },
+  "d83c_df5e": {
+    "message": "duona"
+  },
+  "d83c_df5f": {
+    "message": "bulvyt\u0117s"
+  },
+  "d83c_df60": {
+    "message": "skrudinta bulv\u0117"
+  },
+  "d83c_df61": {
+    "message": "mochi"
+  },
+  "d83c_df62": {
+    "message": "oden"
+  },
+  "d83c_df63": {
+    "message": "su\u0161is"
+  },
+  "d83c_df64": {
+    "message": "kepta krevet\u0117"
+  },
+  "d83c_df65": {
+    "message": "\u017euvies tortas"
+  },
+  "d83c_df66": {
+    "message": "kreminiai ledai"
+  },
+  "d83c_df67": {
+    "message": "smulkintas ledas"
+  },
+  "d83c_df68": {
+    "message": "ledai"
+  },
+  "d83c_df69": {
+    "message": "spurga"
+  },
+  "d83c_df6a": {
+    "message": "sausainis"
+  },
+  "d83c_df6b": {
+    "message": "\u0161okoladas"
+  },
+  "d83c_df6c": {
+    "message": "saldainis"
+  },
+  "d83c_df6d": {
+    "message": "ledinukas"
+  },
+  "d83c_df6e": {
+    "message": "saldus kremas"
+  },
+  "d83c_df6f": {
+    "message": "medaus puodyn\u0117"
+  },
+  "d83c_df70": {
+    "message": "sm\u0117linis pyragaitis"
+  },
+  "d83c_df71": {
+    "message": "bento"
+  },
+  "d83c_df72": {
+    "message": "tro\u0161kinta m\u0117sa"
+  },
+  "d83c_df73": {
+    "message": "keptuv\u0117"
+  },
+  "d83c_df74": {
+    "message": "\u0161akut\u0117 ir peilis"
+  },
+  "d83c_df75": {
+    "message": "arbatos puodelis"
+  },
+  "d83c_df76": {
+    "message": "sak\u0117"
+  },
+  "d83c_df77": {
+    "message": "vynas"
+  },
+  "d83c_df78": {
+    "message": "kokteilis"
+  },
+  "d83c_df79": {
+    "message": "tropinis g\u0117rimas"
+  },
+  "d83c_df7a": {
+    "message": "alus"
+  },
+  "d83c_df7b": {
+    "message": "alaus bokalai"
+  },
+  "d83c_df7c": {
+    "message": "k\u016bdikio buteliukas"
+  },
+  "d83c_df80": {
+    "message": "juosta"
+  },
+  "d83c_df81": {
+    "message": "dovana"
+  },
+  "d83c_df82": {
+    "message": "gimtadienio tortas"
+  },
+  "d83c_df83": {
+    "message": "\u017eibintas i\u0161 moli\u016bgo"
+  },
+  "d83c_df84": {
+    "message": "Kal\u0117d\u0173 eglut\u0117"
+  },
+  "d83c_df85": {
+    "message": "Kal\u0117d\u0173 senelis"
+  },
+  "d83c_df86": {
+    "message": "fejerverkai"
+  },
+  "d83c_df87": {
+    "message": "bengali\u0161koji ugnis"
+  },
+  "d83c_df88": {
+    "message": "balionas"
+  },
+  "d83c_df89": {
+    "message": "Party Popper"
+  },
+  "d83c_df8a": {
+    "message": "konfeti"
+  },
+  "d83c_df8b": {
+    "message": "medis i\u0161 popieriaus juosteli\u0173"
+  },
+  "d83c_df8c": {
+    "message": "sukry\u017eiuotos v\u0117liavos"
+  },
+  "d83c_df8d": {
+    "message": "dekoracija i\u0161 pu\u0161ies \u0161ak\u0173"
+  },
+  "d83c_df8e": {
+    "message": "l\u0117l\u0117s"
+  },
+  "d83c_df8f": {
+    "message": "kabinami ilgi siauri kaspinai"
+  },
+  "d83c_df90": {
+    "message": "v\u0117jo varpelis"
+  },
+  "d83c_df91": {
+    "message": "m\u0117nulio steb\u0117jimas"
+  },
+  "d83c_df92": {
+    "message": "kuprin\u0117"
+  },
+  "d83c_df93": {
+    "message": "moksl\u0173 baigimo kepur\u0117"
+  },
+  "d83c_dfa0": {
+    "message": "karusel\u0117"
+  },
+  "d83c_dfa1": {
+    "message": "ap\u017evalgos ratas"
+  },
+  "d83c_dfa2": {
+    "message": "amerikieti\u0161ki kalneliai"
+  },
+  "d83c_dfa3": {
+    "message": "\u017evejyba"
+  },
+  "d83c_dfa4": {
+    "message": "mikrofonas"
+  },
+  "d83c_dfa5": {
+    "message": "filmavimo kamera"
+  },
+  "d83c_dfa6": {
+    "message": "filmas"
+  },
+  "d83c_dfa7": {
+    "message": "ausin\u0117s"
+  },
+  "d83c_dfa8": {
+    "message": "da\u017e\u0173 palet\u0117"
+  },
+  "d83c_dfa9": {
+    "message": "cilindras"
+  },
+  "d83c_dfaa": {
+    "message": "cirkas"
+  },
+  "d83c_dfab": {
+    "message": "bilietas"
+  },
+  "d83c_dfac": {
+    "message": "pliau\u0161k\u0117"
+  },
+  "d83c_dfad": {
+    "message": "veido kauk\u0117"
+  },
+  "d83c_dfae": {
+    "message": "vaizdo \u017eaidimas"
+  },
+  "d83c_dfaf": {
+    "message": "taikinio centras"
+  },
+  "d83c_dfb0": {
+    "message": "lo\u0161imo automatas"
+  },
+  "d83c_dfb1": {
+    "message": "biliardas"
+  },
+  "d83c_dfb2": {
+    "message": "\u017eaidimo kauliukas"
+  },
+  "d83c_dfb3": {
+    "message": "boulingas"
+  },
+  "d83c_dfb4": {
+    "message": "\u017eaidimo korta"
+  },
+  "d83c_dfb5": {
+    "message": "nata"
+  },
+  "d83c_dfb6": {
+    "message": "natos"
+  },
+  "d83c_dfb7": {
+    "message": "saksofonas"
+  },
+  "d83c_dfb8": {
+    "message": "gitara"
+  },
+  "d83c_dfb9": {
+    "message": "pianinas"
+  },
+  "d83c_dfba": {
+    "message": "trimitas"
+  },
+  "d83c_dfbb": {
+    "message": "smuikas"
+  },
+  "d83c_dfbc": {
+    "message": "muzikos partit\u016bra"
+  },
+  "d83c_dfbd": {
+    "message": "b\u0117gimo mar\u0161kin\u0117liai"
+  },
+  "d83c_dfbe": {
+    "message": "tenisas"
+  },
+  "d83c_dfbf": {
+    "message": "slidin\u0117jimas"
+  },
+  "d83c_dfc0": {
+    "message": "krep\u0161inis"
+  },
+  "d83c_dfc1": {
+    "message": "languota v\u0117liav\u0117l\u0117"
+  },
+  "d83c_dfc2": {
+    "message": "snieglentininkas"
+  },
+  "d83c_dfc3": {
+    "message": "b\u0117gikas"
+  },
+  "d83c_dfc4": {
+    "message": "banglen\u010di\u0173 sportas"
+  },
+  "d83c_dfc6": {
+    "message": "trof\u0117jus"
+  },
+  "d83c_dfc7": {
+    "message": "arkli\u0173 lenktyn\u0117s"
+  },
+  "d83c_dfc8": {
+    "message": "amerikieti\u0161kasis futbolas"
+  },
+  "d83c_dfc9": {
+    "message": "futbolas"
+  },
+  "d83c_dfca": {
+    "message": "plaukikas"
+  },
+  "d83c_dfe0": {
+    "message": "namas"
+  },
+  "d83c_dfe1": {
+    "message": "namai"
+  },
+  "d83c_dfe2": {
+    "message": "biuro pastatas"
+  },
+  "d83c_dfe3": {
+    "message": "japoni\u0161kas pa\u0161tas"
+  },
+  "d83c_dfe4": {
+    "message": "europieti\u0161kas pa\u0161tas"
+  },
+  "d83c_dfe5": {
+    "message": "ligonin\u0117"
+  },
+  "d83c_dfe6": {
+    "message": "bankas"
+  },
+  "d83c_dfe7": {
+    "message": "bankomatas"
+  },
+  "d83c_dfe8": {
+    "message": "vie\u0161butis"
+  },
+  "d83c_dfe9": {
+    "message": "meil\u0117s vie\u0161butis"
+  },
+  "d83c_dfea": {
+    "message": "vis\u0105 par\u0105 dirbanti parduotuv\u0117"
+  },
+  "d83c_dfeb": {
+    "message": "mokykla"
+  },
+  "d83c_dfec": {
+    "message": "universalin\u0117 parduotuv\u0117"
+  },
+  "d83c_dfed": {
+    "message": "fabrikas"
+  },
+  "d83c_dfee": {
+    "message": "raudonas \u017eibintas"
+  },
+  "d83c_dfef": {
+    "message": "japoni\u0161ka pilis"
+  },
+  "d83c_dff0": {
+    "message": "europieti\u0161ka pilis"
+  },
+  "d83d_dc00": {
+    "message": "\u017eiurk\u0117"
+  },
+  "d83d_dc01": {
+    "message": "pel\u0117"
+  },
+  "d83d_dc02": {
+    "message": "jautis"
+  },
+  "d83d_dc03": {
+    "message": "vandeninis buivolas"
+  },
+  "d83d_dc04": {
+    "message": "karv\u0117"
+  },
+  "d83d_dc06": {
+    "message": "leopardas"
+  },
+  "d83d_dc07": {
+    "message": "triu\u0161is"
+  },
+  "d83d_dc08": {
+    "message": "kat\u0117"
+  },
+  "d83d_dc09": {
+    "message": "drakonas"
+  },
+  "d83d_dc0a": {
+    "message": "krokodilas"
+  },
+  "d83d_dc0b": {
+    "message": "banginis"
+  },
+  "d83d_dc0c": {
+    "message": "sraig\u0117"
+  },
+  "d83d_dc0d": {
+    "message": "gyvat\u0117"
+  },
+  "d83d_dc0e": {
+    "message": "arklys"
+  },
+  "d83d_dc0f": {
+    "message": "avinas"
+  },
+  "d83d_dc10": {
+    "message": "o\u017eka"
+  },
+  "d83d_dc11": {
+    "message": "avis"
+  },
+  "d83d_dc12": {
+    "message": "be\u017ed\u017eion\u0117"
+  },
+  "d83d_dc13": {
+    "message": "gaidys"
+  },
+  "d83d_dc14": {
+    "message": "vi\u0161ta"
+  },
+  "d83d_dc15": {
+    "message": "\u0161uo"
+  },
+  "d83d_dc16": {
+    "message": "kiaul\u0117"
+  },
+  "d83d_dc17": {
+    "message": "\u0161ernas"
+  },
+  "d83d_dc18": {
+    "message": "dramblys"
+  },
+  "d83d_dc19": {
+    "message": "a\u0161tuonkojis"
+  },
+  "d83d_dc1a": {
+    "message": "kiautas"
+  },
+  "d83d_dc1b": {
+    "message": "vabalas"
+  },
+  "d83d_dc1c": {
+    "message": "skruzd\u0117"
+  },
+  "d83d_dc1d": {
+    "message": "bit\u0117"
+  },
+  "d83d_dc1e": {
+    "message": "boru\u017e\u0117l\u0117"
+  },
+  "d83d_dc1f": {
+    "message": "\u017euvis"
+  },
+  "d83d_dc20": {
+    "message": "tropin\u0117 \u017euvis"
+  },
+  "d83d_dc21": {
+    "message": "Fugu \u017euvis"
+  },
+  "d83d_dc22": {
+    "message": "v\u0117\u017elys"
+  },
+  "d83d_dc23": {
+    "message": "besikalantis vi\u0161\u010diukas"
+  },
+  "d83d_dc24": {
+    "message": "vi\u0161\u010diuko snapas"
+  },
+  "d83d_dc25": {
+    "message": "vi\u0161\u010diukas"
+  },
+  "d83d_dc26": {
+    "message": "pauk\u0161tis"
+  },
+  "d83d_dc27": {
+    "message": "pingvinas"
+  },
+  "d83d_dc28": {
+    "message": "koala"
+  },
+  "d83d_dc29": {
+    "message": "pudelis"
+  },
+  "d83d_dc2a": {
+    "message": "vienkupris kupranugaris"
+  },
+  "d83d_dc2b": {
+    "message": "dvikupris kupranugaris"
+  },
+  "d83d_dc2c": {
+    "message": "delfinas"
+  },
+  "d83d_dc2d": {
+    "message": "pel\u0117s snukis"
+  },
+  "d83d_dc2e": {
+    "message": "karv\u0117s snukis"
+  },
+  "d83d_dc2f": {
+    "message": "tigro snukis"
+  },
+  "d83d_dc30": {
+    "message": "triu\u0161io snukis"
+  },
+  "d83d_dc31": {
+    "message": "kat\u0117s snukis"
+  },
+  "d83d_dc32": {
+    "message": "drakono snukis"
+  },
+  "d83d_dc33": {
+    "message": "banginis su vandens \u010diurk\u0161le"
+  },
+  "d83d_dc34": {
+    "message": "arklio snukis"
+  },
+  "d83d_dc35": {
+    "message": "be\u017ed\u017eion\u0117s snukis"
+  },
+  "d83d_dc36": {
+    "message": "\u0161uns snukis"
+  },
+  "d83d_dc37": {
+    "message": "kiaul\u0117s snukis"
+  },
+  "d83d_dc38": {
+    "message": "varl\u0117s snukis"
+  },
+  "d83d_dc39": {
+    "message": "\u017eiurk\u0117no snukis"
+  },
+  "d83d_dc3a": {
+    "message": "vilko snukis"
+  },
+  "d83d_dc3b": {
+    "message": "me\u0161kos snukis"
+  },
+  "d83d_dc3c": {
+    "message": "pandos snukis"
+  },
+  "d83d_dc3d": {
+    "message": "kiaul\u0117s nosis"
+  },
+  "d83d_dc3e": {
+    "message": "letena"
+  },
+  "d83d_dc40": {
+    "message": "akys"
+  },
+  "d83d_dc42": {
+    "message": "ausis"
+  },
+  "d83d_dc43": {
+    "message": "nosis"
+  },
+  "d83d_dc44": {
+    "message": "burna"
+  },
+  "d83d_dc45": {
+    "message": "lie\u017euvis"
+  },
+  "d83d_dc46": {
+    "message": "pir\u0161tas auk\u0161tyn"
+  },
+  "d83d_dc47": {
+    "message": "pir\u0161tas \u017eemyn"
+  },
+  "d83d_dc48": {
+    "message": "pir\u0161tas kair\u0117n"
+  },
+  "d83d_dc49": {
+    "message": "pir\u0161tas de\u0161in\u0117n"
+  },
+  "d83d_dc4a": {
+    "message": "suspaustas kum\u0161tis"
+  },
+  "d83d_dc4b": {
+    "message": "mojuojantis"
+  },
+  "d83d_dc4c": {
+    "message": "\u017eenklas ranka \u201eGerai\u201c"
+  },
+  "d83d_dc4d": {
+    "message": "patinka"
+  },
+  "d83d_dc4e": {
+    "message": "nepatinka"
+  },
+  "d83d_dc4f": {
+    "message": "plojantis rankomis"
+  },
+  "d83d_dc50": {
+    "message": "atviros rankos"
+  },
+  "d83d_dc51": {
+    "message": "kar\u016bna"
+  },
+  "d83d_dc52": {
+    "message": "moteri\u0161ka skryb\u0117l\u0117"
+  },
+  "d83d_dc53": {
+    "message": "akiniai"
+  },
+  "d83d_dc54": {
+    "message": "kaklarai\u0161tis"
+  },
+  "d83d_dc55": {
+    "message": "mar\u0161kin\u0117liai"
+  },
+  "d83d_dc56": {
+    "message": "keln\u0117s"
+  },
+  "d83d_dc57": {
+    "message": "suknel\u0117"
+  },
+  "d83d_dc58": {
+    "message": "kimono"
+  },
+  "d83d_dc59": {
+    "message": "bikinis"
+  },
+  "d83d_dc5a": {
+    "message": "moteri\u0161ki drabu\u017eiai"
+  },
+  "d83d_dc5b": {
+    "message": "pinigin\u0117"
+  },
+  "d83d_dc5c": {
+    "message": "rankin\u0117"
+  },
+  "d83d_dc5d": {
+    "message": "mai\u0161elis"
+  },
+  "d83d_dc5e": {
+    "message": "vyro batas"
+  },
+  "d83d_dc5f": {
+    "message": "sportinis batas"
+  },
+  "d83d_dc60": {
+    "message": "auk\u0161takulniai"
+  },
+  "d83d_dc61": {
+    "message": "moteri\u0161kos basut\u0117s"
+  },
+  "d83d_dc62": {
+    "message": "moteri\u0161ki batai"
+  },
+  "d83d_dc63": {
+    "message": "p\u0117dsakas"
+  },
+  "d83d_dc64": {
+    "message": "biusto siluetas"
+  },
+  "d83d_dc65": {
+    "message": "biust\u0173 siluetai"
+  },
+  "d83d_dc66": {
+    "message": "berniukas"
+  },
+  "d83d_dc67": {
+    "message": "mergait\u0117"
+  },
+  "d83d_dc68": {
+    "message": "vyras"
+  },
+  "d83d_dc69": {
+    "message": "moteris"
+  },
+  "d83d_dc6a": {
+    "message": "\u0161eima"
+  },
+  "d83d_dc6b": {
+    "message": "vyras ir moteris"
+  },
+  "d83d_dc6c": {
+    "message": "du vyrai"
+  },
+  "d83d_dc6d": {
+    "message": "dvi moterys"
+  },
+  "d83d_dc6e": {
+    "message": "policininkas"
+  },
+  "d83d_dc6f": {
+    "message": "seksuali mergina"
+  },
+  "d83d_dc70": {
+    "message": "nuotaka"
+  },
+  "d83d_dc71": {
+    "message": "\u0161viesi\u0173 plauk\u0173 \u017emogus"
+  },
+  "d83d_dc72": {
+    "message": "vyras su kinieti\u0161ka kepure"
+  },
+  "d83d_dc73": {
+    "message": "vyras su turbanu"
+  },
+  "d83d_dc74": {
+    "message": "senyvas vyras"
+  },
+  "d83d_dc75": {
+    "message": "senyva moteris"
+  },
+  "d83d_dc76": {
+    "message": "k\u016bdikis"
+  },
+  "d83d_dc77": {
+    "message": "statybininkas"
+  },
+  "d83d_dc78": {
+    "message": "princes\u0117"
+  },
+  "d83d_dc79": {
+    "message": "\u017emog\u0117dra"
+  },
+  "d83d_dc7a": {
+    "message": "dvasia"
+  },
+  "d83d_dc7b": {
+    "message": "vaiduoklis"
+  },
+  "d83d_dc7c": {
+    "message": "k\u016bdikis angelas"
+  },
+  "d83d_dc7d": {
+    "message": "ateivis"
+  },
+  "d83d_dc7e": {
+    "message": "ateivis monstras"
+  },
+  "d83d_dc7f": {
+    "message": "velni\u016bk\u0161tis"
+  },
+  "d83d_dc80": {
+    "message": "kaukol\u0117"
+  },
+  "d83d_dc81": {
+    "message": "informacijos skyrius"
+  },
+  "d83d_dc82": {
+    "message": "sargybinis"
+  },
+  "d83d_dc83": {
+    "message": "\u0161ok\u0117jas"
+  },
+  "d83d_dc84": {
+    "message": "l\u016bpda\u017eis"
+  },
+  "d83d_dc85": {
+    "message": "maniki\u016bras"
+  },
+  "d83d_dc86": {
+    "message": "veido masa\u017eas"
+  },
+  "d83d_dc87": {
+    "message": "\u0161ukuosena"
+  },
+  "d83d_dc88": {
+    "message": "kirpykla"
+  },
+  "d83d_dc89": {
+    "message": "\u0161\u016bvis"
+  },
+  "d83d_dc8a": {
+    "message": "sviedinys"
+  },
+  "d83d_dc8b": {
+    "message": "bu\u010dinio atvaizdas"
+  },
+  "d83d_dc8c": {
+    "message": "meil\u0117s lai\u0161kas"
+  },
+  "d83d_dc8d": {
+    "message": "\u017eiedas"
+  },
+  "d83d_dc8e": {
+    "message": "brangakmenis"
+  },
+  "d83d_dc8f": {
+    "message": "bu\u010dinys"
+  },
+  "d83d_dc90": {
+    "message": "puok\u0161t\u0117"
+  },
+  "d83d_dc91": {
+    "message": "pora"
+  },
+  "d83d_dc92": {
+    "message": "vestuvi\u0173 koplyt\u0117l\u0117"
+  },
+  "d83d_dc93": {
+    "message": "plakanti \u0161irdis"
+  },
+  "d83d_dc94": {
+    "message": "sudau\u017eyta \u0161irdis"
+  },
+  "d83d_dc95": {
+    "message": "dvi \u0161irdys"
+  },
+  "d83d_dc96": {
+    "message": "\u017e\u0117rinti \u0161irdis"
+  },
+  "d83d_dc97": {
+    "message": "did\u0117janti \u0161irdis"
+  },
+  "d83d_dc98": {
+    "message": "str\u0117le persmeigta \u0161irdis"
+  },
+  "d83d_dc99": {
+    "message": "m\u0117lyna \u0161irdis"
+  },
+  "d83d_dc9a": {
+    "message": "\u017ealia \u0161irdis"
+  },
+  "d83d_dc9b": {
+    "message": "geltona \u0161irdis"
+  },
+  "d83d_dc9c": {
+    "message": "purpurin\u0117 \u0161irdis"
+  },
+  "d83d_dc9d": {
+    "message": "juosta apjuosta \u0161irdis"
+  },
+  "d83d_dc9e": {
+    "message": "besisukan\u010dios \u0161irdys"
+  },
+  "d83d_dc9f": {
+    "message": "\u0161irdies formos dekoracija"
+  },
+  "d83d_dca0": {
+    "message": "g\u0117l\u0117s vainiklapis"
+  },
+  "d83d_dca1": {
+    "message": "lemput\u0117"
+  },
+  "d83d_dca2": {
+    "message": "pyktis"
+  },
+  "d83d_dca3": {
+    "message": "bomba"
+  },
+  "d83d_dca4": {
+    "message": "mieguistumo simbolis"
+  },
+  "d83d_dca5": {
+    "message": "susid\u016brimas"
+  },
+  "d83d_dca6": {
+    "message": "prakaito la\u0161ai"
+  },
+  "d83d_dca7": {
+    "message": "\u0161altas prakaitas"
+  },
+  "d83d_dca8": {
+    "message": "staigiai prab\u0117gti"
+  },
+  "d83d_dca9": {
+    "message": "i\u0161matos"
+  },
+  "d83d_dcaa": {
+    "message": "bicepsas"
+  },
+  "d83d_dcab": {
+    "message": "apsvaig\u0119s"
+  },
+  "d83d_dcac": {
+    "message": "kalbos balion\u0117lis"
+  },
+  "d83d_dcad": {
+    "message": "min\u010di\u0173 balion\u0117lis"
+  },
+  "d83d_dcae": {
+    "message": "g\u0117l\u0117s antspaudas"
+  },
+  "d83d_dcaf": {
+    "message": "visa partit\u016bra"
+  },
+  "d83d_dcb0": {
+    "message": "mai\u0161elis pinigams"
+  },
+  "d83d_dcb1": {
+    "message": "valiutos keitimas"
+  },
+  "d83d_dcb2": {
+    "message": "dolerio \u017eenklas"
+  },
+  "d83d_dcb3": {
+    "message": "kredito kortel\u0117"
+  },
+  "d83d_dcb4": {
+    "message": "jenos banknotas"
+  },
+  "d83d_dcb5": {
+    "message": "dolerio banknotas"
+  },
+  "d83d_dcb6": {
+    "message": "euro banknotas"
+  },
+  "d83d_dcb7": {
+    "message": "svaro banknotas"
+  },
+  "d83d_dcb8": {
+    "message": "skrendantys pinigai"
+  },
+  "d83d_dcb9": {
+    "message": "did\u0117janti rinka"
+  },
+  "d83d_dcba": {
+    "message": "k\u0117d\u0117"
+  },
+  "d83d_dcbb": {
+    "message": "asmeninis kompiuteris"
+  },
+  "d83d_dcbc": {
+    "message": "portfelis"
+  },
+  "d83d_dcbd": {
+    "message": "mini diskas"
+  },
+  "d83d_dcbe": {
+    "message": "diskelis"
+  },
+  "d83d_dcbf": {
+    "message": "Blu-ray"
+  },
+  "d83d_dcc0": {
+    "message": "DVD"
+  },
+  "d83d_dcc1": {
+    "message": "fail\u0173 aplankas"
+  },
+  "d83d_dcc2": {
+    "message": "atidarytas aplankas"
+  },
+  "d83d_dcc3": {
+    "message": "dokumentas"
+  },
+  "d83d_dcc4": {
+    "message": "dokumentas"
+  },
+  "d83d_dcc5": {
+    "message": "kalendorius"
+  },
+  "d83d_dcc6": {
+    "message": "nupl\u0117\u0161iamas kalendorius"
+  },
+  "d83d_dcc7": {
+    "message": "kartoteka"
+  },
+  "d83d_dcc8": {
+    "message": "did\u0117jimo tendencija"
+  },
+  "d83d_dcc9": {
+    "message": "ma\u017e\u0117jimo tendencija"
+  },
+  "d83d_dcca": {
+    "message": "juostin\u0117 diagrama"
+  },
+  "d83d_dccb": {
+    "message": "i\u0161karpin\u0117"
+  },
+  "d83d_dccc": {
+    "message": "smeigtukas"
+  },
+  "d83d_dccd": {
+    "message": "apvalus smeigtukas"
+  },
+  "d83d_dcce": {
+    "message": "s\u0105var\u017e\u0117l\u0117"
+  },
+  "d83d_dccf": {
+    "message": "tiesi liniuot\u0117"
+  },
+  "d83d_dcd0": {
+    "message": "trikamp\u0117 liniuot\u0117"
+  },
+  "d83d_dcd1": {
+    "message": "\u017eymi\u0173 skirtukai"
+  },
+  "d83d_dcd2": {
+    "message": "s\u0105skait\u0173 knyga"
+  },
+  "d83d_dcd3": {
+    "message": "u\u017era\u0161in\u0117"
+  },
+  "d83d_dcd4": {
+    "message": "dekoruota u\u017era\u0161in\u0117"
+  },
+  "d83d_dcd5": {
+    "message": "u\u017eversta knyga"
+  },
+  "d83d_dcd6": {
+    "message": "atversta knyga"
+  },
+  "d83d_dcd7": {
+    "message": "\u017ealia knyga"
+  },
+  "d83d_dcd8": {
+    "message": "knyga"
+  },
+  "d83d_dcd9": {
+    "message": "oran\u017ein\u0117 knyga"
+  },
+  "d83d_dcda": {
+    "message": "knygos"
+  },
+  "d83d_dcdb": {
+    "message": "\u017eenklelis su vardu"
+  },
+  "d83d_dcdc": {
+    "message": "ritinys"
+  },
+  "d83d_dcdd": {
+    "message": "atmintin\u0117"
+  },
+  "d83d_dcde": {
+    "message": "telefonas"
+  },
+  "d83d_dcdf": {
+    "message": "prane\u0161im\u0173 gaviklis"
+  },
+  "d83d_dce0": {
+    "message": "faksas"
+  },
+  "d83d_dce1": {
+    "message": "palydovin\u0117 antena"
+  },
+  "d83d_dce2": {
+    "message": "garsiakalbis"
+  },
+  "d83d_dce3": {
+    "message": "garsintuvas"
+  },
+  "d83d_dce4": {
+    "message": "i\u0161si\u0173stas lai\u0161kas"
+  },
+  "d83d_dce5": {
+    "message": "gautieji"
+  },
+  "d83d_dce6": {
+    "message": "paketas"
+  },
+  "d83d_dce7": {
+    "message": "el. pa\u0161tas"
+  },
+  "d83d_dce8": {
+    "message": "gaunamas lai\u0161kas"
+  },
+  "d83d_dce9": {
+    "message": "i\u0161siun\u010diamas lai\u0161kas"
+  },
+  "d83d_dcea": {
+    "message": "u\u017edaryta pa\u0161to d\u0117\u017eut\u0117 su \u017eemyn nukreipta v\u0117liav\u0117le"
+  },
+  "d83d_dceb": {
+    "message": "u\u017edaryta pa\u0161to d\u0117\u017eut\u0117 su auk\u0161tyn nukreipta v\u0117liav\u0117le"
+  },
+  "d83d_dcec": {
+    "message": "atidaryta pa\u0161to d\u0117\u017eut\u0117 su auk\u0161tyn nukreipta v\u0117liav\u0117le"
+  },
+  "d83d_dced": {
+    "message": "atidaryta pa\u0161to d\u0117\u017eut\u0117 su \u017eemyn nukreipta v\u0117liav\u0117le"
+  },
+  "d83d_dcee": {
+    "message": "pa\u0161to d\u0117\u017eut\u0117"
+  },
+  "d83d_dcef": {
+    "message": "pa\u0161to ragas"
+  },
+  "d83d_dcf0": {
+    "message": "laikra\u0161tis"
+  },
+  "d83d_dcf1": {
+    "message": "mobilusis telefonas"
+  },
+  "d83d_dcf2": {
+    "message": "mobilusis telefonas su rodykle"
+  },
+  "d83d_dcf3": {
+    "message": "vibravimo re\u017eimas"
+  },
+  "d83d_dcf4": {
+    "message": "i\u0161jungti telefon\u0105"
+  },
+  "d83d_dcf5": {
+    "message": "draud\u017eiami mobilieji telefonai"
+  },
+  "d83d_dcf6": {
+    "message": "mobiliojo ry\u0161io signalai"
+  },
+  "d83d_dcf7": {
+    "message": "fotoaparatas"
+  },
+  "d83d_dcf9": {
+    "message": "vaizdo kamera"
+  },
+  "d83d_dcfa": {
+    "message": "televizorius"
+  },
+  "d83d_dcfb": {
+    "message": "radijas"
+  },
+  "d83d_dcfc": {
+    "message": "vaizdajuost\u0117"
+  },
+  "d83d_dd00": {
+    "message": "sukry\u017eiuotos rodykl\u0117s"
+  },
+  "d83d_dd01": {
+    "message": "pagal laikrod\u017eio rodykl\u0119 nukreiptos rodykl\u0117s"
+  },
+  "d83d_dd02": {
+    "message": "pagal laikrod\u017eio rodykl\u0119 nukreiptos rodykl\u0117s"
+  },
+  "d83d_dd03": {
+    "message": "\u012fkelti i\u0161 naujo"
+  },
+  "d83d_dd04": {
+    "message": "prie\u0161 laikrod\u017eio rodykl\u0119 nukreiptos rodykl\u0117s"
+  },
+  "d83d_dd05": {
+    "message": "ma\u017eas \u0161viesumas"
+  },
+  "d83d_dd06": {
+    "message": "didelis \u0161viesumas"
+  },
+  "d83d_dd07": {
+    "message": "negalima kalb\u0117ti"
+  },
+  "d83d_dd08": {
+    "message": "garsiakalbis"
+  },
+  "d83d_dd09": {
+    "message": "nedidelio garsumo garsiakalbis"
+  },
+  "d83d_dd0a": {
+    "message": "didelio garsumo garsiakalbis"
+  },
+  "d83d_dd0b": {
+    "message": "akumuliatorius"
+  },
+  "d83d_dd0c": {
+    "message": "ki\u0161tukas \u012f elektros lizd\u0105"
+  },
+  "d83d_dd0d": {
+    "message": "kair\u0117n pakreiptas didinamasis stiklas"
+  },
+  "d83d_dd0e": {
+    "message": "de\u0161in\u0117n pakreiptas didinamasis stiklas"
+  },
+  "d83d_dd0f": {
+    "message": "spyna su ra\u0161ikliu"
+  },
+  "d83d_dd10": {
+    "message": "u\u017erakinta spyna su raktu"
+  },
+  "d83d_dd11": {
+    "message": "raktas"
+  },
+  "d83d_dd12": {
+    "message": "u\u017erakinta spyna"
+  },
+  "d83d_dd13": {
+    "message": "atrakinta spyna"
+  },
+  "d83d_dd14": {
+    "message": "varpelis"
+  },
+  "d83d_dd15": {
+    "message": "perbrauktas varpelis"
+  },
+  "d83d_dd16": {
+    "message": "\u017eym\u0117"
+  },
+  "d83d_dd17": {
+    "message": "susiejimo \u017eenklas"
+  },
+  "d83d_dd18": {
+    "message": "akut\u0117"
+  },
+  "d83d_dd19": {
+    "message": "atgal"
+  },
+  "d83d_dd1a": {
+    "message": "pabaiga"
+  },
+  "d83d_dd1b": {
+    "message": "rodykl\u0117 ON (\u012fjungta)"
+  },
+  "d83d_dd1c": {
+    "message": "\u017eenklas \u201eSoon\u201c (netrukus)"
+  },
+  "d83d_dd1d": {
+    "message": "\u017eenklas \u201eTop\u201c (auk\u0161tyn)"
+  },
+  "d83d_dd1e": {
+    "message": "neleid\u017eiami asmenys iki 18 m."
+  },
+  "d83d_dd20": {
+    "message": "did\u017eiosios raid\u0117s"
+  },
+  "d83d_dd21": {
+    "message": "ma\u017eosios raid\u0117s"
+  },
+  "d83d_dd22": {
+    "message": "skai\u010diai"
+  },
+  "d83d_dd23": {
+    "message": "simboliai"
+  },
+  "d83d_dd24": {
+    "message": "lotyn\u0173 ab\u0117c\u0117l\u0117"
+  },
+  "d83d_dd25": {
+    "message": "ugnis"
+  },
+  "d83d_dd26": {
+    "message": "\u017eibintuv\u0117lis"
+  },
+  "d83d_dd27": {
+    "message": "ver\u017eliaraktis"
+  },
+  "d83d_dd28": {
+    "message": "plaktukas"
+  },
+  "d83d_dd29": {
+    "message": "ver\u017el\u0117 ir var\u017etas"
+  },
+  "d83d_dd2a": {
+    "message": "virtuvinis peilis"
+  },
+  "d83d_dd2b": {
+    "message": "ginklas"
+  },
+  "d83d_dd2c": {
+    "message": "mikroskopas"
+  },
+  "d83d_dd2d": {
+    "message": "teleskopas"
+  },
+  "d83d_dd2e": {
+    "message": "stebuklingas rutulys"
+  },
+  "d83d_dd2f": {
+    "message": "\u0161e\u0161iakamp\u0117 \u017evaig\u017ed\u0117"
+  },
+  "d83d_dd30": {
+    "message": "\u017ealias ir geltonas lapas"
+  },
+  "d83d_dd31": {
+    "message": "tri\u0161akio \u017eenklas"
+  },
+  "d83d_dd32": {
+    "message": "vientiso r\u0117mo kvadrato formos mygtukas"
+  },
+  "d83d_dd33": {
+    "message": "kont\u016bro r\u0117mo kvadrato formos mygtukas"
+  },
+  "d83d_dd34": {
+    "message": "didelis raudonas apskritimas"
+  },
+  "d83d_dd35": {
+    "message": "didelis m\u0117lynas apskritimas"
+  },
+  "d83d_dd36": {
+    "message": "didelis oran\u017einis rombas"
+  },
+  "d83d_dd37": {
+    "message": "didelis m\u0117lynas rombas"
+  },
+  "d83d_dd38": {
+    "message": "ma\u017eas oran\u017einis rombas"
+  },
+  "d83d_dd39": {
+    "message": "ma\u017eas m\u0117lynas rombas"
+  },
+  "d83d_dd3a": {
+    "message": "auk\u0161tyn nukreiptas trikampis"
+  },
+  "d83d_dd3b": {
+    "message": "\u017eemyn nukreiptas trikampis"
+  },
+  "d83d_dd3c": {
+    "message": "auk\u0161tyn nukreipto trikampio mygtukas"
+  },
+  "d83d_dd3d": {
+    "message": "\u017eemyn nukreipto trikampio mygtukas"
+  },
+  "d83d_dd50": {
+    "message": "1.00 val."
+  },
+  "d83d_dd51": {
+    "message": "2.00 val."
+  },
+  "d83d_dd52": {
+    "message": "3.00 val."
+  },
+  "d83d_dd53": {
+    "message": "4.00 val."
+  },
+  "d83d_dd54": {
+    "message": "5.00 val."
+  },
+  "d83d_dd55": {
+    "message": "6.00 val."
+  },
+  "d83d_dd56": {
+    "message": "7.00 val."
+  },
+  "d83d_dd57": {
+    "message": "8.00 val."
+  },
+  "d83d_dd58": {
+    "message": "9.00 val."
+  },
+  "d83d_dd59": {
+    "message": "10.00 val."
+  },
+  "d83d_dd5a": {
+    "message": "11.00 val."
+  },
+  "d83d_dd5b": {
+    "message": "12.00 val."
+  },
+  "d83d_dd5c": {
+    "message": "1.30 val."
+  },
+  "d83d_dd5d": {
+    "message": "2.30 val."
+  },
+  "d83d_dd5e": {
+    "message": "3.30 val."
+  },
+  "d83d_dd5f": {
+    "message": "4.30 val."
+  },
+  "d83d_dd60": {
+    "message": "5.30 val."
+  },
+  "d83d_dd61": {
+    "message": "6.30 val."
+  },
+  "d83d_dd62": {
+    "message": "7.30 val."
+  },
+  "d83d_dd63": {
+    "message": "8.30 val."
+  },
+  "d83d_dd64": {
+    "message": "9.30 val."
+  },
+  "d83d_dd65": {
+    "message": "10.30 val."
+  },
+  "d83d_dd66": {
+    "message": "11.30 val."
+  },
+  "d83d_dd67": {
+    "message": "12.30 val."
+  },
+  "d83d_ddfb": {
+    "message": "Fud\u017ei kalnas"
+  },
+  "d83d_ddfc": {
+    "message": "Tokijo bok\u0161tas"
+  },
+  "d83d_ddfd": {
+    "message": "Laisv\u0117s statula"
+  },
+  "d83d_ddfe": {
+    "message": "Japonijos \u017eem\u0117lapis"
+  },
+  "d83d_ddff": {
+    "message": "Moai statula"
+  },
+  "d83d_de00": {
+    "message": "i\u0161si\u0161iep\u0119s"
+  },
+  "d83d_de01": {
+    "message": " linksmai i\u0161si\u0161iep\u0119s"
+  },
+  "d83d_de02": {
+    "message": "d\u017eiaugsmo a\u0161aros"
+  },
+  "d83d_de03": {
+    "message": "kvatojasi"
+  },
+  "d83d_de04": {
+    "message": "linksmai kvatojasi"
+  },
+  "d83d_de05": {
+    "message": "besi\u0161ypsantis i\u0161piltas \u0161alto prakaito"
+  },
+  "d83d_de06": {
+    "message": " kvatojasi u\u017emerk\u0119s akis"
+  },
+  "d83d_de07": {
+    "message": "besi\u0161ypsantis apsuptas aureol\u0117s"
+  },
+  "d83d_de08": {
+    "message": "velni\u0161kai besi\u0161ypsantis"
+  },
+  "d83d_de09": {
+    "message": "mirksintis"
+  },
+  "d83d_de0a": {
+    "message": "\u0161ypsena"
+  },
+  "d83d_de0b": {
+    "message": "skanum\u0117lis"
+  },
+  "d83d_de0c": {
+    "message": "jau\u010diantis palengv\u0117jim\u0105"
+  },
+  "d83d_de0d": {
+    "message": "besi\u0161ypsantis"
+  },
+  "d83d_de0e": {
+    "message": "\u0161aunus"
+  },
+  "d83d_de0f": {
+    "message": "\u0161aipytis"
+  },
+  "d83d_de10": {
+    "message": "bejausmis"
+  },
+  "d83d_de11": {
+    "message": "nei\u0161rai\u0161kingas"
+  },
+  "d83d_de12": {
+    "message": "nelinksmas"
+  },
+  "d83d_de13": {
+    "message": "\u0161altas prakaitas"
+  },
+  "d83d_de14": {
+    "message": "susim\u0105st\u0119s"
+  },
+  "d83d_de15": {
+    "message": "sumi\u0161\u0119s"
+  },
+  "d83d_de16": {
+    "message": "suglumintas"
+  },
+  "d83d_de17": {
+    "message": "bu\u010diuojantis veidas"
+  },
+  "d83d_de18": {
+    "message": "oro bu\u010dinys"
+  },
+  "d83d_de19": {
+    "message": "bu\u010dinys ir \u0161ypsena"
+  },
+  "d83d_de1a": {
+    "message": "bu\u010diuojantis"
+  },
+  "d83d_de1b": {
+    "message": "i\u0161ki\u0161\u0119s lie\u017euv\u012f"
+  },
+  "d83d_de1c": {
+    "message": "mirksintis ir rodantis lie\u017euv\u012f"
+  },
+  "d83d_de1d": {
+    "message": "pasi\u0161lyk\u0161t\u0117j\u0119s"
+  },
+  "d83d_de1e": {
+    "message": "nusivyl\u0119s"
+  },
+  "d83d_de1f": {
+    "message": "sunerim\u0119s"
+  },
+  "d83d_de20": {
+    "message": "piktas"
+  },
+  "d83d_de21": {
+    "message": "susirauk\u0119s"
+  },
+  "d83d_de22": {
+    "message": "verkiantis"
+  },
+  "d83d_de23": {
+    "message": "praleista proga"
+  },
+  "d83d_de24": {
+    "message": "\u0161ven\u010diantis pergal\u0119"
+  },
+  "d83d_de25": {
+    "message": "ak!"
+  },
+  "d83d_de26": {
+    "message": "susirauk\u0119s veidas"
+  },
+  "d83d_de27": {
+    "message": "ken\u010diantis"
+  },
+  "d83d_de28": {
+    "message": "baug\u0161tus"
+  },
+  "d83d_de29": {
+    "message": "nuobodus"
+  },
+  "d83d_de2a": {
+    "message": "mieguistas"
+  },
+  "d83d_de2b": {
+    "message": "pavarg\u0119s"
+  },
+  "d83d_de2c": {
+    "message": "grimasa"
+  },
+  "d83d_de2d": {
+    "message": "garsiai verkiantis"
+  },
+  "d83d_de2e": {
+    "message": "i\u0161si\u017eioj\u0119s"
+  },
+  "d83d_de2f": {
+    "message": "pritil\u0119s"
+  },
+  "d83d_de30": {
+    "message": "skubantis"
+  },
+  "d83d_de31": {
+    "message": "bebaimis"
+  },
+  "d83d_de32": {
+    "message": "nusteb\u0119s"
+  },
+  "d83d_de33": {
+    "message": "susig\u0117d\u0119s"
+  },
+  "d83d_de34": {
+    "message": "miegantis"
+  },
+  "d83d_de35": {
+    "message": "apsvaig\u0119s"
+  },
+  "d83d_de36": {
+    "message": "veidas be burnos"
+  },
+  "d83d_de37": {
+    "message": "veidas su kauke"
+  },
+  "d83d_de38": {
+    "message": "i\u0161si\u0161iepusios kat\u0117s snukis"
+  },
+  "d83d_de39": {
+    "message": "d\u017eiaugsmo a\u0161aromis verkian\u010dios kat\u0117s snukis"
+  },
+  "d83d_de3a": {
+    "message": "besi\u0161ypsan\u010dios kat\u0117s snukis"
+  },
+  "d83d_de3b": {
+    "message": "besi\u0161ypsan\u010dios kat\u0117s snukis"
+  },
+  "d83d_de3c": {
+    "message": "ironi\u0161kas kat\u0117s snukis"
+  },
+  "d83d_de3d": {
+    "message": "bu\u010diuojanti kat\u0117"
+  },
+  "d83d_de3e": {
+    "message": "susiraukusios kat\u0117s snukis"
+  },
+  "d83d_de3f": {
+    "message": "verkian\u010dios kat\u0117s snukis"
+  },
+  "d83d_de40": {
+    "message": "pavargusios kat\u0117s snukis"
+  },
+  "d83d_de45": {
+    "message": "sukry\u017eiav\u0119s rankas"
+  },
+  "d83d_de46": {
+    "message": "gestas \u201eGerai\u201c"
+  },
+  "d83d_de47": {
+    "message": "atsipra\u0161au"
+  },
+  "d83d_de48": {
+    "message": "nematantis nieko blogo"
+  },
+  "d83d_de49": {
+    "message": "negird\u017eiu nieko blogo"
+  },
+  "d83d_de4a": {
+    "message": "nesakantis nieko blogo"
+  },
+  "d83d_de4b": {
+    "message": "laimingas \u017emogus"
+  },
+  "d83d_de4c": {
+    "message": "valio"
+  },
+  "d83d_de4d": {
+    "message": "susirauk\u0119s \u017emogus"
+  },
+  "d83d_de4e": {
+    "message": "susirauk\u0119s"
+  },
+  "d83d_de4f": {
+    "message": "suspaud\u0119s rankas"
+  },
+  "d83d_de80": {
+    "message": "raketa"
+  },
+  "d83d_de81": {
+    "message": "sraigtasparnis"
+  },
+  "d83d_de82": {
+    "message": "garve\u017eys"
+  },
+  "d83d_de83": {
+    "message": "traukinys"
+  },
+  "d83d_de84": {
+    "message": "greitasis traukinys"
+  },
+  "d83d_de85": {
+    "message": "greitasis traukinys apvaliu priekiu"
+  },
+  "d83d_de86": {
+    "message": "traukinys"
+  },
+  "d83d_de87": {
+    "message": "metro"
+  },
+  "d83d_de88": {
+    "message": "lengvasis gele\u017einkelis"
+  },
+  "d83d_de89": {
+    "message": "traukini\u0173 stotis"
+  },
+  "d83d_de8a": {
+    "message": "tramvajus"
+  },
+  "d83d_de8b": {
+    "message": "tramvajaus vagonas"
+  },
+  "d83d_de8c": {
+    "message": "autobusas"
+  },
+  "d83d_de8d": {
+    "message": "atva\u017eiuojantis autobusas"
+  },
+  "d83d_de8e": {
+    "message": "troleibusas"
+  },
+  "d83d_de8f": {
+    "message": "autobuso stotel\u0117"
+  },
+  "d83d_de90": {
+    "message": "mikroautobusas"
+  },
+  "d83d_de91": {
+    "message": "greitoji"
+  },
+  "d83d_de92": {
+    "message": "gaisrin\u0117"
+  },
+  "d83d_de93": {
+    "message": "policijos automobilis"
+  },
+  "d83d_de94": {
+    "message": "atva\u017eiuojantis policijos automobilis"
+  },
+  "d83d_de95": {
+    "message": "taksi"
+  },
+  "d83d_de96": {
+    "message": "atva\u017eiuojantis taksi"
+  },
+  "d83d_de97": {
+    "message": "automobilis"
+  },
+  "d83d_de98": {
+    "message": "atva\u017eiuojantis automobilis"
+  },
+  "d83d_de99": {
+    "message": "pramogin\u0117 transporto priemon\u0117"
+  },
+  "d83d_de9a": {
+    "message": "preki\u0173 pristatymo sunkve\u017eimis"
+  },
+  "d83d_de9b": {
+    "message": "sunkve\u017eimis"
+  },
+  "d83d_de9c": {
+    "message": "traktorius"
+  },
+  "d83d_de9d": {
+    "message": "vienb\u0117gis gele\u017einkelis"
+  },
+  "d83d_de9e": {
+    "message": "kaln\u0173 gele\u017einkelis"
+  },
+  "d83d_de9f": {
+    "message": "pakabinamas gele\u017einkelis"
+  },
+  "d83d_dea0": {
+    "message": "lyn\u0173 kelias kalnuose"
+  },
+  "d83d_dea1": {
+    "message": "funikulierius"
+  },
+  "d83d_dea2": {
+    "message": "laivas"
+  },
+  "d83d_dea3": {
+    "message": "irklin\u0117 valtis"
+  },
+  "d83d_dea4": {
+    "message": "greitaeigis kateris"
+  },
+  "d83d_dea5": {
+    "message": "horizontalusis \u0161viesoforas"
+  },
+  "d83d_dea6": {
+    "message": "vertikalusis \u0161viesoforas"
+  },
+  "d83d_dea7": {
+    "message": "vyksta statyb\u0173 darbai"
+  },
+  "d83d_dea8": {
+    "message": "\u0161vytur\u0117lis"
+  },
+  "d83d_dea9": {
+    "message": "vietov\u0117s v\u0117liava"
+  },
+  "d83d_deaa": {
+    "message": "durys"
+  },
+  "d83d_deab": {
+    "message": "\u017eenklas, nurodantis, kad n\u0117ra \u012f\u0117jimo"
+  },
+  "d83d_deac": {
+    "message": "r\u016bkymo \u017eenklas"
+  },
+  "d83d_dead": {
+    "message": "draudimo r\u016bkyti \u017eenklas"
+  },
+  "d83d_deae": {
+    "message": "\u0161iuk\u0161li\u0173 d\u0117\u017e\u0117s \u017eenklas"
+  },
+  "d83d_deaf": {
+    "message": "ne\u0161iuk\u0161linti nurodantis \u017eenklas"
+  },
+  "d83d_deb0": {
+    "message": "gerti tinkamas vanduo"
+  },
+  "d83d_deb1": {
+    "message": "gerti netinkamas vanduo"
+  },
+  "d83d_deb2": {
+    "message": "dviratis"
+  },
+  "d83d_deb3": {
+    "message": "draud\u017eiami dvira\u010diai"
+  },
+  "d83d_deb4": {
+    "message": "dviratininkas"
+  },
+  "d83d_deb5": {
+    "message": "kaln\u0173 dviratininkas"
+  },
+  "d83d_deb6": {
+    "message": "p\u0117s\u010diasis"
+  },
+  "d83d_deb7": {
+    "message": "n\u0117ra p\u0117s\u010di\u0173j\u0173"
+  },
+  "d83d_deb8": {
+    "message": "vaik\u0161to vaikai"
+  },
+  "d83d_deb9": {
+    "message": "vyr\u0173 \u017eenklas"
+  },
+  "d83d_deba": {
+    "message": "moter\u0173 \u017eenklas"
+  },
+  "d83d_debb": {
+    "message": "tualeto kambario \u017eenklas"
+  },
+  "d83d_debc": {
+    "message": "k\u016bdiki\u0173 \u017eenklas"
+  },
+  "d83d_debd": {
+    "message": "tualetas"
+  },
+  "d83d_debe": {
+    "message": "klozetas"
+  },
+  "d83d_debf": {
+    "message": "du\u0161as"
+  },
+  "d83d_dec0": {
+    "message": "vonios kambarys"
+  },
+  "d83d_dec1": {
+    "message": "vonia"
+  },
+  "d83d_dec2": {
+    "message": "pas\u0173 kontrol\u0117"
+  },
+  "d83d_dec3": {
+    "message": "muitin\u0117"
+  },
+  "d83d_dec4": {
+    "message": "baga\u017eo atsi\u0117mimo punktas"
+  },
+  "d83d_dec5": {
+    "message": "paliktas baga\u017eas"
+  },
+  "de_ger_settings_page": {
+    "message": "Voki\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "de_neo_ger_settings_page": {
+    "message": "Voki\u0161kos \u201eNeo 2\u201c klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "dictionarytoolcategorytitle": {
+    "message": "Kategorija"
+  },
+  "dictionarytoolcommentnewinput": {
+    "message": "K\u043ementaras"
+  },
+  "dictionarytoolcommenttitle": {
+    "message": "K\u043ementaras"
+  },
+  "dictionarytooldeletedictionaryconfirm": {
+    "message": "Ar norite i\u0161trinti \u201e[object Object]\u201c?"
+  },
+  "dictionarytooldeletedictionarytitle": {
+    "message": "I\u0161trinti \u017eodyn\u0105"
+  },
+  "dictionarytooldictionarylisttitle": {
+    "message": "\u017dodynai"
+  },
+  "dictionarytooldictionaryname": {
+    "message": "\u017dodyno pavadinimas"
+  },
+  "dictionarytooldonebutton": {
+    "message": "Atlikta"
+  },
+  "dictionarytoolexportbutton": {
+    "message": "Eksportuoti"
+  },
+  "dictionarytoolimportbutton": {
+    "message": "Importuoti..."
+  },
+  "dictionarytoolmenutitle": {
+    "message": "\u017dodyno tvarkymas"
+  },
+  "dictionarytoolnewdictionarynameplaceholder": {
+    "message": "Naujas \u017eodynas"
+  },
+  "dictionarytoolpagetitle": {
+    "message": "Naudotoj\u0173 \u017eodynai"
+  },
+  "dictionarytoolreadingnewinput": {
+    "message": "Naujas skaitymo tekstas"
+  },
+  "dictionarytoolreadingtitle": {
+    "message": "Skaitymo tekstas"
+  },
+  "dictionarytoolstatuserrordictionarynamecontainsinvalidcharacter": {
+    "message": "Pavadinime yra netinkam\u0173 simboli\u0173."
+  },
+  "dictionarytoolstatuserrordictionarynameduplicated": {
+    "message": "Pavadinimas jau yra."
+  },
+  "dictionarytoolstatuserrordictionarynameempty": {
+    "message": "\u012eveskite \u017eodyno pavadinim\u0105."
+  },
+  "dictionarytoolstatuserrordictionarynametoolong": {
+    "message": "Pavadinimas per ilgas."
+  },
+  "dictionarytoolstatuserrordictionarysizelimitexceeded": {
+    "message": "Negalima sukurti daugiau \u017eodyn\u0173."
+  },
+  "dictionarytoolstatuserroremptyfile": {
+    "message": "Failas tu\u0161\u010dias."
+  },
+  "dictionarytoolstatuserrorentrysizelimitexceeded": {
+    "message": "Negalima sukurti daugiau \u012fra\u0161\u0173 \u0161iame \u017eodyne."
+  },
+  "dictionarytoolstatuserrorfilenotfound": {
+    "message": "Nepavyko atidaryti failo."
+  },
+  "dictionarytoolstatuserrorfilesizelimitexceeded": {
+    "message": "Duomen\u0173 dydis vir\u0161ija failo dyd\u017eio limit\u0105."
+  },
+  "dictionarytoolstatuserrorgeneral": {
+    "message": "Operacija nepavyko."
+  },
+  "dictionarytoolstatuserrorimportinvalidentries": {
+    "message": "Nepavyko importuoti kai kuri\u0173 \u017eod\u017ei\u0173."
+  },
+  "dictionarytoolstatuserrorimporttoomanywords": {
+    "message": "Importavimo \u0161altinyje per daug \u017eod\u017ei\u0173."
+  },
+  "dictionarytoolstatuserrorinvalidfileformat": {
+    "message": "Nepavyko nuskaityti failo."
+  },
+  "dictionarytoolstatuserrornoundohistory": {
+    "message": "Neb\u0117ra anuliuojam\u0173 operacij\u0173."
+  },
+  "dictionarytoolstatuserrorreadingcontainsinvalidcharacter": {
+    "message": "Skaitymo tekste yra netinkam\u0173 simboli\u0173. Galite naudoti ASCII simbolius, hiragana, tariamo garso \u017eym\u0119 (\u309b), pusiau tariamo garso \u017eym\u0119 (\u309c), vidurin\u012f ta\u0161k\u0105 (\u30fb), pailginto garso \u017eym\u0119 (\u30fc), japon\u0173 k. kablel\u012f (\u3001), japon\u0173 k. ta\u0161k\u0105 (\u3002), japon\u0173 k. skliaustelius (\u300c\u300d\u300e\u300f) ir japon\u0173 k. banguot\u0105 br\u016bk\u0161nel\u012f (\u301c)."
+  },
+  "dictionarytoolstatuserrorreadingempty": {
+    "message": "\u012eveskite skaitymo tekst\u0105."
+  },
+  "dictionarytoolstatuserrorreadingtoolong": {
+    "message": "Skaitymo tekstas per ilgas."
+  },
+  "dictionarytoolstatuserrortitleaddentry": {
+    "message": "\u012era\u0161o prid\u0117jimo klaida"
+  },
+  "dictionarytoolstatuserrortitlecreatedictionary": {
+    "message": "\u017dodyno k\u016brimo klaida"
+  },
+  "dictionarytoolstatuserrortitledeletedictionary": {
+    "message": "\u017dodyno pa\u0161alinimo klaida"
+  },
+  "dictionarytoolstatuserrortitledeleteentry": {
+    "message": "\u012era\u0161o pa\u0161alinimo klaida"
+  },
+  "dictionarytoolstatuserrortitleeditentry": {
+    "message": "\u012era\u0161o redagavimo klaida"
+  },
+  "dictionarytoolstatuserrortitleimportdata": {
+    "message": "Importavimo klaida"
+  },
+  "dictionarytoolstatuserrortitlerenamedictionary": {
+    "message": "\u017dodyno pervardijimo klaida"
+  },
+  "dictionarytoolstatuserrorwordcontainsinvalidcharacter": {
+    "message": "\u017dodyje yra netinkam\u0173 simboli\u0173."
+  },
+  "dictionarytoolstatuserrorwordempty": {
+    "message": "\u012eveskite \u017eod\u012f."
+  },
+  "dictionarytoolstatuserrorwordtoolong": {
+    "message": "\u017dodis per ilgas."
+  },
+  "dictionarytoolwordnewinput": {
+    "message": "Naujas \u017eodis"
+  },
+  "dictionarytoolwordtitle": {
+    "message": "\u017dodis"
+  },
+  "dismiss_menu": {
+    "message": "atsisakyti klaviat\u016bros meniu"
+  },
+  "dk_dan_settings_page": {
+    "message": "Dani\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "double_space_period": {
+    "message": "Ta\u0161kas ir tarpas dukart paspaudus"
+  },
+  "down_arrow": {
+    "message": "rodykl\u0117 \u017eemyn"
+  },
+  "ee_est_settings_page": {
+    "message": "Esti\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "emoji_tab_emoticon": {
+    "message": "Jaustuk\u0173 kategorija \u201ejaustukas\u201c"
+  },
+  "emoji_tab_face": {
+    "message": "Jaustuk\u0173 kategorija \u201eveidas\u201c"
+  },
+  "emoji_tab_hot": {
+    "message": "Jaustuk\u0173 kategorija \u201epopuliaru\u201c"
+  },
+  "emoji_tab_nature": {
+    "message": "Jaustuk\u0173 kategorija \u201egamta\u201c"
+  },
+  "emoji_tab_object": {
+    "message": "Jaustuk\u0173 kategorija \u201eobjektas\u201c"
+  },
+  "emoji_tab_place": {
+    "message": "Jaustuk\u0173 kategorija \u201evieta\u201c"
+  },
+  "emoji_tab_recent": {
+    "message": "Jaustuk\u0173 kategorija \u201enaujausia\u201c"
+  },
+  "emoji_tab_symbol": {
+    "message": "Jaustuk\u0173 kategorija \u201esimbolis\u201c"
+  },
+  "enable_capitalization": {
+    "message": "Automatinis did\u017ei\u0173j\u0173 raid\u017ei\u0173 ra\u0161ymas"
+  },
+  "enable_completion": {
+    "message": "\u012egalinti u\u017ebaigim\u0105"
+  },
+  "enable_prediction": {
+    "message": "\u012egalinti kito \u017eod\u017eio numatymo funkcij\u0105"
+  },
+  "enter": {
+    "message": "\u012fvedimo klavi\u0161as"
+  },
+  "es_cat_cat_settings_page": {
+    "message": "Katalonieti\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "es_spa_settings_page": {
+    "message": "Ispani\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "expand": {
+    "message": "I\u0161skleisti"
+  },
+  "expand_candidates": {
+    "message": "i\u0161skleisti variant\u0173 s\u0105ra\u0161\u0105"
+  },
+  "fi_fin_settings_page": {
+    "message": "Suomi\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "footer_emoji_button": {
+    "message": "perjungti \u012f jaustukus"
+  },
+  "footer_handwriting_button": {
+    "message": "perjungti \u012f ra\u0161ymo ranka funkcij\u0105"
+  },
+  "footer_settings_button": {
+    "message": "atidaryti \u012fvesties metodo nustatymus"
+  },
+  "fr_fra_settings_page": {
+    "message": "Pranc\u016bzi\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "fuzzy_pinyin": {
+    "message": "\u012egalinti netiksl\u0173 \u201ePinyin\u201c re\u017eim\u0105"
+  },
+  "gb_dvorak_eng_settings_page": {
+    "message": "JK Dvorako klaviat\u016bros (angl\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "gb_extd_eng_settings_page": {
+    "message": "JK klaviat\u016bros (angl\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "ge_geo_settings_page": {
+    "message": "Gruzini\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "globe": {
+    "message": "perjungti \u012f ankstesn\u0119 klaviat\u016br\u0105"
+  },
+  "got_it": {
+    "message": "Supratau"
+  },
+  "gr_gre_settings_page": {
+    "message": "Graiki\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "handwriting_back": {
+    "message": "Atgal"
+  },
+  "handwriting_netowrk_error": {
+    "message": "Apgailestaujame, negalite naudoti ra\u0161ymo ranka funkcijos, nes tinklas yra nepasiekiamas."
+  },
+  "handwriting_privacy_info": {
+    "message": "J\u016bs\u0173 \u012fvestis bus i\u0161si\u0173sta \u012f \u201eGoogle\u201c serverius, kad b\u016bt\u0173 atpa\u017eintas tekstas."
+  },
+  "hide_keyboard": {
+    "message": "sl\u0117pti klaviat\u016br\u0105"
+  },
+  "hr_scr_settings_page": {
+    "message": "Kroati\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "hu_hun_settings_page": {
+    "message": "Vengri\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "ie_ga_settings_page": {
+    "message": "Airi\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "ignore_correction": {
+    "message": "Ignoruoti pataisym\u0105"
+  },
+  "ignore_correction_short": {
+    "message": "Ignoruoti pataisym\u0105"
+  },
+  "il_heb_settings_page": {
+    "message": "Hebraji\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "init_lang": {
+    "message": "Pagrindin\u0117 \u012fvesties kalba \u2013 kin\u0173 k."
+  },
+  "init_punc": {
+    "message": "Pagrindinis skyrybos \u017eenklo plotis yra viso dyd\u017eio"
+  },
+  "init_sbc": {
+    "message": "Pagrindinis simbolio plotis yra viso dyd\u017eio"
+  },
+  "input_hangul": {
+    "message": "Hangul re\u017eimas"
+  },
+  "input_hanja": {
+    "message": "Hanja re\u017eimas"
+  },
+  "inputmethod_array": {
+    "message": "\u201eArray\u201c \u012fvesties metodas"
+  },
+  "inputmethod_cangjie": {
+    "message": "\u201eCangjie\u201c \u012fvesties metodas"
+  },
+  "inputmethod_dayi": {
+    "message": "\u201eDayi\u201c \u012fvesties metodas"
+  },
+  "inputmethod_hangul": {
+    "message": "\u012evesties kor\u0117jie\u010di\u0173 k. metodas"
+  },
+  "inputmethod_pinyin": {
+    "message": "\u201ePinyin\u201c \u012fvesties metodas"
+  },
+  "inputmethod_quick": {
+    "message": "Spar\u010diosios \u012fvesties metodas"
+  },
+  "inputmethod_traditional_pinyin": {
+    "message": "Tradicin\u0117s kin\u0173 k. \u201ePinyin\u201c \u012fvesties metodas"
+  },
+  "inputmethod_wubi": {
+    "message": "\u201eWubi\u201c \u012fvesties metodas"
+  },
+  "inputmethod_zhuyin": {
+    "message": "\u201eZhuyin\u201c \u012fvesties metodas"
+  },
+  "is_ice_settings_page": {
+    "message": "Islandi\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "it_ita_settings_page": {
+    "message": "Itali\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "jp_jpn_settings_page": {
+    "message": "Japoni\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "keyboard_arabic": {
+    "message": "Arabi\u0161ka klaviat\u016bra"
+  },
+  "keyboard_armenian_phonetic": {
+    "message": "Arm\u0117ni\u0161ka fonetin\u0117 klaviat\u016bra"
+  },
+  "keyboard_belarusian": {
+    "message": "Baltarusi\u0161ka klaviat\u016bra"
+  },
+  "keyboard_belgian": {
+    "message": "Belgi\u0161ka klaviat\u016bra"
+  },
+  "keyboard_bengali_phonetic": {
+    "message": "Bengali\u0161ka klaviat\u016bra (fonetin\u0117)"
+  },
+  "keyboard_brazilian": {
+    "message": "Brazili\u0161ka klaviat\u016bra"
+  },
+  "keyboard_bulgarian": {
+    "message": "Bulgari\u0161ka klaviat\u016bra"
+  },
+  "keyboard_bulgarian_phonetic": {
+    "message": "Bulgari\u0161ka fonetin\u0117 klaviat\u016bra"
+  },
+  "keyboard_canadian_english": {
+    "message": "Kanados angli\u0161ka klaviat\u016bra"
+  },
+  "keyboard_canadian_french": {
+    "message": "Kanados pranc\u016bzi\u0161ka klaviat\u016bra"
+  },
+  "keyboard_canadian_multilingual": {
+    "message": "Kanados keli\u0173 kalb\u0173 klaviat\u016bra"
+  },
+  "keyboard_catalan": {
+    "message": "Katalonieti\u0161ka klaviat\u016bra"
+  },
+  "keyboard_croatian": {
+    "message": "Kroati\u0161ka klaviat\u016bra"
+  },
+  "keyboard_czech": {
+    "message": "\u010ceki\u0161ka klaviat\u016bra"
+  },
+  "keyboard_czech_qwerty": {
+    "message": "\u010ceki\u0161ka QWERTY klaviat\u016bra"
+  },
+  "keyboard_danish": {
+    "message": "Dani\u0161ka klaviat\u016bra"
+  },
+  "keyboard_devanagari_phonetic": {
+    "message": "Devanagari klaviat\u016bra (fonetin\u0117)"
+  },
+  "keyboard_estonian": {
+    "message": "Esti\u0161ka klaviat\u016bra"
+  },
+  "keyboard_ethiopic": {
+    "message": "Etiopi\u0161ka klaviat\u016bra"
+  },
+  "keyboard_finnish": {
+    "message": "Suomi\u0161ka klaviat\u016bra"
+  },
+  "keyboard_french": {
+    "message": "Pranc\u016bzi\u0161ka klaviat\u016bra"
+  },
+  "keyboard_georgian": {
+    "message": "Gruzini\u0161ka klaviat\u016bra"
+  },
+  "keyboard_german": {
+    "message": "Voki\u0161ka klaviat\u016bra"
+  },
+  "keyboard_german_neo_2": {
+    "message": "Voki\u0161ka \u201eNeo 2\u201c klaviat\u016bra"
+  },
+  "keyboard_greek": {
+    "message": "Graiki\u0161ka klaviat\u016bra"
+  },
+  "keyboard_gujarati_phonetic": {
+    "message": "Gud\u017earati klaviat\u016bra (fonetin\u0117)"
+  },
+  "keyboard_hebrew": {
+    "message": "Hebraji\u0161ka klaviat\u016bra"
+  },
+  "keyboard_hungarian": {
+    "message": "Vengri\u0161ka klaviat\u016bra"
+  },
+  "keyboard_icelandic": {
+    "message": "Islandi\u0161ka klaviat\u016bra"
+  },
+  "keyboard_inscript": {
+    "message": "Klaviat\u016bra (\u201eInScript\u201c)"
+  },
+  "keyboard_irish": {
+    "message": "Airi\u0161ka klaviat\u016bra"
+  },
+  "keyboard_italian": {
+    "message": "Itali\u0161ka klaviat\u016bra"
+  },
+  "keyboard_itrans": {
+    "message": "Klaviat\u016bra (\u201eItrans\u201c)"
+  },
+  "keyboard_japanese": {
+    "message": "Japoni\u0161ka klaviat\u016bra"
+  },
+  "keyboard_kannada_phonetic": {
+    "message": "Kanadieti\u0161ka klaviat\u016bra (fonetin\u0117)"
+  },
+  "keyboard_kedmanee": {
+    "message": "Klaviat\u016bra (\u201eKedmanee\u201c)"
+  },
+  "keyboard_khmer": {
+    "message": "Khmer\u0173 klaviat\u016bra"
+  },
+  "keyboard_lao": {
+    "message": "Laosie\u010di\u0173 klaviat\u016bra"
+  },
+  "keyboard_latin_american": {
+    "message": "Lotyn\u0173 amerikie\u010di\u0173 klaviat\u016bra"
+  },
+  "keyboard_latvian": {
+    "message": "Latvi\u0161ka klaviat\u016bra"
+  },
+  "keyboard_lithuanian": {
+    "message": "Lietuvi\u0161ka klaviat\u016bra"
+  },
+  "keyboard_malayalam_phonetic": {
+    "message": "Malajali\u0161ka klaviat\u016bra (fonetin\u0117)"
+  },
+  "keyboard_maltese": {
+    "message": "Maltie\u010di\u0173 klaviat\u016bra"
+  },
+  "keyboard_mongolian": {
+    "message": "Mongoli\u0161ka klaviat\u016bra"
+  },
+  "keyboard_myanmar": {
+    "message": "Mianmaro MM3 klaviat\u016bra"
+  },
+  "keyboard_myanmar_myansan": {
+    "message": "Mianmaro Myansan klaviat\u016bra"
+  },
+  "keyboard_nepali_inscript": {
+    "message": "Nepalie\u010di\u0173 klaviat\u016bra (\u201eInScript\u201c)"
+  },
+  "keyboard_nepali_phonetic": {
+    "message": "Nepalie\u010di\u0173 klaviat\u016bra (fonetin\u0117)"
+  },
+  "keyboard_netherlands": {
+    "message": "Olandi\u0161ka klaviat\u016bra"
+  },
+  "keyboard_none": {
+    "message": "Klaviat\u016bra"
+  },
+  "keyboard_norwegian": {
+    "message": "Norvegi\u0161ka klaviat\u016bra"
+  },
+  "keyboard_pattachote": {
+    "message": "Klaviat\u016bra (\u201ePattachote\u201c)"
+  },
+  "keyboard_persian": {
+    "message": "Persi\u0161ka klaviat\u016bra"
+  },
+  "keyboard_phonetic": {
+    "message": "Klaviat\u016bra (fonetin\u0117)"
+  },
+  "keyboard_polish": {
+    "message": "Lenki\u0161ka klaviat\u016bra"
+  },
+  "keyboard_portuguese": {
+    "message": "Portugali\u0161ka klaviat\u016bra"
+  },
+  "keyboard_romanian": {
+    "message": "Rumuni\u0161ka klaviat\u016bra"
+  },
+  "keyboard_romanian_standard": {
+    "message": "Rumun\u0173 k. standartin\u0117 klaviat\u016bra"
+  },
+  "keyboard_russian": {
+    "message": "Rusi\u0161ka klaviat\u016bra"
+  },
+  "keyboard_russian_phonetic": {
+    "message": "Rusi\u0161ka fonetin\u0117 klaviat\u016bra"
+  },
+  "keyboard_russian_phonetic_aatseel": {
+    "message": "Rusi\u0161ka fonetin\u0117 (AATSEEL) klaviat\u016bra"
+  },
+  "keyboard_russian_phonetic_yazhert": {
+    "message": "Rusi\u0161ka fonetin\u0117 (\u201eYaZHert\u201c) klaviat\u016bra"
+  },
+  "keyboard_serbian": {
+    "message": "Serbi\u0161ka klaviat\u016bra"
+  },
+  "keyboard_sinhala": {
+    "message": "Sinhal\u0173 klaviat\u016bra"
+  },
+  "keyboard_slovakian": {
+    "message": "Slovaki\u0161ka klaviat\u016bra"
+  },
+  "keyboard_slovenian": {
+    "message": "Slov\u0117ni\u0161ka klaviat\u016bra"
+  },
+  "keyboard_soranikurdish_ar": {
+    "message": "Sorani\u0173 kurd\u0173 arabi\u0161ka klaviat\u016bra"
+  },
+  "keyboard_soranikurdish_en": {
+    "message": "Sorani\u0173 kurd\u0173 angli\u0161ka klaviat\u016bra"
+  },
+  "keyboard_spanish": {
+    "message": "Ispani\u0161ka klaviat\u016bra"
+  },
+  "keyboard_swedish": {
+    "message": "\u0160vedi\u0161ka klaviat\u016bra"
+  },
+  "keyboard_swiss": {
+    "message": "\u0160veicari\u0161ka klaviat\u016bra"
+  },
+  "keyboard_swiss_french": {
+    "message": "\u0160veicarijos pranc\u016bzi\u0161ka klaviat\u016bra"
+  },
+  "keyboard_tamil99": {
+    "message": "Klaviat\u016bra (\u201eTamil99\u201c)"
+  },
+  "keyboard_tamil_inscript": {
+    "message": "Tamili\u0161ka klaviat\u016bra (\u201eInScript\u201c)"
+  },
+  "keyboard_tamil_itrans": {
+    "message": "Tamili\u0161ka klaviat\u016bra (\u201eitrans\u201c)"
+  },
+  "keyboard_tamil_phonetic": {
+    "message": "Tamili\u0161ka klaviat\u016bra (fonetin\u0117)"
+  },
+  "keyboard_tamil_tamil99": {
+    "message": "Tamili\u0161ka klaviat\u016bra (\u201eTamil99\u201c)"
+  },
+  "keyboard_tamil_typewriter": {
+    "message": "Tamili\u0161ka klaviat\u016bra (ra\u0161omosios ma\u0161in\u0117l\u0117s i\u0161d\u0117stymas)"
+  },
+  "keyboard_tcvn": {
+    "message": "Klaviat\u016bra (TCVN)"
+  },
+  "keyboard_telex": {
+    "message": "Klaviat\u016bra (\u0098telekso i\u0161d\u0117stymas)"
+  },
+  "keyboard_telugu_phonetic": {
+    "message": "Telugi\u0161ka klaviat\u016bra (fonetin\u0117)"
+  },
+  "keyboard_thai_kedmanee": {
+    "message": "Tailandieti\u0161ka klaviat\u016bra (\u201eKedmanee\u201c)"
+  },
+  "keyboard_thai_pattachote": {
+    "message": "Tailandieti\u0161ka klaviat\u016bra (\u201ePattachote\u201c)"
+  },
+  "keyboard_thai_tis": {
+    "message": "Tailandieti\u0161ka klaviat\u016bra (TIS 820-2531)"
+  },
+  "keyboard_tis": {
+    "message": "Klaviat\u016bra (TIS 820-2531)"
+  },
+  "keyboard_turkish": {
+    "message": "Turki\u0161ka klaviat\u016bra"
+  },
+  "keyboard_typewriter": {
+    "message": "Klaviat\u016bra (ra\u0161omosios ma\u0161in\u0117l\u0117s i\u0161d\u0117stymas)"
+  },
+  "keyboard_uk": {
+    "message": "JK klaviat\u016bra"
+  },
+  "keyboard_uk_dvorak": {
+    "message": "JK Dvorako klaviat\u016bra"
+  },
+  "keyboard_ukrainian": {
+    "message": "Ukrainieti\u0161ka klaviat\u016bra"
+  },
+  "keyboard_us": {
+    "message": "JAV klaviat\u016bra"
+  },
+  "keyboard_us_colemak": {
+    "message": "JAV \u201eColemak\u201c klaviat\u016bra"
+  },
+  "keyboard_us_dvorak": {
+    "message": "JAV Dvorako klaviat\u016bra"
+  },
+  "keyboard_us_extended": {
+    "message": "JAV i\u0161pl\u0117stin\u0117 klaviat\u016bra"
+  },
+  "keyboard_us_international": {
+    "message": "JAV tarptautin\u0117 klaviat\u016bra"
+  },
+  "keyboard_vietnamese_tcvn": {
+    "message": "Vietnamieti\u0161ka klaviat\u016bra (TCVN)"
+  },
+  "keyboard_vietnamese_telex": {
+    "message": "Vietnamieti\u0161ka klaviat\u016bra (telekso i\u0161d\u0117stymas)"
+  },
+  "keyboard_vietnamese_viqr": {
+    "message": "Vietnamieti\u0161ka klaviat\u016bra (VIQR)"
+  },
+  "keyboard_vietnamese_vni": {
+    "message": "Vietnamieti\u0161ka klaviat\u016bra (VNI)"
+  },
+  "keyboard_viqr": {
+    "message": "Klaviat\u016bra (VIQR)"
+  },
+  "keyboard_vni": {
+    "message": "Klaviat\u016bra (VNI)"
+  },
+  "korean_hanja_display": {
+    "message": "Hanja variant\u0173 re\u017eimas"
+  },
+  "korean_keyboard_layout": {
+    "message": "Kor\u0117jieti\u0161kos klaviat\u016bros i\u0161d\u0117stymas"
+  },
+  "korean_settings_page": {
+    "message": "\u012evesties kor\u0117jie\u010di\u0173 k. metodo nustatym\u0173 puslapis"
+  },
+  "korean_syllable_input": {
+    "message": "\u012eveskite po vien\u0105 skiemen\u012f vienu metu"
+  },
+  "latam_spa_settings_page": {
+    "message": "Lotyn\u0173 amerikie\u010di\u0173 klaviat\u016bros (ispan\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "latin_settings_page": {
+    "message": "Nustatymai"
+  },
+  "left_arrow": {
+    "message": "rodykl\u0117 kair\u0117n"
+  },
+  "lt_lit_settings_page": {
+    "message": "Lietuvi\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "lv_apostrophe_lav_settings_page": {
+    "message": "Latvi\u0161kos klaviat\u016bros (latvi\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "menu_key": {
+    "message": "atidaryti klaviat\u016bros meniu"
+  },
+  "mn_mon_settings_page": {
+    "message": "Mongoli\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "move_page_key_above": {
+    "message": "Naudokite klavi\u0161us \u201e\u2013\u201c ir \u201e=\u201c, jei norite per\u017ei\u016br\u0117ti kandidat\u0173 s\u0105ra\u0161\u0105"
+  },
+  "move_page_key_below": {
+    "message": "Naudokite klavi\u0161us \u201e,\u201c\u00b7ir \u201e.\u201c, jei norite per\u017ei\u016br\u0117ti kandidat\u0173 s\u0105ra\u0161\u0105"
+  },
+  "never_auto_correct": {
+    "message": "I\u0161jungti"
+  },
+  "no_nob_settings_page": {
+    "message": "Norvegi\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "pause": {
+    "message": "Pristabdyti"
+  },
+  "physical_auto_correction_level": {
+    "message": "Automatinis taisymas"
+  },
+  "physical_enable_capitalization": {
+    "message": "Automatinis did\u017ei\u0173j\u0173 raid\u017ei\u0173 ra\u0161ymas"
+  },
+  "physical_keyboard": {
+    "message": "Fizin\u0117 klaviat\u016bra"
+  },
+  "pinyin_settings_page": {
+    "message": "\u201ePinyin\u201c nustatym\u0173 puslapis"
+  },
+  "pl_pol_settings_page": {
+    "message": "Lenki\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "pt_por_settings_page": {
+    "message": "Portugali\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "right_arrow": {
+    "message": "rodykl\u0117 de\u0161in\u0117n"
+  },
+  "ro_rum_settings_page": {
+    "message": "Rumuni\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "rs_srp_settings_page": {
+    "message": "Serbi\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "ru_phonetic_rus_settings_page": {
+    "message": "Rusi\u0161kos fonetin\u0117s klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "ru_rus_settings_page": {
+    "message": "Rusi\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "se_swe_settings_page": {
+    "message": "\u0160vedi\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "settings": {
+    "message": "Nustatymai"
+  },
+  "shift": {
+    "message": "klavi\u0161as \u201eshift\u201c"
+  },
+  "shift_lock": {
+    "message": "klavi\u0161as \u201eshift\u201c u\u017erakintas"
+  },
+  "show_candidate_mode": {
+    "message": "Atid\u0117ti i\u0161skleid\u017eiamojo pasi\u016blym\u0173 s\u0105ra\u0161o rodym\u0105"
+  },
+  "show_candidates_1000": {
+    "message": "Rodyti i\u0161skleid\u017eiam\u0105j\u012f pasi\u016blym\u0173 s\u0105ra\u0161\u0105 po 1 s"
+  },
+  "show_candidates_2000": {
+    "message": "Rodyti i\u0161skleid\u017eiam\u0105j\u012f pasi\u016blym\u0173 s\u0105ra\u0161\u0105 po 2 s"
+  },
+  "show_candidates_500": {
+    "message": "Rodyti i\u0161skleid\u017eiam\u0105j\u012f pasi\u016blym\u0173 s\u0105ra\u0161\u0105 po 500 ms"
+  },
+  "show_candidates_5000": {
+    "message": "Rodyti i\u0161skleid\u017eiam\u0105j\u012f pasi\u016blym\u0173 s\u0105ra\u0161\u0105 po 5 s"
+  },
+  "show_candidates_backspace": {
+    "message": "Rodyti i\u0161skleid\u017eiam\u0105j\u012f pasi\u016blym\u0173 s\u0105ra\u0161\u0105, kai spaud\u017eiamas naikinimo klavi\u0161as"
+  },
+  "show_hangul_candidate": {
+    "message": "Rodyti kandidatus Hangul re\u017eimu"
+  },
+  "shrink_candidates": {
+    "message": "sutraukti variant\u0173 s\u0105ra\u0161\u0105"
+  },
+  "si_slv_settings_page": {
+    "message": "Slov\u0117ni\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "sk_slo_settings_page": {
+    "message": "Slovaki\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "smiley": {
+    "message": "jaustukas"
+  },
+  "sometimes_auto_correct": {
+    "message": "Vidutinis"
+  },
+  "sound_on_keypress": {
+    "message": "Garsas spaud\u017eiant klavi\u0161us"
+  },
+  "space": {
+    "message": "tarpo klavi\u0161as"
+  },
+  "switch_to": {
+    "message": "perjungti \u012f "
+  },
+  "switch_to_compact_layout": {
+    "message": "Perjungti \u012f kompakti\u0161k\u0105 i\u0161d\u0117stym\u0105"
+  },
+  "switch_to_full_layout": {
+    "message": "Perjungti \u012f vis\u0105 i\u0161d\u0117stym\u0105"
+  },
+  "switch_to_keyboard_prefix": {
+    "message": "perjungti \u012f "
+  },
+  "switched_to": {
+    "message": "perjungta \u012f "
+  },
+  "tab": {
+    "message": "tabuliavimo klavi\u0161as"
+  },
+  "touch_keyboard": {
+    "message": "Ekrano klaviat\u016bra"
+  },
+  "tr_tur_settings_page": {
+    "message": "Turki\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "transliteration_am": {
+    "message": "Transliteracija (salam \u2192 \u1230\u120b\u121d)"
+  },
+  "transliteration_ar": {
+    "message": "Transliteracija (marhaban \u2190 \u0645\u0631\u062d\u0628\u0627)"
+  },
+  "transliteration_be": {
+    "message": "Transliteracija (pryvitannie \u2192 \u043f\u0440\u044b\u0432\u0456\u0442\u0430\u043d\u043d\u0435)"
+  },
+  "transliteration_bg": {
+    "message": "Transliteracija (zdrasti \u2192 \u0437\u0434\u0440\u0430\u0441\u0442\u0438)"
+  },
+  "transliteration_bn": {
+    "message": "Transliteracija (namaskar \u2192 \u09a8\u09ae\u09b8\u09cd\u0995\u09be\u09b0)"
+  },
+  "transliteration_el": {
+    "message": "Transliteracija (geia \u2192 \u03b3\u03b5\u03b9\u03b1)"
+  },
+  "transliteration_fa": {
+    "message": "Transliteracija (salam \u2190 \u0633\u0644\u0627\u0645)"
+  },
+  "transliteration_gu": {
+    "message": "Transliteracija (namaste \u2192 \u0aa8\u0aae\u0ab8\u0acd\u0aa4\u0ac7)"
+  },
+  "transliteration_he": {
+    "message": "Transliteracija (shalom \u2190 \u05e9\u05dc\u05d5\u05dd)"
+  },
+  "transliteration_hi": {
+    "message": "Transliteracija (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_kn": {
+    "message": "Transliteracija (namaskaram \u2192 \u0ca8\u0cae\u0cb8\u0ccd\u0c95\u0cbe\u0cb0)"
+  },
+  "transliteration_ml": {
+    "message": "Transliteracija (namaskar \u2192 \u0d28\u0d2e\u0d38\u0d4d\u0d15\u0d3e\u0d30\u0d02)"
+  },
+  "transliteration_mr": {
+    "message": "Transliteracija (namaste \u2192 \u0928\u092e\u0938\u094d\u0915\u093e\u0930)"
+  },
+  "transliteration_ne": {
+    "message": "Transliteracija (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_or": {
+    "message": "Transliteracija (mausam \u2192 \u0b28\u0b2e\u0b38\u0b4d\u0b24\u0b47)"
+  },
+  "transliteration_pa": {
+    "message": "Transliteracija (mausam \u2192 \u0a2e\u0a4c\u0a38\u0a2e)"
+  },
+  "transliteration_ru": {
+    "message": "Transliteracija (privet \u2192 \u043f\u0440\u0438\u0432\u0435\u0442)"
+  },
+  "transliteration_sa": {
+    "message": "Transliteracija (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_si": {
+    "message": "Transliteracija (halo \u2192 \u0dc4\u0dbd\u0ddd)"
+  },
+  "transliteration_sr": {
+    "message": "Transliteracija (zdravo \u2192 \u0437\u0434\u0440\u0430\u0432\u043e)"
+  },
+  "transliteration_ta": {
+    "message": "Transliteracija (vanakkam \u2192 \u0bb5\u0ba3\u0b95\u0bcd\u0b95\u0bae\u0bcd)"
+  },
+  "transliteration_te": {
+    "message": "Transliteracija (emandi \u2192 \u0c0f\u0c2e\u0c02\u0c21\u0c40)"
+  },
+  "transliteration_ti": {
+    "message": "Transliteracija (selam \u2192 \u1230\u120b\u121d)"
+  },
+  "transliteration_uk": {
+    "message": "Transliteracija (pryvit \u2192 \u043f\u0440\u0438\u0432\u0456\u0442)"
+  },
+  "transliteration_ur": {
+    "message": "Transliteracija (salam \u2190 \u0633\u0644\u0627\u0645)"
+  },
+  "transliteration_vi": {
+    "message": "Transliteracija (chao \u2192 ch\u00e0o)"
+  },
+  "ua_ukr_settings_page": {
+    "message": "Ukrainieti\u0161kos klaviat\u016bros nustatym\u0173 puslapis"
+  },
+  "up_arrow": {
+    "message": "rodykl\u0117 auk\u0161tyn"
+  },
+  "us_altgr_intl_eng_settings_page": {
+    "message": "JAV i\u0161pl\u0117stin\u0117s klaviat\u016bros (angl\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "us_colemak_eng_settings_page": {
+    "message": "JAV \u201eColemak\u201c klaviat\u016bros (angl\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "us_dvorak_eng_settings_page": {
+    "message": "JAV Dvorako klaviat\u016bros (angl\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "us_eng_settings_page": {
+    "message": "JAV klaviat\u016bros (angl\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "us_fil_settings_page": {
+    "message": "JAV klaviat\u016bros (filipinie\u010di\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "us_ind_settings_page": {
+    "message": "JAV klaviat\u016bros (indonezie\u010di\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "us_intl_eng_settings_page": {
+    "message": "JAV tarptautin\u0117s klaviat\u016bros (angl\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "us_intl_nld_settings_page": {
+    "message": "JAV tarptautin\u0117s klaviat\u016bros (oland\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "us_intl_por_settings_page": {
+    "message": "JAV tarptautin\u0117s klaviat\u016bros (Brazilijos portugal\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "us_msa_settings_page": {
+    "message": "JAV klaviat\u016bros (malajie\u010di\u0173 k.) nustatym\u0173 puslapis"
+  },
+  "user_dict": {
+    "message": "\u012egalinti asmenin\u012f \u017eodyn\u0105"
+  },
+  "user_dict_add": {
+    "message": "Prid\u0117ti"
+  },
+  "user_dict_clear": {
+    "message": "I\u0161valyti visk\u0105"
+  },
+  "user_dict_manage": {
+    "message": "Tvarkyti asmenin\u012f \u017eodyn\u0105..."
+  },
+  "user_dict_new_word": {
+    "message": "Naujas \u017eodis"
+  },
+  "user_dict_remove": {
+    "message": "Pa\u0161alinti pasirinktus"
+  },
+  "user_dict_reset": {
+    "message": "Nustatyti visus \u017eodyno \u012fra\u0161us i\u0161 naujo"
+  },
+  "user_dict_save": {
+    "message": "I\u0161saugoti"
+  },
+  "user_dict_sync": {
+    "message": "Sinchronizuoti asmenin\u012f \u017eodyn\u0105"
+  },
+  "user_dict_title": {
+    "message": "Asmeninis \u017eodynas"
+  },
+  "voice": {
+    "message": "Voice"
+  },
+  "voice_privacy_info": {
+    "message": "J\u016bs\u0173 \u012fvestis balsu bus i\u0161si\u0173sta \u012f \u201eGoogle\u201c serverius, kad b\u016bt\u0173 atpa\u017eintas tekstas."
+  },
+  "voice_turn_off": {
+    "message": "I\u0161jungti \u012fvesties balsu \u012frank\u012f"
+  },
+  "voice_turn_on": {
+    "message": "\u012ejungti \u012fvesties balsu \u012frank\u012f"
+  },
+  "wait": {
+    "message": "Palaukti"
+  },
+  "zhuyin_keyboard_layout": {
+    "message": "Klaviat\u016bros tipas"
+  },
+  "zhuyin_page_size": {
+    "message": "Puslapyje rodom\u0173 kandidat\u0173 skai\u010dius"
+  },
+  "zhuyin_select_keys": {
+    "message": "Pasirinkimo klavi\u0161ai"
+  },
+  "zhuyin_settings_page": {
+    "message": "\u201eZhuyin\u201c nustatym\u0173 puslapis"
+  }
+}

@@ -1,0 +1,4 @@
+include_rules = [
+  "+chrome/grit/generated_resources.h",
+  "+chrome/installer/launcher_support",
+]

@@ -1,0 +1,612 @@
+<!--
+Copyright 2015 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
+<rappor-configuration>
+<!--
+This file is used to generate a comprehensive list of Chrome rappor metrics
+along with a detailed description for each histogram. See the design doc at
+http://www.chromium.org/developers/design-documents/rappor
+for a description of rappor metrics.
+-->
+
+<rappor-parameter-types>
+<!--
+Parameters that rappor metrics can be collected with.  This list should be
+kept in sync with parameter type definitions in
+components/rappor/rappor_service.cc.
+-->
+
+<rappor-parameters name="COARSE_RAPPOR_TYPE">
+  <summary>
+    Stricter parameters for metrics collected from a broader population.
+  </summary>
+  <parameters num-cohorts="128" bytes="1" hash-functions="2" fake-prob="0.5"
+      fake-one-prob="0.5" one-coin-prob="0.75" zero-coin-prob="0.25"
+      reporting-level="COARSE"/>
+</rappor-parameters>
+
+<rappor-parameters name="ETLD_PLUS_ONE">
+  <summary>
+    Deprecated parameters for collecting the domain and registry of a URL from
+    UMA opt-in users. Should use UMA_RAPPOR_TYPE instead.
+  </summary>
+  <parameters num-cohorts="128" bytes="16" hash-functions="2" fake-prob="0.5"
+      fake-one-prob="0.5" one-coin-prob="0.75" zero-coin-prob="0.25"
+      reporting-level="FINE"/>
+</rappor-parameters>
+
+<rappor-parameters name="SAFEBROWSING_RAPPOR_TYPE">
+  <summary>
+    Parameters for metrics related to Safe Browsing, collected from all user
+    with safe browsing enabled.
+  </summary>
+  <parameters num-cohorts="128" bytes="1" hash-functions="2" fake-prob="0.5"
+      fake-one-prob="0.5" one-coin-prob="0.75" zero-coin-prob="0.25"
+      reporting-level="COARSE"/>
+</rappor-parameters>
+
+<rappor-parameters name="UMA_RAPPOR_TYPE">
+  <summary>
+    Parameters suitable for metrics from UMA opt-in users.
+  </summary>
+  <parameters num-cohorts="128" bytes="4" hash-functions="2" fake-prob="0.5"
+      fake-one-prob="0.5" one-coin-prob="0.75" zero-coin-prob="0.25"
+      reporting-level="FINE"/>
+</rappor-parameters>
+
+</rappor-parameter-types>
+
+<rappor-metrics>
+<!-- Rappor metric definitions -->
+
+<rappor-metric name="AppBanner.NativeApp.Dismissed" type="ETLD_PLUS_ONE">
+  <owner>dfalcantara@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL that displayed a native app banner, which was explicitly
+    dismissed by the user.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="AppBanner.NativeApp.Installed" type="ETLD_PLUS_ONE">
+  <owner>dfalcantara@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL that displayed a native app banner, which resulted in
+    the user installing the promoted application.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="AppBanner.NativeApp.Shown" type="ETLD_PLUS_ONE">
+  <owner>dfalcantara@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL that displayed a native app banner.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="AppBanner.WebApp.Dismissed" type="ETLD_PLUS_ONE">
+  <owner>dfalcantara@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL that displayed a web app banner, which was explicitly
+    dismissed by the user.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="AppBanner.WebApp.Installed" type="ETLD_PLUS_ONE">
+  <owner>dfalcantara@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL that displayed a web app banner, which resulted in the
+    user installing the promoted application.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="AppBanner.WebApp.Shown" type="ETLD_PLUS_ONE">
+  <owner>dfalcantara@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL that displayed a web app banner.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Autofill.HighNumberOfHeuristicMismatches"
+    type="ETLD_PLUS_ONE">
+  <owner>mathp@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL for which there was a high number of mismatches for the
+    heuristic prediction of the form field types.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Autofill.HighNumberOfServerMismatches"
+    type="ETLD_PLUS_ONE">
+  <owner>mathp@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL for which there was a high number of mismatches for the
+    server prediction of the form field types.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Autofill.QueryResponseHasNoServerDataForForm"
+    type="ETLD_PLUS_ONE">
+  <owner>mathp@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL for which there was a server query response for which
+    the server had no data at all for at least one form.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="ContentSettings.MixedScript.DisplayedShield"
+    type="ETLD_PLUS_ONE">
+  <owner>lgarron@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL that displayed a mixed script shield. Note: this does
+    *not* include pages with mixed scripts where the user has already clicked
+    through the shield.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="ContentSettings.MixedScript.RanMixedScript"
+    type="ETLD_PLUS_ONE">
+  <owner>lgarron@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL that when mixed script actually ran.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="ContentSettings.MixedScript.UserClickedAllow"
+    type="ETLD_PLUS_ONE">
+  <owner>lgarron@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL where the user clicked &quot;Load unsafe scripts&quot;
+    on a mixed content shield. (This results in a page refresh. Mixed scripts
+    may not actually run until the users triggers them again after the refresh.)
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="ContentSettings.PermissionActions_Camera.Revoked.Url"
+    type="ETLD_PLUS_ONE">
+  <owner>jialiul@chromium.org</owner>
+  <summary>
+    The domain for which a camera permission was revoked.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="ContentSettings.PermissionActions_Geolocation.Denied.Url"
+    type="ETLD_PLUS_ONE">
+  <owner>miguelg@chromium.org</owner>
+  <summary>
+    The domain for which a Geolocation permission prompt was Denied.
+  </summary>
+</rappor-metric>
+
+<rappor-metric
+    name="ContentSettings.PermissionActions_Geolocation.Dismissed.Url"
+    type="ETLD_PLUS_ONE">
+  <owner>miguelg@chromium.org</owner>
+  <summary>
+    The domain for which a Geolocation permission prompt was Dismissed.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="ContentSettings.PermissionActions_Geolocation.Granted.Url"
+    type="ETLD_PLUS_ONE">
+  <owner>miguelg@chromium.org</owner>
+  <summary>
+    The domain for which a Geolocation permission prompt was accepted.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="ContentSettings.PermissionActions_Geolocation.Ignored.Url"
+    type="ETLD_PLUS_ONE">
+  <owner>miguelg@chromium.org</owner>
+  <summary>
+    The domain for which a Geolocation permission prompt was Ignored.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="ContentSettings.PermissionActions_Geolocation.Revoked.Url"
+    type="ETLD_PLUS_ONE">
+  <owner>jialiul@chromium.org</owner>
+  <summary>
+    The domain for which a Geolocation permission was revoked.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="ContentSettings.PermissionActions_Mic.Revoked.Url"
+    type="ETLD_PLUS_ONE">
+  <owner>jialiul@chromium.org</owner>
+  <summary>
+    The domain for which a microphone permission was revoked.
+  </summary>
+</rappor-metric>
+
+<rappor-metric
+    name="ContentSettings.PermissionActions_Notifications.Denied.Url"
+    type="ETLD_PLUS_ONE">
+  <owner>miguelg@chromium.org</owner>
+  <summary>
+    The domain for which a Notification permission prompt was Denied.
+  </summary>
+</rappor-metric>
+
+<rappor-metric
+    name="ContentSettings.PermissionActions_Notifications.Dismissed.Url"
+    type="ETLD_PLUS_ONE">
+  <owner>miguelg@chromium.org</owner>
+  <summary>
+    The domain for which a Notification permission prompt was Dismissed.
+  </summary>
+</rappor-metric>
+
+<rappor-metric
+    name="ContentSettings.PermissionActions_Notifications.Granted.Url"
+    type="ETLD_PLUS_ONE">
+  <owner>miguelg@chromium.org</owner>
+  <summary>
+    The domain for which a Notification permission prompt was accepted.
+  </summary>
+</rappor-metric>
+
+<rappor-metric
+    name="ContentSettings.PermissionActions_Notifications.Ignored.Url"
+    type="ETLD_PLUS_ONE">
+  <owner>miguelg@chromium.org</owner>
+  <summary>
+    The domain for which a Notification permission prompt was Ignored.
+  </summary>
+</rappor-metric>
+
+<rappor-metric
+    name="ContentSettings.PermissionActions_Notifications.Revoked.Url"
+    type="ETLD_PLUS_ONE">
+  <owner>jialiul@chromium.org</owner>
+  <summary>
+    The domain for which a Notification permission was revoked.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="ContentSettings.PermissionRequested.Geolocation.Url"
+    type="ETLD_PLUS_ONE">
+  <owner>miguelg@chromium.org</owner>
+  <summary>
+    The domain that issues a Geolocation permission prompt.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="ContentSettings.PermissionRequested.Notifications.Url"
+    type="ETLD_PLUS_ONE">
+  <owner>miguelg@chromium.org</owner>
+  <summary>
+    The domain that issues a Notification permission prompt.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="DeviceSensors.DeviceMotion" type="ETLD_PLUS_ONE">
+  <owner>timvolodine@chromium.org</owner>
+  <summary>
+    The domain and registry of the URL that is using Device Motion API.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="DeviceSensors.DeviceOrientation" type="ETLD_PLUS_ONE">
+  <owner>timvolodine@chromium.org</owner>
+  <summary>
+    The domain and registry of the URL that is using Device Orientation API.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Extensions.PossibleAdInjection2" type="ETLD_PLUS_ONE">
+  <owner>rdevlin.cronin@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL that might be doing ad injection.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Launch.HomeScreen.Shortcut" type="ETLD_PLUS_ONE">
+  <owner>dfalcantara@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL that was launched from the Android Home screen into a
+    tab.  This explicitly does not count relaunches via the Android Recents
+    menu.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Launch.HomeScreen.Standalone" type="ETLD_PLUS_ONE">
+  <owner>dfalcantara@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL that was launched from the Android Home screen into a
+    WebappActivity.  This explicitly does not count relaunches via the Android
+    Recents menu.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Launch.HomeScreenSource.AddToHomeScreen"
+    type="ETLD_PLUS_ONE">
+  <owner>dominickn@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL that was launched from the Android Home screen via an
+    intent added from an add to homescreen menu item. This explicitly does not
+    count relaunches via the Android Recents menu.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Launch.HomeScreenSource.AppBanner" type="ETLD_PLUS_ONE">
+  <owner>dominickn@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL that was launched from the Android Home screen via an
+    intent added from an app banner. This explicitly does not count relaunches
+    via the Android Recents menu.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Launch.HomeScreenSource.Unknown" type="ETLD_PLUS_ONE">
+  <owner>dominickn@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL that was launched from the Android Home screen via an
+    intent added from an unknown source. This explicitly does not count
+    relaunches via the Android Recents menu.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Media.OriginUrl.EME" type="ETLD_PLUS_ONE">
+  <owner>xhwang@chromium.org</owner>
+  <summary>
+    The domain and registry of the URL that uses Encrypted Media Extensions
+    (EME).
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Media.OriginUrl.EME.Insecure" type="ETLD_PLUS_ONE">
+  <owner>xhwang@chromium.org</owner>
+  <summary>
+    The domain and registry of the URL that uses Encrypted Media Extensions
+    (EME) from an insecure origin.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Media.OriginUrl.MSE" type="ETLD_PLUS_ONE">
+  <owner>xhwang@chromium.org</owner>
+  <summary>
+    The domain and registry of the URL that loads an HTML5 media player using
+    Media Source Extensions (MSE).
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Media.OriginUrl.SRC" type="ETLD_PLUS_ONE">
+  <owner>xhwang@chromium.org</owner>
+  <summary>
+    The domain and registry of the URL that loads an HTML5 media player using
+    SRC.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Plugins.FlashOriginUrl" type="ETLD_PLUS_ONE">
+  <owner>wfh@chromium.org</owner>
+  <summary>
+    The domain and registry of the top level URL of a page which attempts to
+    launch a Flash NPAPI or PPAPI plugin, if the client has Flash installed
+    and enabled. Recorded when the plugin frame appears for each Flash object
+    found on the page, even if the plugin is click-to-play.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Plugins.FlashUrl" type="ETLD_PLUS_ONE">
+  <owner>wfh@chromium.org</owner>
+  <summary>
+    The domain and registry of the URL from where Flash SWF or SPL content is
+    being loaded from, while attempting to launch a Flash (NPAPI or PPAPI)
+    plugin that is installed and enabled.  Recorded when the plugin frame
+    appears for each Flash object found in the page, even if the plugin is
+    click-to-play.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Plugins.SilverlightOriginUrl" type="ETLD_PLUS_ONE">
+  <owner>wfh@chromium.org</owner>
+  <summary>
+    The domain and registry of the top level URL of a page which attempts to
+    launch a Silverlight NPAPI plugin, if the client has Silverlight installed
+    and enabled. Recorded when the plugin frame appears for each Silverlight
+    object found on the page, even if the plugin is click-to-play.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="PushMessaging.GenericNotificationShown.Origin"
+    type="ETLD_PLUS_ONE">
+  <owner>miguelg@chromium.org</owner>
+  <summary>
+    Number of times the generic (forced) notification was shown per origin.
+    This happens if the site uses the push api but does not generate a
+    notification of their own.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="PushMessaging.MessageReceived.Origin" type="ETLD_PLUS_ONE">
+  <owner>miguelg@chromium.org</owner>
+  <summary>
+    Push Messages received per Origin.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Search.DefaultSearchProvider" type="ETLD_PLUS_ONE">
+  <owner>holte@chromium.org</owner>
+  <summary>
+    The domain and registry of the URL for the default search engine.
+    Recorded when a profile is opened or after a profile reset.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="ServiceWorker.ControlledPageUrl" type="ETLD_PLUS_ONE">
+  <owner>horo@chromium.org</owner>
+  <summary>
+    The domain and registry of the URL of the page which is controlled by a
+    ServiceWorker. Recorded when the page is loaded.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Settings.FirstStartupPage" type="ETLD_PLUS_ONE">
+  <owner>holte@chromium.org</owner>
+  <summary>
+    The domain and registry of the URL of the first page opened on startup.
+    Recorded when a profile is loaded if preferences specify a fixed set of URLs
+    to open on startup.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Settings.HomePage2" type="ETLD_PLUS_ONE">
+  <owner>holte@chromium.org</owner>
+  <summary>
+    The eTLD+1 of the prefs::kHomePage setting.  Recorded when a profile is
+    loaded if the URL is valid and prefs::kHomePageIsNewTabPage is false.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Settings.NewTabPage" type="ETLD_PLUS_ONE">
+  <owner>holte@chromium.org</owner>
+  <summary>
+    The domain and registry of the URL chrome://newtab is rewritten to.
+    Recorded when a profile is loaded, if the URL is valid.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="SoftwareReporter.FoundUwS" type="COARSE_RAPPOR_TYPE">
+  <owner>mad@chromium.org</owner>
+  <summary>
+    The IDs of unwanted software found by the software reporter tool.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Startup.BrowserLaunchURL" type="UMA_RAPPOR_TYPE">
+  <owner>rkaplow@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL that was passed in from the command line when Chrome
+    is invoked. Note that this handles the case of a URL passed to Chrome
+    starting up, or when a running Chrome is given the message to open a new
+    URL.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="WebComponents.DocumentRegisterElement"
+    type="ETLD_PLUS_ONE">
+  <owner>kojii@chromium.org</owner>
+  <summary>
+    The host of a URL that used Document::RegisterElement().
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="WebComponents.ElementCreateShadowRoot"
+    type="ETLD_PLUS_ONE">
+  <owner>kojii@chromium.org</owner>
+  <summary>
+    The host of a URL that used Element::CreateShadowRoot().
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="WebComponents.EventPath" type="ETLD_PLUS_ONE">
+  <owner>kojii@chromium.org</owner>
+  <summary>
+    The host of a URL that used Event::Path().
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="WebComponents.EventPath.Extensions" type="ETLD_PLUS_ONE">
+  <owner>kojii@chromium.org</owner>
+  <summary>
+    The name of an extension that used Event::Path().
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="interstitial.harmful" type="SAFEBROWSING_RAPPOR_TYPE">
+  <owner>nparker@chromium.org</owner>
+  <summary>
+    The domain+registry of a URL that triggered a safe-browsing UWS
+    interstitial.
+  </summary>
+  <string-field name="domain">
+    <summary>
+      The domain+registry of a URL that triggered a safe-browsing UWS
+      interstitial.
+    </summary>
+  </string-field>
+  <flags-field name="flags">
+    <flag>Bit 0: DID_PROCEED</flag>
+    <flag>Bit 1: IS_REPEAT_VISIT</flag>
+    <summary>
+      Bitfield of the state from a safe-browsing UWS warning interstitial.
+    </summary>
+  </flags-field>
+</rappor-metric>
+
+<rappor-metric name="interstitial.malware" type="SAFEBROWSING_RAPPOR_TYPE">
+  <owner>nparker@chromium.org</owner>
+  <summary>
+    The domain+registry of a URL that triggered a safe-browsing malware
+    interstitial.
+  </summary>
+  <string-field name="domain">
+    <summary>
+      The domain+registry of a URL that triggered a safe-browsing malware
+      interstitial.
+    </summary>
+  </string-field>
+  <flags-field name="flags">
+    <flag>Bit 0: DID_PROCEED</flag>
+    <flag>Bit 1: IS_REPEAT_VISIT</flag>
+    <summary>
+      Bitfield of the state from a safe-browsing malware warning interstitial.
+    </summary>
+  </flags-field>
+</rappor-metric>
+
+<rappor-metric name="interstitial.phishing" type="SAFEBROWSING_RAPPOR_TYPE">
+  <owner>nparker@chromium.org</owner>
+  <summary>
+    The domain+registry of a URL that triggered a safe-browsing phishing
+    interstitial.
+  </summary>
+  <string-field name="domain">
+    <summary>
+      The domain+registry of a URL that triggered a safe-browsing phishing
+      interstitial.
+    </summary>
+  </string-field>
+  <flags-field name="flags">
+    <flag>Bit 0: DID_PROCEED</flag>
+    <flag>Bit 1: IS_REPEAT_VISIT</flag>
+    <summary>
+      Bitfield of the state from a safe-browsing phishing warning interstitial.
+    </summary>
+  </flags-field>
+</rappor-metric>
+
+<rappor-metric name="interstitial.ssl.domain" type="COARSE_RAPPOR_TYPE">
+  <owner>nparker@chromium.org</owner>
+  <summary>
+    ** DEPRECATED.  Replaced by insterstitial.ssl2.domain on 2015-07-07 since
+    the type changed.**  The domain+registry of a URL that triggered an SSL
+    interstitial.  Domains for bad-clock warnings are not reported.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="interstitial.ssl2" type="UMA_RAPPOR_TYPE">
+  <owner>nparker@chromium.org</owner>
+  <summary>
+    The domain+registry of a URL that triggered an SSL interstitial.
+  </summary>
+  <string-field name="domain">
+    <summary>
+      The domain+registry of a URL that triggered an SSL interstitial.
+    </summary>
+  </string-field>
+  <flags-field name="flags">
+    <flag>Bit 0: DID_PROCEED</flag>
+    <flag>Bit 1: IS_REPEAT_VISIT</flag>
+    <summary>
+      Bitfield of the state from an SSL warning interstitial.
+    </summary>
+  </flags-field>
+</rappor-metric>
+
+</rappor-metrics>
+
+</rappor-configuration>

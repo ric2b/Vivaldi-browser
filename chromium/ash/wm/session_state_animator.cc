@@ -1,0 +1,100 @@
+// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "ash/wm/session_state_animator.h"
+
+#include "ash/shell.h"
+#include "ash/shell_window_ids.h"
+#include "ash/wm/window_animations.h"
+#include "ui/aura/client/aura_constants.h"
+#include "ui/aura/window_event_dispatcher.h"
+#include "ui/compositor/layer_animation_observer.h"
+#include "ui/compositor/layer_animation_sequence.h"
+#include "ui/compositor/scoped_layer_animation_settings.h"
+#include "ui/views/widget/widget.h"
+
+namespace ash {
+
+const int SessionStateAnimator::kAllLockScreenContainersMask =
+    SessionStateAnimator::LOCK_SCREEN_BACKGROUND |
+    SessionStateAnimator::LOCK_SCREEN_CONTAINERS |
+    SessionStateAnimator::LOCK_SCREEN_RELATED_CONTAINERS;
+
+const int SessionStateAnimator::kAllNonRootContainersMask =
+    SessionStateAnimator::kAllLockScreenContainersMask |
+    SessionStateAnimator::DESKTOP_BACKGROUND |
+    SessionStateAnimator::LAUNCHER |
+    SessionStateAnimator::NON_LOCK_SCREEN_CONTAINERS;
+
+SessionStateAnimator::AnimationSequence::AnimationSequence(
+    base::Closure callback)
+  : sequence_ended_(false),
+    animation_completed_(false),
+    invoke_callback_(false),
+    callback_(callback) {
+}
+
+SessionStateAnimator::AnimationSequence::~AnimationSequence() {
+}
+
+void SessionStateAnimator::AnimationSequence::EndSequence() {
+  sequence_ended_ = true;
+  CleanupIfSequenceCompleted();
+}
+
+void SessionStateAnimator::AnimationSequence::OnAnimationCompleted() {
+  animation_completed_ = true;
+  invoke_callback_ = true;
+  CleanupIfSequenceCompleted();
+}
+
+void SessionStateAnimator::AnimationSequence::OnAnimationAborted() {
+  animation_completed_ = true;
+  invoke_callback_ = false;
+  CleanupIfSequenceCompleted();
+}
+
+void SessionStateAnimator::AnimationSequence::CleanupIfSequenceCompleted() {
+  if (sequence_ended_ && animation_completed_) {
+    if (invoke_callback_)
+      callback_.Run();
+    delete this;
+  }
+}
+
+SessionStateAnimator::SessionStateAnimator() {
+}
+
+SessionStateAnimator::~SessionStateAnimator() {
+}
+
+base::TimeDelta SessionStateAnimator::GetDuration(
+    SessionStateAnimator::AnimationSpeed speed) {
+  switch (speed) {
+    case ANIMATION_SPEED_IMMEDIATE:
+      return base::TimeDelta();
+    case ANIMATION_SPEED_UNDOABLE:
+      return base::TimeDelta::FromMilliseconds(400);
+    case ANIMATION_SPEED_REVERT:
+      return base::TimeDelta::FromMilliseconds(150);
+    case ANIMATION_SPEED_FAST:
+      return base::TimeDelta::FromMilliseconds(150);
+    case ANIMATION_SPEED_SHOW_LOCK_SCREEN:
+      return base::TimeDelta::FromMilliseconds(200);
+    case ANIMATION_SPEED_MOVE_WINDOWS:
+      return base::TimeDelta::FromMilliseconds(350);
+    case ANIMATION_SPEED_UNDO_MOVE_WINDOWS:
+      return base::TimeDelta::FromMilliseconds(350);
+    case ANIMATION_SPEED_SHUTDOWN:
+      return base::TimeDelta::FromMilliseconds(1000);
+    case ANIMATION_SPEED_REVERT_SHUTDOWN:
+      return base::TimeDelta::FromMilliseconds(500);
+  }
+  // Satisfy compilers that do not understand that we will return from switch
+  // above anyway.
+  DCHECK(false) << "Unhandled animation speed " << speed;
+  return base::TimeDelta();
+}
+
+}  // namespace ash

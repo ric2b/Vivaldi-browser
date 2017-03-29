@@ -1,0 +1,486 @@
+// Copyright (c) 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+[
+  {
+    "namespace": "notes",
+    "description": "Use the <code>chrome.notes</code> API to manipulate notes.",
+    "types": [
+      {
+        "id": "NoteAttachment",
+        "type": "object",
+        "description": "Attachment to a node.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minimum": 0,
+            "description": "The unique identifier for the attachment."
+          },
+          "index": {
+            "type": "integer",
+            "optional": true,
+            "description": "The 0-based position of this node within its parent folder."
+          },
+          "filename": {
+            "type": "string",
+            "optional": true,
+            "description": "Full system-path to a file that contains data."
+          },
+          "content_type": {
+            "type": "string",
+            "optional": true,
+            "description": "TODO: Document."
+          },
+          "content": {
+            "type": "string",
+            "optional": true,
+            "description": "Content data."
+          }
+        }
+      },
+      {
+        "id": "NoteTreeNode",
+        "type": "object",
+        "description": "A node (either a note-entry or a folder) in the notes tree. Child nodes are ordered within their parent folder.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minimum": 0,
+            "description": "The unique identifier for the node. IDs are unique within the current profile, and they remain valid even after the browser is restarted."
+          },
+          "parentId": {
+            "type": "string",
+            "minimum": 0,
+            "optional": true,
+            "description": "The <code>id</code> of the parent folder.  Omitted for the root node."
+          },
+          "index": {
+            "type": "integer",
+            "optional": true,
+            "description": "The 0-based position of this node within its parent folder."
+          },
+          "title": {
+            "type": "string",
+            "optional": true,
+            "description": "Title/subject of note."
+          },
+          "content": {
+            "type": "string",
+            "optional": true,
+            "description": "The note in the note."
+          },
+          "url": {
+            "type": "string",
+            "optional": true,
+            "description": ""
+          },
+          "dateAdded": {
+            "type": "number",
+            "optional": true,
+            "description": "When this node was created, in milliseconds since the epoch (<code>new Date(dateAdded)</code>)."
+          },
+          "dateGroupModified": {
+            "type": "number",
+            "optional": true,
+            "description": "When the contents of this folder last changed, in milliseconds since the epoch."
+          },
+          "children": {
+            "type": "array",
+            "optional": true,
+            "items": { "$ref": "NoteTreeNode" },
+            "description": "An ordered list of children of this node."
+          },
+          "attachments": {
+            "type": "array",
+            "optional": true,
+            "items": { "$ref": "NoteAttachment" },
+            "description": "An ordered list of attachments to this note."
+          }
+        }
+      },
+      {
+        "id": "CreateDetails",
+        "description": "Object passed to the create() function.",
+        "inline_doc": true,
+        "type": "object",
+        "properties": {
+          "parentId": {
+            "type": "string",
+            "serialized_type": "int64",
+            "optional": true,
+            "description": "Defaults to the root folder."
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0,
+            "optional": true
+          },
+          "type": {
+            "type": "string",
+            "optional": true
+          },
+          "title": {
+            "type": "string",
+            "optional": true
+          },
+          "url": {
+            "type": "string",
+            "optional": true
+          },
+          "content": {
+            "type": "string",
+            "description": "",
+            "optional": true
+          },
+          "filename": {
+            "type": "string",
+            "optional": true
+          },
+          "icon": {
+            "type": "object",
+            "properties": {
+              "filename": { "type": "string", "description": "Filename of icon." },
+              "content_type": { "type": "string", "description": "Contenttype of file." },
+              "content": { "type": "string", "description": "Does not make sense for icon and is unused." }
+            },
+            "optional": true
+          },
+          "attachments": {
+            "type": "array",
+            "description": "",
+            "items": { "$ref": "NoteAttachment" },
+            "optional": true
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "get",
+        "type": "function",
+        "description": "Retrieves the specified NoteTreeNode(s).",
+        "parameters": [
+          {
+            "name": "idOrIdList",
+            "description": "A single string-valued id, or an array of string-valued ids",
+            "choices": [
+              {
+                "type": "string",
+                "serialized_type": "int64"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "serialized_type": "int64"
+                },
+                "minItems": 1
+              }
+            ]
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "results",
+                "type": "array",
+                "items": { "$ref": "NoteTreeNode" }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getTree",
+        "type": "function",
+        "description": "Retrieves the entire Notes hierarchy.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "results",
+                "type": "array",
+                "items": { "$ref": "NoteTreeNode" }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "create",
+        "type": "function",
+        "description": "Creates a bookmark or folder under the specified parentId.",
+        "parameters": [
+          {
+            "$ref": "CreateDetails",
+            "name": "note"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "result",
+                "$ref": "NoteTreeNode"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "update",
+        "type": "function",
+        "description": "Updates the properties of a note or folder. Specify only the properties that you want to change; unspecified properties will be left unchanged. <b>Note:</b> Currently, only 'title' and 'url' are supported.",
+        "parameters": [
+          {
+            "type": "string",
+            "serialized_type": "int64",
+            "name": "id"
+          },
+          {
+            "type": "object",
+            "name": "changes",
+            "properties": {
+              "title": {
+                "type": "string",
+                "optional": true
+              },
+              "content": {
+                "type": "string",
+                "optional": true
+              },
+              "url": {
+                "type": "string",
+                "optional": true
+              },
+              "dateAdded": {
+                "type": "number",
+                "optional": true
+              },
+              "dateGroupModified": {
+                "type": "number",
+                "optional": true
+              },
+              "attachments": {
+                "type": "array",
+                "description": "",
+                "items": { "$ref": "NoteAttachment" },
+                "optional": true
+              }
+            }
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "result",
+                "$ref": "NoteTreeNode"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "remove",
+        "type": "function",
+        "description": "Removes a note or an empty folder.",
+        "parameters": [
+          {
+            "type": "string",
+            "serialized_type": "int64",
+            "name": "id"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [ ]
+          }
+        ]
+      },
+      {
+        "name": "removeTree",
+        "type": "function",
+        "description": "Recursively removes a note folder. Use this when deleting a folder.",
+        "parameters": [
+          {
+            "type": "string",
+            "serialized_type": "int64",
+            "name": "id"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [ ]
+          }
+        ]
+      },
+      {
+        "name": "search",
+        "type": "function",
+        "description": "",
+        "parameters": [
+          {
+            "name": "query",
+            "description": "A string of words matched agains note contents.",
+            "type": "string"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "results",
+                "type": "array",
+                "items": { "$ref": "NoteTreeNode" }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "move",
+        "type": "function",
+        "description": "Moves the specified node to the provided location.",
+        "parameters": [
+          {
+            "type": "string",
+            "serialized_type": "int64",
+            "description": "The id to be moved",
+            "name": "id"
+          },
+          {
+            "type": "object",
+            "name": "destination",
+            "description": "Object describing the target location",
+            "properties": {
+              "parentId": {
+                "type": "string",
+                "description": "Id of target folder",
+                "optional": true
+              },
+              "index": {
+                "type": "integer",
+                "description": "The index inside the target folder",
+                "minimum": 0,
+                "optional": true
+              }
+            }
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "result",
+                "$ref": "NoteTreeNode"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onCreated",
+        "type": "function",
+        "description": "Fired when a bookmark or folder is created.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "id"
+          },
+          {
+            "$ref": "NoteTreeNode",
+            "name": "note"
+          }
+        ]
+      },
+      {
+        "name": "onRemoved",
+        "type": "function",
+        "description": "Fired when a note or folder is removed. When a folder is removed recursively, a single notification is fired for the folder, and none for its contents.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "id"
+          },
+          {
+            "type": "object",
+            "name": "removeInfo",
+            "properties": {
+              "parentId": { "type": "string" },
+              "index": { "type": "integer" }
+            }
+          }
+        ]
+      },
+      {
+        "name": "onChanged",
+        "type": "function",
+        "description": "Fired when a note or folder changes.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "id"
+          },
+          {
+            "type": "object",
+            "name": "changeInfo",
+            "properties": {
+              "title": { "type": "string" },
+              "content": { "type": "string" },
+              "url": {
+                "type": "string",
+                "optional": true
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "onMoved",
+        "type": "function",
+        "description": "Fired when a note or folder is moved.",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The id of the moved note",
+            "name": "id"
+          },
+          {
+            "type": "object",
+            "name": "moveInfo",
+            "properties": {
+              "parentId": {
+                "type": "string",
+                "description": "The id of the parent folder"
+              },
+              "index": {
+                "type": "integer",
+                "description": "The index inside the parent folder"
+              },
+              "oldParentId": {
+                "type": "string",
+                "description": "Previous parent id"
+              },
+              "oldIndex": {
+                "type": "integer",
+                "description": "Previous index inside the parent folder"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

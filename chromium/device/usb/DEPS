@@ -1,0 +1,9 @@
+include_rules = [
+  "+chromeos",
+  "+dbus",
+
+  "-net",
+  "+net/base",
+
+  "+third_party/libusb",
+]

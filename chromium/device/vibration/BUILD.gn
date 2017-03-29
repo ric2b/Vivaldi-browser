@@ -1,0 +1,58 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//third_party/mojo/src/mojo/public/tools/bindings/mojom.gni")
+
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/rules.gni")  # For generate_jni().
+}
+
+component("vibration") {
+  output_name = "device_vibration"
+
+  sources = [
+    "vibration_export.h",
+    "vibration_manager_impl.h",
+  ]
+
+  defines = [ "DEVICE_VIBRATION_IMPLEMENTATION" ]
+
+  deps = [
+    ":mojo_bindings",
+    "//base",
+    "//base/third_party/dynamic_annotations",
+    "//mojo/environment:chromium",
+    "//third_party/mojo/src/mojo/public/cpp/bindings",
+    "//third_party/mojo/src/mojo/edk/system",
+  ]
+
+  if (is_android) {
+    sources += [
+      "android/vibration_jni_registrar.cc",
+      "android/vibration_jni_registrar.h",
+      "vibration_manager_impl_android.cc",
+      "vibration_manager_impl_android.h",
+    ]
+    deps += [ ":vibration_jni_headers" ]
+  } else {
+    sources += [ "vibration_manager_impl_default.cc" ]
+  }
+}
+
+mojom("mojo_bindings") {
+  sources = [
+    "vibration_manager.mojom",
+  ]
+}
+
+if (is_android) {
+  generate_jni("vibration_jni_headers") {
+    sources = [
+      "android/java/src/org/chromium/device/vibration/VibrationProvider.java",
+    ]
+    jni_package = "vibration"
+  }
+}

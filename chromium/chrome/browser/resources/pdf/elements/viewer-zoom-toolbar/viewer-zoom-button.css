@@ -1,0 +1,10 @@
+/* Copyright 2015 The Chromium Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file. */
+
+paper-fab {
+  background-color: rgb(242, 242, 242);
+  color: rgb(96, 96, 96);
+  margin: 0 48px;
+  overflow: visible;
+}

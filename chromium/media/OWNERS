@@ -1,0 +1,20 @@
+# NOTE: Do not use these owners when you're in a subdirectory that has
+# OWNERS file. For example:
+# - cast
+# - midi
+# - ozone
+# - video/capture
+# Instead prefer the OWNERS in the subdirectory as they will be more familiar,
+# and to load balance. Only use OWNERS in this file for these subdirectories
+# when doing refactorings and general cleanups.
+
+dalecurtis@chromium.org
+ddorwin@chromium.org
+jrummell@chromium.org
+sandersd@chromium.org
+wolenetz@chromium.org
+xhwang@chromium.org
+
+per-file *.isolate=maruel@chromium.org
+per-file *.isolate=tandrii@chromium.org
+per-file *.isolate=vadimsh@chromium.org

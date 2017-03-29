@@ -1,0 +1,9 @@
+{
+  "name": "Platform Test",
+  "version": "1",
+  "app": {
+    "background": {
+      // Platform apps must have a background page or scripts
+    }
+  }
+}

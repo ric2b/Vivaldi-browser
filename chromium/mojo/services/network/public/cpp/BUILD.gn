@@ -1,0 +1,31 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/mojo/src/mojo/public/mojo_sdk.gni")
+
+mojo_sdk_source_set("cpp") {
+  restrict_external_deps = false
+  public_configs = [ "../../../public/build/config:mojo_services" ]
+  sources = [
+    "udp_socket_wrapper.cc",
+    "udp_socket_wrapper.h",
+    "web_socket_read_queue.cc",
+    "web_socket_read_queue.h",
+    "web_socket_write_queue.cc",
+    "web_socket_write_queue.h",
+  ]
+
+  deps = [
+    "../interfaces",
+    "//base",
+    "//mojo/application/public/cpp",
+    "//mojo/common",
+    "//mojo/environment:chromium",
+  ]
+
+  mojo_sdk_deps = [
+    "mojo/public/c/system",
+    "mojo/public/cpp/system",
+  ]
+}

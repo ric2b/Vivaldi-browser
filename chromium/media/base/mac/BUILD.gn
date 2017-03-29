@@ -1,0 +1,41 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+assert(is_mac || is_ios)
+
+source_set("mac") {
+  set_sources_assignment_filter([])
+  sources = [
+    "coremedia_glue.h",
+    "coremedia_glue.mm",
+    "corevideo_glue.h",
+    "video_frame_mac.cc",
+    "video_frame_mac.h",
+    "videotoolbox_glue.h",
+    "videotoolbox_glue.mm",
+  ]
+  if (is_mac) {
+    sources += [
+      "avfoundation_glue.h",
+      "avfoundation_glue.mm",
+    ]
+    libs = [
+      # Required by video_frame_mac.cc.
+      "CoreVideo.framework",
+    ]
+  }
+  set_sources_assignment_filter(sources_assignment_filter)
+  configs += [ "//media:media_config" ]
+}
+
+source_set("unittests") {
+  testonly = true
+  sources = [
+    "video_frame_mac_unittests.cc",
+  ]
+  configs += [ "//media:media_config" ]
+  deps = [
+    "//testing/gtest",
+  ]
+}

@@ -1,0 +1,67 @@
+# Copyright (c) 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+{
+  'conditions': [
+    ['use_x11==0', {
+      'variables': {
+        'command': [
+          '../testing/test_env.py',
+          '<(PRODUCT_DIR)/ash_unittests<(EXECUTABLE_SUFFIX)',
+          '--test-launcher-bot-mode',
+        ],
+      },
+    }],
+    ['use_x11==1', {
+      'variables': {
+        'command': [
+          '../testing/xvfb.py',
+          '<(PRODUCT_DIR)',
+          '<(PRODUCT_DIR)/ash_unittests',
+          '--test-launcher-bot-mode',
+        ],
+        'files': [
+          '../testing/xvfb.py',
+          '<(PRODUCT_DIR)/xdisplaycheck<(EXECUTABLE_SUFFIX)',
+        ],
+      },
+    }],
+    ['OS=="win" or chromeos==1', {
+      'variables': {
+        'files': [
+          '../testing/test_env.py',
+          '<(PRODUCT_DIR)/ash_unittests<(EXECUTABLE_SUFFIX)',
+          '<(PRODUCT_DIR)/vivaldi_100_percent.pak',
+          '<(PRODUCT_DIR)/vivaldi_200_percent.pak',
+          '<(PRODUCT_DIR)/locales/en-US.pak',
+          '<(PRODUCT_DIR)/keyboard_resources.pak',
+        ],
+      },
+    }],
+    ['OS=="linux"', {
+      'variables': {
+        'files': [
+          '<(PRODUCT_DIR)/libosmesa.so',
+        ],
+      },
+    }],
+    ['OS=="win"', {
+      'variables': {
+        'files': [
+          '<(PRODUCT_DIR)/osmesa.dll',
+        ],
+      },
+    }],
+    ['OS=="win" and (fastbuild==0 or fastbuild==1)', {
+      'variables': {
+        'files': [
+          '<(PRODUCT_DIR)/ash_unittests.exe.pdb',
+        ],
+      },
+    }],
+  ],
+  'includes': [
+    '../base/base.isolate',
+    '../third_party/angle/angle.isolate',
+  ],
+}

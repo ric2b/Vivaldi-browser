@@ -1,0 +1,120 @@
+// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+//
+// This file defines dummy implementation of several functions from the
+// BrowserDistribution class for Google Chrome. These functions allow 64-bit
+// Windows Chrome binary to build successfully. Since this binary is only used
+// for Native Client support, most of the install/uninstall functionality is not
+// necessary there.
+
+#include "chrome/installer/util/google_chrome_distribution.h"
+
+#include <windows.h>
+
+#include "base/files/file_path.h"
+#include "base/logging.h"
+#include "base/values.h"
+#include "chrome/installer/util/app_registration_data.h"
+#include "chrome/installer/util/non_updating_app_registration_data.h"
+
+GoogleChromeDistribution::GoogleChromeDistribution()
+    : BrowserDistribution(
+          CHROME_BROWSER,
+          scoped_ptr<AppRegistrationData>(
+              new NonUpdatingAppRegistrationData(base::string16()))) {
+}
+
+GoogleChromeDistribution::GoogleChromeDistribution(
+    scoped_ptr<AppRegistrationData> app_reg_data)
+    : BrowserDistribution(CHROME_BROWSER, app_reg_data.Pass()) {
+}
+
+void GoogleChromeDistribution::DoPostUninstallOperations(
+    const Version& version,
+    const base::FilePath& local_data_path,
+    const base::string16& distribution_data) {
+}
+
+base::string16 GoogleChromeDistribution::GetActiveSetupGuid() {
+  return base::string16();
+}
+
+base::string16 GoogleChromeDistribution::GetBaseAppName() {
+  return base::string16();
+}
+
+base::string16 GoogleChromeDistribution::GetShortcutName(
+    ShortcutType shortcut_type) {
+  return base::string16();
+}
+
+int GoogleChromeDistribution::GetIconIndex(ShortcutType shortcut_type) {
+  return 0;
+}
+
+base::string16 GoogleChromeDistribution::GetBaseAppId() {
+  return base::string16();
+}
+
+base::string16 GoogleChromeDistribution::GetBrowserProgIdPrefix() {
+  return base::string16();
+}
+
+base::string16 GoogleChromeDistribution::GetBrowserProgIdDesc() {
+  return base::string16();
+}
+
+base::string16 GoogleChromeDistribution::GetInstallSubDir() {
+  return base::string16();
+}
+
+base::string16 GoogleChromeDistribution::GetPublisherName() {
+  return base::string16();
+}
+
+base::string16 GoogleChromeDistribution::GetAppDescription() {
+  return base::string16();
+}
+
+std::string GoogleChromeDistribution::GetSafeBrowsingName() {
+  return std::string();
+}
+
+std::string GoogleChromeDistribution::GetNetworkStatsServer() const {
+  return std::string();
+}
+
+base::string16 GoogleChromeDistribution::GetDistributionData(HKEY root_key) {
+  return base::string16();
+}
+
+base::string16 GoogleChromeDistribution::GetUninstallLinkName() {
+  return base::string16();
+}
+
+base::string16 GoogleChromeDistribution::GetUninstallRegPath() {
+  return base::string16();
+}
+
+base::string16 GoogleChromeDistribution::GetIconFilename() {
+  return base::string16();
+}
+
+bool GoogleChromeDistribution::GetCommandExecuteImplClsid(
+    base::string16* handler_class_uuid) {
+  return false;
+}
+
+void GoogleChromeDistribution::UpdateInstallStatus(bool system_install,
+    installer::ArchiveType archive_type,
+    installer::InstallStatus install_status) {
+}
+
+bool GoogleChromeDistribution::ShouldSetExperimentLabels() {
+  return false;
+}
+
+bool GoogleChromeDistribution::HasUserExperiments() {
+  return false;
+}

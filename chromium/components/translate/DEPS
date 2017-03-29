@@ -1,0 +1,13 @@
+include_rules = [
+  "+components/infobars",
+  "+components/language_usage_metrics",
+  "+components/pref_registry",
+  "+google_apis",
+  "+grit",  # For generated headers.
+  "+net",
+  "+ui",
+
+  # Translate is a layered component; subdirectories must explicitly introduce
+  # the ability to use the content layer as appropriate.
+  "-components/translate/content",
+]

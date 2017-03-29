@@ -1,0 +1,775 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/config.gni")
+import("//build/config/arm.gni")
+import("//build/config/features.gni")
+import("//build/config/linux/pkg_config.gni")
+import("//build/config/ui.gni")
+import("//media/media_options.gni")
+import("//testing/test.gni")
+
+# Common configuration for targets in the media directory.
+# NOT for exporting.
+config("media_config") {
+  defines = []
+  if (!media_use_libvpx) {
+    defines += [ "MEDIA_DISABLE_LIBVPX" ]
+  }
+  if (!media_use_ffmpeg) {
+    defines += [ "MEDIA_DISABLE_FFMPEG" ]
+  }
+  if (current_cpu == "arm" && arm_use_neon) {
+    defines += [ "USE_NEON" ]
+  }
+  if (use_pulseaudio) {
+    defines += [ "USE_PULSEAUDIO" ]
+    if (!link_pulseaudio) {
+      defines += [ "DLOPEN_PULSEAUDIO" ]
+    }
+  }
+  if (use_cras) {
+    defines += [ "USE_CRAS" ]
+  }
+}
+
+config("media_implementation") {
+  defines = [ "MEDIA_IMPLEMENTATION" ]
+}
+
+config("media_dependent_config") {
+  defines = []
+  if (!media_use_libvpx) {
+    defines += [ "MEDIA_DISABLE_LIBVPX" ]
+  }
+  if (!media_use_ffmpeg) {
+    defines += [ "MEDIA_DISABLE_FFMPEG" ]
+  }
+  if (is_win) {
+    ldflags = [
+      "/DELAYLOAD:mf.dll",
+      "/DELAYLOAD:mfplat.dll",
+      "/DELAYLOAD:mfreadwrite.dll",
+    ]
+  }
+}
+
+if (use_ozone) {
+  action("generate_ozone_constructor_list") {
+    # Ozone platform objects are auto-generated using similar
+    # patterns for naming and classes constructors. Here we build the
+    # object MediaOzonePlatform.
+    script = "../ui/ozone/generate_constructor_list.py"
+
+    platform_list_txt_file = "$target_gen_dir/../ui/ozone/platform_list.txt"
+    constructor_list_cc_file = "$target_gen_dir/ozone/constructor_list.cc"
+
+    sources = [
+      platform_list_txt_file,
+    ]
+    outputs = [
+      constructor_list_cc_file,
+    ]
+    args = [
+      "--platform_list=" + rebase_path(platform_list_txt_file, root_build_dir),
+      "--output_cc=" + rebase_path(constructor_list_cc_file, root_build_dir),
+      "--namespace=media",
+      "--typename=MediaOzonePlatform",
+      "--include=\"media/ozone/media_ozone_platform.h\"",
+    ]
+    deps = [
+      "//ui/ozone:generate_ozone_platform_list",
+    ]
+  }
+}
+
+component("media") {
+  sources = [
+    "blink/skcanvas_video_renderer.cc",
+    "blink/skcanvas_video_renderer.h",
+    "capture/animated_content_sampler.cc",
+    "capture/animated_content_sampler.h",
+    "capture/capture_resolution_chooser.cc",
+    "capture/capture_resolution_chooser.h",
+    "capture/feedback_signal_accumulator.cc",
+    "capture/feedback_signal_accumulator.h",
+    "capture/screen_capture_device_core.cc",
+    "capture/screen_capture_device_core.h",
+    "capture/smooth_event_sampler.cc",
+    "capture/smooth_event_sampler.h",
+    "capture/thread_safe_capture_oracle.cc",
+    "capture/thread_safe_capture_oracle.h",
+    "capture/video_capture_oracle.cc",
+    "capture/video_capture_oracle.h",
+    "cdm/aes_decryptor.cc",
+    "cdm/aes_decryptor.h",
+    "cdm/default_cdm_factory.cc",
+    "cdm/default_cdm_factory.h",
+    "cdm/json_web_key.cc",
+    "cdm/json_web_key.h",
+    "cdm/key_system_names.cc",
+    "cdm/key_system_names.h",
+    "cdm/player_tracker_impl.cc",
+    "cdm/player_tracker_impl.h",
+    "cdm/proxy_decryptor.cc",
+    "cdm/proxy_decyrptor.h",
+    "ffmpeg/ffmpeg_deleters.h",
+    "filters/audio_clock.cc",
+    "filters/audio_clock.h",
+    "filters/audio_renderer_algorithm.cc",
+    "filters/audio_renderer_algorithm.h",
+    "filters/chunk_demuxer.cc",
+    "filters/chunk_demuxer.h",
+    "filters/context_3d.h",
+    "filters/decoder_selector.cc",
+    "filters/decoder_selector.h",
+    "filters/decoder_stream.cc",
+    "filters/decoder_stream.h",
+    "filters/decoder_stream_traits.cc",
+    "filters/decoder_stream_traits.h",
+    "filters/decrypting_audio_decoder.cc",
+    "filters/decrypting_audio_decoder.h",
+    "filters/decrypting_demuxer_stream.cc",
+    "filters/decrypting_demuxer_stream.h",
+    "filters/decrypting_video_decoder.cc",
+    "filters/decrypting_video_decoder.h",
+    "filters/default_media_permission.cc",
+    "filters/default_media_permission.h",
+    "filters/file_data_source.cc",
+    "filters/file_data_source.h",
+    "filters/frame_processor.cc",
+    "filters/frame_processor.h",
+    "filters/gpu_video_decoder.cc",
+    "filters/gpu_video_decoder.h",
+    "filters/h264_bit_reader.cc",
+    "filters/h264_bit_reader.h",
+    "filters/h264_parser.cc",
+    "filters/h264_parser.h",
+    "filters/jpeg_parser.cc",
+    "filters/jpeg_parser.h",
+    "filters/source_buffer_platform.cc",
+    "filters/source_buffer_platform.h",
+    "filters/source_buffer_range.cc",
+    "filters/source_buffer_range.h",
+    "filters/source_buffer_stream.cc",
+    "filters/source_buffer_stream.h",
+    "filters/stream_parser_factory.cc",
+    "filters/stream_parser_factory.h",
+    "filters/video_cadence_estimator.cc",
+    "filters/video_cadence_estimator.h",
+    "filters/video_renderer_algorithm.cc",
+    "filters/video_renderer_algorithm.h",
+    "filters/vp8_bool_decoder.cc",
+    "filters/vp8_bool_decoder.h",
+    "filters/vp8_parser.cc",
+    "filters/vp8_parser.h",
+    "filters/webvtt_util.h",
+    "filters/wsola_internals.cc",
+    "filters/wsola_internals.h",
+    "formats/common/offset_byte_queue.cc",
+    "formats/common/offset_byte_queue.h",
+    "formats/webm/webm_audio_client.cc",
+    "formats/webm/webm_audio_client.h",
+    "formats/webm/webm_cluster_parser.cc",
+    "formats/webm/webm_cluster_parser.h",
+    "formats/webm/webm_constants.cc",
+    "formats/webm/webm_constants.h",
+    "formats/webm/webm_content_encodings.cc",
+    "formats/webm/webm_content_encodings.h",
+    "formats/webm/webm_content_encodings_client.cc",
+    "formats/webm/webm_content_encodings_client.h",
+    "formats/webm/webm_crypto_helpers.cc",
+    "formats/webm/webm_crypto_helpers.h",
+    "formats/webm/webm_info_parser.cc",
+    "formats/webm/webm_info_parser.h",
+    "formats/webm/webm_parser.cc",
+    "formats/webm/webm_parser.h",
+    "formats/webm/webm_stream_parser.cc",
+    "formats/webm/webm_stream_parser.h",
+    "formats/webm/webm_tracks_parser.cc",
+    "formats/webm/webm_tracks_parser.h",
+    "formats/webm/webm_video_client.cc",
+    "formats/webm/webm_video_client.h",
+    "formats/webm/webm_webvtt_parser.cc",
+    "formats/webm/webm_webvtt_parser.h",
+    "renderers/audio_renderer_impl.cc",
+    "renderers/audio_renderer_impl.h",
+    "renderers/default_renderer_factory.cc",
+    "renderers/default_renderer_factory.h",
+    "renderers/gpu_video_accelerator_factories.h",
+    "renderers/renderer_impl.cc",
+    "renderers/renderer_impl.h",
+    "renderers/video_renderer_impl.cc",
+    "renderers/video_renderer_impl.h",
+    "video/capture/fake_video_capture_device.cc",
+    "video/capture/fake_video_capture_device.h",
+    "video/capture/fake_video_capture_device_factory.cc",
+    "video/capture/fake_video_capture_device_factory.h",
+    "video/capture/file_video_capture_device.cc",
+    "video/capture/file_video_capture_device.h",
+    "video/capture/file_video_capture_device_factory.cc",
+    "video/capture/file_video_capture_device_factory.h",
+    "video/capture/linux/v4l2_capture_delegate.cc",
+    "video/capture/linux/v4l2_capture_delegate.h",
+    "video/capture/linux/v4l2_capture_delegate_multi_plane.cc",
+    "video/capture/linux/v4l2_capture_delegate_multi_plane.h",
+    "video/capture/linux/v4l2_capture_delegate_single_plane.cc",
+    "video/capture/linux/v4l2_capture_delegate_single_plane.h",
+    "video/capture/linux/video_capture_device_chromeos.cc",
+    "video/capture/linux/video_capture_device_chromeos.h",
+    "video/capture/linux/video_capture_device_factory_linux.cc",
+    "video/capture/linux/video_capture_device_factory_linux.h",
+    "video/capture/linux/video_capture_device_linux.cc",
+    "video/capture/linux/video_capture_device_linux.h",
+    "video/capture/mac/platform_video_capturing_mac.h",
+    "video/capture/mac/video_capture_device_avfoundation_mac.h",
+    "video/capture/mac/video_capture_device_avfoundation_mac.mm",
+    "video/capture/mac/video_capture_device_decklink_mac.h",
+    "video/capture/mac/video_capture_device_decklink_mac.mm",
+    "video/capture/mac/video_capture_device_factory_mac.h",
+    "video/capture/mac/video_capture_device_factory_mac.mm",
+    "video/capture/mac/video_capture_device_mac.h",
+    "video/capture/mac/video_capture_device_mac.mm",
+    "video/capture/mac/video_capture_device_qtkit_mac.h",
+    "video/capture/mac/video_capture_device_qtkit_mac.mm",
+    "video/capture/video_capture_device.cc",
+    "video/capture/video_capture_device.h",
+    "video/capture/video_capture_device_factory.cc",
+    "video/capture/video_capture_device_factory.h",
+    "video/capture/video_capture_device_info.cc",
+    "video/capture/video_capture_device_info.h",
+    "video/capture/win/capability_list_win.cc",
+    "video/capture/win/capability_list_win.h",
+    "video/capture/win/filter_base_win.cc",
+    "video/capture/win/filter_base_win.h",
+    "video/capture/win/pin_base_win.cc",
+    "video/capture/win/pin_base_win.h",
+    "video/capture/win/sink_filter_observer_win.h",
+    "video/capture/win/sink_filter_win.cc",
+    "video/capture/win/sink_filter_win.h",
+    "video/capture/win/sink_input_pin_win.cc",
+    "video/capture/win/sink_input_pin_win.h",
+    "video/capture/win/video_capture_device_factory_win.cc",
+    "video/capture/win/video_capture_device_factory_win.h",
+    "video/capture/win/video_capture_device_mf_win.cc",
+    "video/capture/win/video_capture_device_mf_win.h",
+    "video/capture/win/video_capture_device_win.cc",
+    "video/capture/win/video_capture_device_win.h",
+    "video/fake_video_encode_accelerator.cc",
+    "video/fake_video_encode_accelerator.h",
+    "video/gpu_memory_buffer_video_frame_pool.cc",
+    "video/gpu_memory_buffer_video_frame_pool.h",
+    "video/h264_poc.cc",
+    "video/h264_poc.h",
+    "video/jpeg_decode_accelerator.cc",
+    "video/jpeg_decode_accelerator.h",
+    "video/picture.cc",
+    "video/picture.h",
+    "video/video_decode_accelerator.cc",
+    "video/video_decode_accelerator.h",
+    "video/video_encode_accelerator.cc",
+    "video/video_encode_accelerator.h",
+  ]
+
+  configs += [
+    ":media_config",
+    ":media_implementation",
+
+    # TODO(wolenetz): Fix size_t to int trunctaion in win64.
+    # See http://crbug.com/171009
+    "//build/config/compiler:no_size_t_to_int_warning",
+  ]
+  all_dependent_configs = [ ":media_dependent_config" ]
+
+  allow_circular_includes_from = []
+  cflags = []
+  libs = []
+  defines = []
+  deps = []
+
+  include_dirs = [ "." ]
+  if (media_use_ffmpeg) {
+    deps += [ "//third_party/ffmpeg" ]
+    sources += [
+      "ffmpeg/ffmpeg_common.cc",
+      "ffmpeg/ffmpeg_common.h",
+      "filters/audio_file_reader.cc",
+      "filters/audio_file_reader.h",
+      "filters/blocking_url_protocol.cc",
+      "filters/blocking_url_protocol.h",
+      "filters/ffmpeg_audio_decoder.cc",
+      "filters/ffmpeg_audio_decoder.h",
+      "filters/ffmpeg_bitstream_converter.h",
+      "filters/ffmpeg_demuxer.cc",
+      "filters/ffmpeg_demuxer.h",
+      "filters/ffmpeg_glue.cc",
+      "filters/ffmpeg_glue.h",
+      "filters/ffmpeg_video_decoder.cc",
+      "filters/ffmpeg_video_decoder.h",
+      "filters/in_memory_url_protocol.cc",
+      "filters/in_memory_url_protocol.h",
+    ]
+    if (proprietary_codecs) {
+      sources += [
+        "filters/ffmpeg_aac_bitstream_converter.cc",
+        "filters/ffmpeg_aac_bitstream_converter.h",
+        "filters/ffmpeg_h264_to_annex_b_bitstream_converter.cc",
+        "filters/ffmpeg_h264_to_annex_b_bitstream_converter.h",
+      ]
+    }
+  }
+
+  if (current_cpu == "arm" && arm_use_neon) {
+    defines += [ "USE_NEON" ]
+  }
+
+  if (media_use_libvpx) {
+    sources += [
+      "filters/vpx_video_decoder.cc",
+      "filters/vpx_video_decoder.h",
+    ]
+    deps += [ "//third_party/libvpx" ]
+  }
+
+  if (is_android) {
+    sources += [
+      "video/capture/android/video_capture_device_android.cc",
+      "video/capture/android/video_capture_device_android.h",
+      "video/capture/android/video_capture_device_factory_android.cc",
+      "video/capture/android/video_capture_device_factory_android.h",
+    ]
+    deps += [
+      "//media/base/android",
+      "//media/base/android:media_jni_headers",
+      "//media/base/android:video_capture_jni_headers",
+    ]
+    allow_circular_includes_from = [ "//media/base/android" ]
+  } else {
+    sources += [
+      "filters/opus_audio_decoder.cc",
+      "filters/opus_audio_decoder.h",
+    ]
+  }
+
+  if (current_cpu != "arm" && is_chromeos) {
+    sources += [
+      "filters/h264_bitstream_buffer.cc",
+      "filters/h264_bitstream_buffer.h",
+    ]
+  }
+
+  # A simple WebM encoder for animated avatars on ChromeOS.
+
+  if (use_ozone) {
+    # Used for the generated listing header (ui/ozone/platform_list.h)
+    include_dirs += [ target_gen_dir ]
+
+    sources += [
+                 "ozone/media_ozone_platform.cc",
+                 "ozone/media_ozone_platform.h",
+               ] + get_target_outputs(":generate_ozone_constructor_list")
+
+    deps += [
+      ":generate_ozone_constructor_list",
+      "//ui/ozone",
+    ]
+  }
+
+  if (is_mac) {
+    deps += [
+      "//media/base/mac",
+      "//third_party/decklink",
+    ]
+    libs += [
+      "CoreVideo.framework",
+      "OpenGL.framework",
+      "QTKit.framework",
+    ]
+  }
+
+  if (is_openbsd) {
+    sources -= [
+      "video/capture/linux/v4l2_capture_delegate_multi_plane.cc",
+      "video/capture/linux/v4l2_capture_delegate_multi_plane.h",
+    ]
+  }
+
+  if (is_ios) {
+    deps += [ "//media/base/mac" ]
+  }
+
+  if (is_win) {
+    deps += [ "//media/base/win" ]
+    libs += [
+      "mf.lib",
+      "mfplat.lib",
+      "mfreadwrite.lib",
+      "mfuuid.lib",
+    ]
+  }
+
+  if (proprietary_codecs) {
+    sources += [
+      "cdm/cenc_utils.cc",
+      "cdm/cenc_utils.h",
+      "filters/h264_to_annex_b_bitstream_converter.cc",
+      "filters/h264_to_annex_b_bitstream_converter.h",
+      "formats/mp2t/es_adapter_video.cc",
+      "formats/mp2t/es_adapter_video.h",
+      "formats/mp2t/es_parser.cc",
+      "formats/mp2t/es_parser.h",
+      "formats/mp2t/es_parser_adts.cc",
+      "formats/mp2t/es_parser_adts.h",
+      "formats/mp2t/es_parser_h264.cc",
+      "formats/mp2t/es_parser_h264.h",
+      "formats/mp2t/es_parser_mpeg1audio.cc",
+      "formats/mp2t/es_parser_mpeg1audio.h",
+      "formats/mp2t/mp2t_common.h",
+      "formats/mp2t/mp2t_stream_parser.cc",
+      "formats/mp2t/mp2t_stream_parser.h",
+      "formats/mp2t/timestamp_unroller.cc",
+      "formats/mp2t/timestamp_unroller.h",
+      "formats/mp2t/ts_packet.cc",
+      "formats/mp2t/ts_packet.h",
+      "formats/mp2t/ts_section.h",
+      "formats/mp2t/ts_section_pat.cc",
+      "formats/mp2t/ts_section_pat.h",
+      "formats/mp2t/ts_section_pes.cc",
+      "formats/mp2t/ts_section_pes.h",
+      "formats/mp2t/ts_section_pmt.cc",
+      "formats/mp2t/ts_section_pmt.h",
+      "formats/mp2t/ts_section_psi.cc",
+      "formats/mp2t/ts_section_psi.h",
+      "formats/mp4/aac.cc",
+      "formats/mp4/aac.h",
+      "formats/mp4/avc.cc",
+      "formats/mp4/avc.h",
+      "formats/mp4/box_definitions.cc",
+      "formats/mp4/box_definitions.h",
+      "formats/mp4/box_reader.cc",
+      "formats/mp4/box_reader.h",
+      "formats/mp4/cenc.cc",
+      "formats/mp4/cenc.h",
+      "formats/mp4/es_descriptor.cc",
+      "formats/mp4/es_descriptor.h",
+      "formats/mp4/mp4_stream_parser.cc",
+      "formats/mp4/mp4_stream_parser.h",
+      "formats/mp4/sample_to_group_iterator.cc",
+      "formats/mp4/sample_to_group_iterator.h",
+      "formats/mp4/track_run_iterator.cc",
+      "formats/mp4/track_run_iterator.h",
+      "formats/mpeg/adts_constants.cc",
+      "formats/mpeg/adts_constants.h",
+      "formats/mpeg/adts_stream_parser.cc",
+      "formats/mpeg/adts_stream_parser.h",
+      "formats/mpeg/mpeg1_audio_stream_parser.cc",
+      "formats/mpeg/mpeg1_audio_stream_parser.h",
+      "formats/mpeg/mpeg_audio_stream_parser_base.cc",
+      "formats/mpeg/mpeg_audio_stream_parser_base.h",
+    ]
+  }
+
+  public_deps = [
+    "//media/base",
+    "//media/audio",
+  ]
+
+  deps += [
+    ":shared_memory_support",
+    "//base",
+    "//base:i18n",
+    "//base/third_party/dynamic_annotations",
+    "//crypto",
+    "//crypto:platform",  # TODO(ajwong): This used to be provided by crypto.gyp via export_dependent_settings
+    "//gpu/command_buffer/common",
+    "//skia",
+    "//third_party/libyuv",
+    "//third_party/opus",
+    "//ui/events:events_base",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//url",
+  ]
+}
+
+# Minimal media component for media/cast on iOS.
+if (is_ios) {
+  component("media_for_cast_ios") {
+    configs += [
+      ":media_config",
+      ":media_implementation",
+    ]
+    all_dependent_configs = [ ":media_dependent_config" ]
+    include_dirs = [ "." ]
+    libs = [ "CoreVideo.framework" ]
+
+    deps = [
+      ":shared_memory_support",
+      "//base",
+      "//gpu/command_buffer/common",
+      "//media/base:base_for_cast_ios",
+      "//media/base/mac",
+      "//ui/gfx/geometry",
+    ]
+  }
+}
+
+test("media_unittests") {
+  sources = [
+    "blink/skcanvas_video_renderer_unittest.cc",
+    "capture/animated_content_sampler_unittest.cc",
+    "capture/capture_resolution_chooser_unittest.cc",
+    "capture/feedback_signal_accumulator_unittest.cc",
+    "capture/smooth_event_sampler_unittest.cc",
+    "capture/video_capture_oracle_unittest.cc",
+    "cdm/aes_decryptor_unittest.cc",
+    "cdm/json_web_key_unittest.cc",
+    "filters/audio_clock_unittest.cc",
+    "filters/audio_decoder_selector_unittest.cc",
+    "filters/audio_renderer_algorithm_unittest.cc",
+    "filters/chunk_demuxer_unittest.cc",
+    "filters/decrypting_audio_decoder_unittest.cc",
+    "filters/decrypting_demuxer_stream_unittest.cc",
+    "filters/decrypting_video_decoder_unittest.cc",
+    "filters/fake_video_decoder.cc",
+    "filters/fake_video_decoder.h",
+    "filters/fake_video_decoder_unittest.cc",
+    "filters/file_data_source_unittest.cc",
+    "filters/frame_processor_unittest.cc",
+    "filters/h264_bit_reader_unittest.cc",
+    "filters/h264_parser_unittest.cc",
+    "filters/jpeg_parser_unittest.cc",
+    "filters/source_buffer_stream_unittest.cc",
+    "filters/video_cadence_estimator_unittest.cc",
+    "filters/video_decoder_selector_unittest.cc",
+    "filters/video_frame_stream_unittest.cc",
+    "filters/video_renderer_algorithm_unittest.cc",
+    "filters/vp8_bool_decoder_unittest.cc",
+    "filters/vp8_parser_unittest.cc",
+    "formats/common/offset_byte_queue_unittest.cc",
+    "formats/webm/cluster_builder.cc",
+    "formats/webm/cluster_builder.h",
+    "formats/webm/opus_packet_builder.cc",
+    "formats/webm/opus_packet_builder.h",
+    "formats/webm/tracks_builder.cc",
+    "formats/webm/tracks_builder.h",
+    "formats/webm/webm_cluster_parser_unittest.cc",
+    "formats/webm/webm_content_encodings_client_unittest.cc",
+    "formats/webm/webm_parser_unittest.cc",
+    "formats/webm/webm_tracks_parser_unittest.cc",
+    "formats/webm/webm_webvtt_parser_unittest.cc",
+    "renderers/audio_renderer_impl_unittest.cc",
+    "renderers/renderer_impl_unittest.cc",
+    "renderers/video_renderer_impl_unittest.cc",
+    "video/capture/fake_video_capture_device_unittest.cc",
+    "video/capture/video_capture_device_unittest.cc",
+    "video/h264_poc_unittest.cc",
+  ]
+
+  # TODO(wolenetz): Fix size_t to int trunctaion in win64.
+  # See http://crbug.com/171009
+  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+
+  deps = [
+    ":media",
+    ":test_support",
+    "//base/allocator",
+    "//base/test:test_support",
+    "//media/audio:unittests",
+    "//media/audio:test_support",
+    "//media/base:unittests",
+    "//media/base:test_support",
+    "//media/test:pipeline_integration_tests",
+    "//skia",  # Direct dependency required to inherit config.
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/widevine/cdm:version_h",
+    "//ui/gfx:test_support",
+    "//url",
+  ]
+
+  if (is_android) {
+    isolate_file = "media_unittests.isolate"
+    deps += [
+      "//media/base/android",
+      # TODO(GYP)
+      #"//testing/android/native_test:native_test_native_code"
+    ]
+  }
+
+  if (media_use_ffmpeg) {
+    sources += [
+      "ffmpeg/ffmpeg_common_unittest.cc",
+      "filters/audio_decoder_unittest.cc",
+      "filters/audio_file_reader_unittest.cc",
+      "filters/blocking_url_protocol_unittest.cc",
+      "filters/ffmpeg_demuxer_unittest.cc",
+      "filters/ffmpeg_glue_unittest.cc",
+      "filters/ffmpeg_video_decoder_unittest.cc",
+      "filters/in_memory_url_protocol_unittest.cc",
+    ]
+  }
+
+  if (current_cpu != "arm" && is_chromeos) {
+    sources += [ "filters/h264_bitstream_buffer_unittest.cc" ]
+  }
+
+  if (proprietary_codecs) {
+    sources += [
+      "cdm/cenc_utils_unittest.cc",
+      "filters/h264_to_annex_b_bitstream_converter_unittest.cc",
+      "formats/common/stream_parser_test_base.cc",
+      "formats/common/stream_parser_test_base.h",
+      "formats/mp2t/es_adapter_video_unittest.cc",
+      "formats/mp2t/es_parser_adts_unittest.cc",
+      "formats/mp2t/es_parser_h264_unittest.cc",
+      "formats/mp2t/es_parser_mpeg1audio_unittest.cc",
+      "formats/mp2t/es_parser_test_base.cc",
+      "formats/mp2t/es_parser_test_base.h",
+      "formats/mp2t/mp2t_stream_parser_unittest.cc",
+      "formats/mp2t/timestamp_unroller_unittest.cc",
+      "formats/mp4/aac_unittest.cc",
+      "formats/mp4/avc_unittest.cc",
+      "formats/mp4/box_reader_unittest.cc",
+      "formats/mp4/es_descriptor_unittest.cc",
+      "formats/mp4/mp4_stream_parser_unittest.cc",
+      "formats/mp4/sample_to_group_iterator_unittest.cc",
+      "formats/mp4/track_run_iterator_unittest.cc",
+      "formats/mpeg/adts_stream_parser_unittest.cc",
+      "formats/mpeg/mpeg1_audio_stream_parser_unittest.cc",
+    ]
+    if (media_use_ffmpeg) {
+      sources += [
+        "filters/ffmpeg_aac_bitstream_converter_unittest.cc",
+        "filters/ffmpeg_h264_to_annex_b_bitstream_converter_unittest.cc",
+      ]
+    }
+  }
+
+  if (is_mac || is_ios) {
+    deps += [ "//media/base/mac" ]
+  }
+
+  if (is_mac) {
+    sources +=
+        [ "video/capture/mac/video_capture_device_factory_mac_unittest.mm" ]
+  }
+
+  #      include_dirs += [
+  #        # Needed by media_drm_bridge.cc.
+  #        target_gen_dir,
+  #      ],
+
+  configs += [ ":media_config" ]
+
+  if (media_use_ffmpeg) {
+    deps += [ "//third_party/ffmpeg" ]  # Direct dependency required to inherit config.
+  }
+}
+
+test("media_perftests") {
+  configs += [ ":media_config" ]
+  deps = [
+    ":media",
+    ":shared_memory_support",
+    ":test_support",
+    "//base/test:test_support",
+    "//media/audio:test_support",
+    "//media/base:perftests",
+    "//media/base:test_support",
+    "//media/test:pipeline_integration_perftests",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//testing/perf",
+    "//third_party/widevine/cdm:version_h",
+    "//ui/gfx:test_support",
+  ]
+  if (is_android) {
+    deps += [ "//ui/gl" ]
+    isolate_file = "media_perftests.isolate"
+  }
+  if (media_use_ffmpeg) {
+    deps += [ "//third_party/ffmpeg" ]  # Direct dependency required to inherit config.
+  }
+}
+
+# For running the subset of media_unittests that might require audio hardware
+# separately on GPU bots. media_unittests includes these too.
+test("audio_unittests") {
+  sources = [
+    "base/run_all_unittests.cc",
+  ]
+  deps = [
+    ":test_support",
+    "//base/test:test_support",
+    "//media/audio:unittests",
+    "//ui/gfx:test_support",
+  ]
+}
+
+source_set("test_support") {
+  testonly = true
+  sources = [
+    "renderers/mock_gpu_video_accelerator_factories.cc",
+    "renderers/mock_gpu_video_accelerator_factories.h",
+    "video/mock_video_decode_accelerator.cc",
+    "video/mock_video_decode_accelerator.h",
+  ]
+  deps = [
+    ":media",
+    ":shared_memory_support",
+    "//base",
+    "//skia",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}
+
+# TODO(dalecurtis): How to split this across audio/base directories??
+component("shared_memory_support") {
+  sources = [
+    "audio/audio_parameters.cc",
+    "audio/audio_parameters.h",
+    "base/audio_bus.cc",
+    "base/audio_bus.h",
+    "base/channel_layout.cc",
+    "base/channel_layout.h",
+    "base/limits.h",
+    "base/media_export.h",
+    "base/vector_math.cc",
+    "base/vector_math.h",
+  ]
+  configs += [
+    ":media_config",
+    ":media_implementation",
+  ]
+  deps = [
+    "//base",
+  ]
+}
+
+if (media_use_ffmpeg) {
+  test("ffmpeg_regression_tests") {
+    sources = [
+      "base/run_all_unittests.cc",
+      "ffmpeg/ffmpeg_regression_tests.cc",
+    ]
+
+    configs += [ "//media:media_config" ]
+
+    deps = [
+      "//base/test:test_support",
+      "//media",
+      "//media:test_support",
+      "//media/audio:test_support",
+      "//media/base:test_support",
+      "//media/test:pipeline_integration_tests",
+      "//testing/gmock",
+      "//testing/gtest",
+      "//third_party/ffmpeg",
+      "//ui/gfx/geometry",
+      "//ui/gfx:test_support",
+    ]
+  }
+}

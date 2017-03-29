@@ -1,0 +1,28 @@
+include_rules = [
+  "-android_webview",
+  "+android_webview/common",
+  "+android_webview/renderer",
+
+  "+components/autofill/content/renderer",
+  "+components/cdm/renderer",
+  "+components/printing/common",
+  "+components/printing/renderer",
+  "+components/visitedlink/renderer",
+
+  "+content/public/child",
+  "+content/public/renderer",
+
+  "+media/base",
+
+  "+printing",
+
+  "+third_party/WebKit/public/platform",
+  "+third_party/WebKit/public/web",
+
+  "+third_party/widevine/cdm/widevine_cdm_common.h",
+
+  "+ui/gfx",
+  "+ui/gl/gpu_memory_buffer.h",
+
+  "+v8/include/v8.h",
+]

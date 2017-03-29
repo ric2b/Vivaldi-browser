@@ -1,0 +1,80 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+static_library("browser") {
+  sources = [
+    "about_signin_internals.cc",
+    "about_signin_internals.h",
+    "account_fetcher_service.cc",
+    "account_fetcher_service.h",
+    "account_reconcilor.cc",
+    "account_reconcilor.h",
+    "account_tracker_service.cc",
+    "account_tracker_service.h",
+    "device_activity_fetcher.cc",
+    "device_activity_fetcher.h",
+    "gaia_cookie_manager_service.cc",
+    "gaia_cookie_manager_service.h",
+    "profile_oauth2_token_service.cc",
+    "profile_oauth2_token_service.h",
+    "refresh_token_annotation_request.cc",
+    "refresh_token_annotation_request.h",
+    "signin_client.h",
+    "signin_cookie_changed_subscription.cc",
+    "signin_cookie_changed_subscription.h",
+    "signin_error_controller.cc",
+    "signin_error_controller.h",
+    "signin_internals_util.cc",
+    "signin_internals_util.h",
+    "signin_manager.cc",
+    "signin_manager.h",
+    "signin_manager_base.cc",
+    "signin_manager_base.h",
+    "signin_manager_cookie_helper.cc",
+    "signin_manager_cookie_helper.h",
+    "signin_metrics.cc",
+    "signin_metrics.h",
+    "signin_tracker.cc",
+    "signin_tracker.h",
+    "webdata/token_service_table.cc",
+    "webdata/token_service_table.h",
+    "webdata/token_web_data.cc",
+    "webdata/token_web_data.h",
+  ]
+
+  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+
+  deps = [
+    "//base",
+    "//crypto",
+    "//google_apis",
+    "//net",
+    "//sql",
+    "//third_party/icu",
+    "//components/content_settings/core/browser",
+    "//components/content_settings/core/common",
+    "//components/keyed_service/core",
+    "//components/os_crypt",
+    "//components/webdata/common",
+  ]
+
+  if (is_chromeos) {
+    sources -= [ "signin_manager.cc" ]
+  }
+}
+
+static_library("test_support") {
+  testonly = true
+  sources = [
+    "fake_auth_status_provider.cc",
+    "fake_auth_status_provider.h",
+    "test_signin_client.cc",
+    "test_signin_client.h",
+  ]
+
+  deps = [
+    ":browser",
+    "//testing/gtest",
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "Platform App Launch Test",
+  "version": "1",
+  "file_handlers": {
+    "image": {
+      "extensions": [
+        "png"
+      ]
+    }
+  },
+  "app": {
+    "background": {
+      "scripts": ["test.js"]
+    }
+  }
+}

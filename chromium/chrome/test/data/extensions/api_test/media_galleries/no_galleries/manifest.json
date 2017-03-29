@@ -1,0 +1,11 @@
+{
+  "name": "chrome.mediaGalleries.no_galleries",
+  "version": "0.1",
+  "description": "Test that without the allGalleries permission, no galleries are present.",
+  "app": {
+    "background": {
+      "scripts": ["test.js"]
+    }
+  },
+  "permissions": [{"mediaGalleries": ["read", "delete", "copyTo"]}]
+}

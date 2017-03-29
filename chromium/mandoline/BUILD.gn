@@ -1,0 +1,44 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+group("all") {
+  # Meta-target, don't link into production code.
+  testonly = true
+
+  deps = [
+    ":tests",
+  ]
+
+  if (!is_component_build) {
+    deps += [ "//mandoline/app" ]
+  }
+}
+
+group("tests") {
+  testonly = true
+  deps = [
+    "//mojo:tests",
+  ]
+
+  if (is_linux) {
+    deps += [ "//tools/xdisplaycheck" ]
+  }
+
+  # TODO(GYP): Make this work.
+  if (!is_component_build && !is_mac) {
+    deps += [
+      "//components/clipboard:apptests",
+      "//components/filesystem:apptests",
+      "//components/html_viewer:apptests",
+      "//components/html_viewer:html_viewer_unittests",
+      "//components/resource_provider:apptests",
+      "//components/resource_provider:resource_provider_unittests",
+      "//components/view_manager:tests",
+      "//mandoline/tab:mandoline_frame_apptests",
+      "//mandoline/ui/browser:mandoline_browser_apptests",
+      "//media/mojo/services:tests",
+      "//sql/mojo:apptests",
+    ]
+  }
+}

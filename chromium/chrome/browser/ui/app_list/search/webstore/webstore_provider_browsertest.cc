@@ -1,0 +1,350 @@
+// Copyright 2013 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include <string>
+
+#include "base/basictypes.h"
+#include "base/bind.h"
+#include "base/command_line.h"
+#include "base/memory/scoped_ptr.h"
+#include "base/run_loop.h"
+#include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/app_list/search/webstore/webstore_provider.h"
+#include "chrome/browser/ui/app_list/search/webstore/webstore_result.h"
+#include "chrome/common/chrome_switches.h"
+#include "chrome/test/base/in_process_browser_test.h"
+#include "content/public/browser/browser_thread.h"
+#include "extensions/common/extension.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/test/embedded_test_server/http_request.h"
+#include "net/test/embedded_test_server/http_response.h"
+#include "ui/app_list/app_list_switches.h"
+#include "ui/app_list/search_result.h"
+
+using content::BrowserThread;
+using extensions::Manifest;
+using net::test_server::BasicHttpResponse;
+using net::test_server::HttpRequest;
+using net::test_server::HttpResponse;
+using net::test_server::EmbeddedTestServer;
+
+namespace app_list {
+namespace test {
+namespace {
+
+// Mock results.
+const char kOneResult[] =
+    "{"
+    "\"search_url\": \"http://host/search\","
+    "\"results\":["
+    "  {"
+    "    \"id\": \"app1_id\","
+    "    \"localized_name\": \"Fun App\","
+    "    \"icon_url\": \"http://host/icon\","
+    "    \"is_paid\": false"
+    "  }"
+    "]}";
+
+const char kThreeResults[] =
+    "{"
+    "\"search_url\": \"http://host/search\","
+    "\"results\":["
+    "  {"
+    "    \"id\": \"app1_id\","
+    "    \"localized_name\": \"Mystery App\","
+    "    \"icon_url\": \"http://host/icon1\","
+    "    \"is_paid\": true,"
+    "    \"item_type\": \"PLATFORM_APP\""
+    "  },"
+    "  {"
+    "    \"id\": \"app2_id\","
+    "    \"localized_name\": \"App Mystère\","
+    "    \"icon_url\": \"http://host/icon2\","
+    "    \"is_paid\": false,"
+    "    \"item_type\": \"HOSTED_APP\""
+    "  },"
+    "  {"
+    "    \"id\": \"app3_id\","
+    "    \"localized_name\": \"Mistero App\","
+    "    \"icon_url\": \"http://host/icon3\","
+    "    \"is_paid\": false,"
+    "    \"item_type\": \"LEGACY_PACKAGED_APP\""
+    "  }"
+    "]}";
+
+struct ParsedSearchResult {
+  const char* id;
+  const char* title;
+  const char* icon_url;
+  bool is_paid;
+  Manifest::Type item_type;
+  size_t num_actions;
+};
+
+// Expected results from a search for "fun" on kOneResult.
+ParsedSearchResult kParsedOneResult[] = {{"app1_id",
+                                          "[Fun] App",
+                                          "http://host/icon",
+                                          false,
+                                          Manifest::TYPE_UNKNOWN,
+                                          1}};
+
+// Expected results from a search for "app" on kThreeResults.
+ParsedSearchResult kParsedThreeResultsApp[] = {
+    {"app1_id",
+     "Mystery [App]",
+     "http://host/icon1",
+     true,
+     Manifest::TYPE_PLATFORM_APP,
+     1},
+    {"app2_id",
+     "[App] Mystère",
+     "http://host/icon2",
+     false,
+     Manifest::TYPE_HOSTED_APP,
+     1},
+    {"app3_id",
+     "Mistero [App]",
+     "http://host/icon3",
+     false,
+     Manifest::TYPE_LEGACY_PACKAGED_APP,
+     1}};
+
+// Expected results from a search for "myst" on kThreeResults.
+ParsedSearchResult kParsedThreeResultsMyst[] = {{"app1_id",
+                                                 "[Myst]ery App",
+                                                 "http://host/icon1",
+                                                 true,
+                                                 Manifest::TYPE_PLATFORM_APP,
+                                                 1},
+                                                {"app2_id",
+                                                 "App [Myst]ère",
+                                                 "http://host/icon2",
+                                                 false,
+                                                 Manifest::TYPE_HOSTED_APP,
+                                                 1}};
+
+}  // namespace
+
+class WebstoreProviderTest : public InProcessBrowserTest {
+ public:
+  WebstoreProviderTest() {}
+  ~WebstoreProviderTest() override {}
+
+  // InProcessBrowserTest overrides:
+  void SetUpOnMainThread() override {
+    test_server_.reset(new EmbeddedTestServer);
+
+    ASSERT_TRUE(test_server_->InitializeAndWaitUntilReady());
+    test_server_->RegisterRequestHandler(
+        base::Bind(&WebstoreProviderTest::HandleRequest,
+                   base::Unretained(this)));
+    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+        ::switches::kAppsGalleryURL, test_server_->base_url().spec());
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        switches::kEnableExperimentalAppList);
+
+    webstore_provider_.reset(new WebstoreProvider(
+        ProfileManager::GetActiveUserProfile(), nullptr));
+    webstore_provider_->set_webstore_search_fetched_callback(
+        base::Bind(&WebstoreProviderTest::OnSearchResultsFetched,
+                   base::Unretained(this)));
+    // TODO(mukai): add test cases for throttling.
+    webstore_provider_->set_use_throttling(false);
+  }
+
+  void TearDownOnMainThread() override {
+    EXPECT_TRUE(test_server_->ShutdownAndWaitUntilComplete());
+    test_server_.reset();
+  }
+
+  void RunQuery(const std::string& query,
+                const std::string& mock_server_response) {
+    mock_server_response_ = mock_server_response;
+    webstore_provider_->Start(false, base::UTF8ToUTF16(query));
+
+    if (webstore_provider_->query_pending_ && !mock_server_response.empty()) {
+      DCHECK(!run_loop_);
+      run_loop_.reset(new base::RunLoop);
+      run_loop_->Run();
+      run_loop_.reset();
+
+      mock_server_response_.clear();
+    }
+
+    webstore_provider_->Stop();
+  }
+
+  std::string GetResultTitles() const {
+    std::string results;
+    for (SearchProvider::Results::const_iterator it =
+             webstore_provider_->results().begin();
+         it != webstore_provider_->results().end();
+         ++it) {
+      if (!results.empty())
+        results += ',';
+      results += base::UTF16ToUTF8((*it)->title());
+    }
+    return results;
+  }
+
+  void VerifyResults(const ParsedSearchResult* expected_results,
+                     size_t expected_result_size) {
+    ASSERT_EQ(expected_result_size, webstore_provider_->results().size());
+    for (size_t i = 0; i < expected_result_size; ++i) {
+      const SearchResult* result = webstore_provider_->results()[i];
+      EXPECT_EQ(extensions::Extension::GetBaseURLFromExtensionId(
+                    expected_results[i].id).spec(),
+                result->id());
+      EXPECT_EQ(std::string(expected_results[i].title),
+                app_list::SearchResult::TagsDebugString(
+                    base::UTF16ToUTF8(result->title()), result->title_tags()));
+
+      // Ensure the number of action buttons is appropriate for the item type.
+      EXPECT_EQ(expected_results[i].num_actions, result->actions().size());
+
+      const WebstoreResult* webstore_result =
+          static_cast<const WebstoreResult*>(result);
+      EXPECT_EQ(expected_results[i].id, webstore_result->app_id());
+      EXPECT_EQ(expected_results[i].icon_url,
+                webstore_result->icon_url().spec());
+      EXPECT_EQ(expected_results[i].is_paid, webstore_result->is_paid());
+      EXPECT_EQ(expected_results[i].item_type, webstore_result->item_type());
+    }
+  }
+
+  void RunQueryAndVerify(const std::string& query,
+                         const std::string& mock_server_response,
+                         const ParsedSearchResult* expected_results,
+                         size_t expected_result_size) {
+    RunQuery(query, mock_server_response);
+    VerifyResults(expected_results, expected_result_size);
+  }
+
+  WebstoreProvider* webstore_provider() { return webstore_provider_.get(); }
+
+ private:
+  scoped_ptr<HttpResponse> HandleRequest(const HttpRequest& request) {
+    scoped_ptr<BasicHttpResponse> response(new BasicHttpResponse);
+
+    if (request.relative_url.find("/jsonsearch?") != std::string::npos) {
+      if (mock_server_response_ == "ERROR_NOT_FOUND") {
+        response->set_code(net::HTTP_NOT_FOUND);
+      } else if (mock_server_response_ == "ERROR_INTERNAL_SERVER_ERROR") {
+        response->set_code(net::HTTP_INTERNAL_SERVER_ERROR);
+      } else {
+        response->set_code(net::HTTP_OK);
+        response->set_content(mock_server_response_);
+      }
+    }
+
+    return response.Pass();
+  }
+
+  void OnSearchResultsFetched() {
+    if (run_loop_)
+      run_loop_->Quit();
+  }
+
+  scoped_ptr<EmbeddedTestServer> test_server_;
+  scoped_ptr<base::RunLoop> run_loop_;
+
+  std::string mock_server_response_;
+
+  scoped_ptr<WebstoreProvider> webstore_provider_;
+
+  DISALLOW_COPY_AND_ASSIGN(WebstoreProviderTest);
+};
+
+IN_PROC_BROWSER_TEST_F(WebstoreProviderTest, Basic) {
+  struct {
+    const char* query;
+    const char* mock_server_response;
+    const char* expected_result_titles;
+    const ParsedSearchResult* expected_results;
+    size_t expected_result_size;
+  } kTestCases[] = {
+      // Note: If a search results in an error, or returns 0 results, we expect
+      // the webstore provider to leave a placeholder "search in web store"
+      // result with the same title as the search query. So all cases where
+      // |expected_result_titles| == |query| means we are expecting an error.
+
+      // A search that returns 0 results.
+      {"synchronous", "", "synchronous", nullptr, 0},
+      // Getting an error response from the server (note: the responses
+      // "ERROR_NOT_FOUND" and "ERROR_INTERNAL_SERVER_ERROR" are treated
+      // specially by HandleResponse).
+      {"404", "ERROR_NOT_FOUND", "404", nullptr, 0},
+      {"500", "ERROR_INTERNAL_SERVER_ERROR", "500", nullptr, 0},
+      // Getting bad JSON from the server.
+      {"bad json", "invalid json", "bad json", nullptr, 0},
+      // Good results. Note that the search term appears in all of the result
+      // titles.
+      {"fun", kOneResult, "Fun App", kParsedOneResult, 1},
+      {"app",
+       kThreeResults,
+       "Mystery App,App Mystère,Mistero App",
+       kParsedThreeResultsApp,
+       3},
+      // Search where one of the results does not include the query term. Only
+      // the results with a title matching the query should be selected.
+      {"myst",
+       kThreeResults,
+       "Mystery App,App Mystère",
+       kParsedThreeResultsMyst,
+       2},
+  };
+
+  for (size_t i = 0; i < arraysize(kTestCases); ++i) {
+    if (kTestCases[i].expected_result_titles) {
+      RunQuery(kTestCases[i].query, kTestCases[i].mock_server_response);
+      EXPECT_EQ(kTestCases[i].expected_result_titles, GetResultTitles())
+          << "Case " << i << ": q=" << kTestCases[i].query;
+
+      if (kTestCases[i].expected_results) {
+        VerifyResults(kTestCases[i].expected_results,
+                      kTestCases[i].expected_result_size);
+      }
+    }
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(WebstoreProviderTest, NoSearchForSensitiveData) {
+  // None of the following input strings should be accepted because they may
+  // contain private data.
+  const char* inputs[] = {
+      // file: scheme is bad.
+      "file://filename",
+      "FILE://filename",
+      // URLs with usernames, ports, queries or refs are bad.
+      "http://username:password@hostname/",
+      "http://www.example.com:1000",
+      "http://foo:1000",
+      "http://hostname/?query=q",
+      "http://hostname/path#ref",
+      // A https URL with path is bad.
+      "https://hostname/path",
+  };
+
+  for (size_t i = 0; i < arraysize(inputs); ++i) {
+    RunQueryAndVerify(inputs[i], kOneResult, nullptr, 0);
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(WebstoreProviderTest, NoSearchForShortQueries) {
+  RunQueryAndVerify("f", kOneResult, nullptr, 0);
+  RunQueryAndVerify("fu", kOneResult, nullptr, 0);
+  RunQueryAndVerify("fun", kOneResult, kParsedOneResult, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(WebstoreProviderTest, SearchCache) {
+  RunQueryAndVerify("fun", kOneResult, kParsedOneResult, 1);
+
+  // No result is provided but the provider gets the result from the cache.
+  RunQueryAndVerify("fun", "", kParsedOneResult, 1);
+}
+
+}  // namespace test
+}  // namespace app_list

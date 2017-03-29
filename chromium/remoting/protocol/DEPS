@@ -1,0 +1,13 @@
+include_rules = [
+  "+google/protobuf",
+  "+jingle/glue",
+  "+net",
+  "+ppapi/c",
+  "+ppapi/cpp",
+  "+ppapi/utility",
+  "+remoting/codec",
+  "+remoting/signaling",
+  "+third_party/libjingle",
+  "+third_party/webrtc",
+  "+third_party/protobuf/src",
+]

@@ -1,0 +1,4 @@
+include_rules = [
+  "+third_party/mojo/src/mojo/public",
+  "+third_party/mojo/src/mojo/edk/embedder",
+]

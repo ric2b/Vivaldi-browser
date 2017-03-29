@@ -1,0 +1,11 @@
+{
+  "name": "system.cpu test",
+  "version": "1.0",
+  "description": "Test system.cpu API",
+  "permissions": ["system.cpu"],
+  "app": {
+    "background": {
+      "scripts": ["test_cpu_api.js"]
+    }
+  }
+}

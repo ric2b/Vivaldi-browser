@@ -1,0 +1,89 @@
+#!/bin/bash -p
+
+# Copyright (c) 2012 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Using codesign, sign the contents of the versioned directory. Namely, this
+# includes the framework and helper app. After signing, the signatures are
+# verified.
+
+set -eu
+
+# Environment sanitization. Set a known-safe PATH. Clear environment variables
+# that might impact the interpreter's operation. The |bash -p| invocation
+# on the #! line takes the bite out of BASH_ENV, ENV, and SHELLOPTS (among
+# other features), but clearing them here ensures that they won't impact any
+# shell scripts used as utility programs. SHELLOPTS is read-only and can't be
+# unset, only unexported.
+export PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+unset BASH_ENV CDPATH ENV GLOBIGNORE IFS POSIXLY_CORRECT
+export -n SHELLOPTS
+
+ME="$(basename "${0}")"
+readonly ME
+
+if [[ ${#} -ne 3 ]]; then
+  echo "usage: ${ME} app_path codesign_keychain codesign_id" >& 2
+  exit 1
+fi
+
+app_path="${1}"
+codesign_keychain="${2}"
+codesign_id="${3}"
+
+# Hack since GYP seems to remove duplicate arguments in actions
+if [ "$codesign_keychain" == "--same--" ]; then
+  codesign_keychain="${codesign_id}"
+fi
+
+versioned_dir="${app_path}/Contents/Versions/@VERSION@"
+
+# An .app bundle to be signed can be signed directly. Normally, signing a
+# framework bundle requires that each version within be signed individually.
+# http://developer.apple.com/mac/library/technotes/tn2007/tn2206.html#TNTAG13
+# In Chrome's case, the framework bundle is unversioned, so it too can be
+# signed directly. See copy_framework_unversioned.sh.
+
+framework="${versioned_dir}/@MAC_PRODUCT_NAME@ Framework.framework"
+crashpad_handler="${framework}/Helpers/crashpad_handler"
+helper_app="${versioned_dir}/@MAC_PRODUCT_NAME@ Helper.app"
+helper_eh_app="${versioned_dir}/@MAC_PRODUCT_NAME@ Helper EH.app"
+helper_np_app="${versioned_dir}/@MAC_PRODUCT_NAME@ Helper NP.app"
+sparkle_framework="${app_path}/Contents/Frameworks/Sparkle.framework"
+
+requirement_suffix="\
+"
+
+codesign -f --sign "${codesign_id}" --keychain "${codesign_keychain}" \
+    "${crashpad_handler}" \
+    -r="designated => identifier \"crashpad_handler\" \
+${requirement_suffix}"
+codesign -f --sign "${codesign_id}" --keychain "${codesign_keychain}" \
+    "${framework}" \
+    -r="designated => identifier \"com.vivaldi.Vivaldi.framework\" \
+${requirement_suffix}"
+codesign -f --sign "${codesign_id}" --keychain "${codesign_keychain}" \
+    "${helper_app}" \
+    -r="designated => identifier \"com.vivaldi.Vivaldi.helper\" \
+${requirement_suffix}"
+codesign -f --sign "${codesign_id}" --keychain "${codesign_keychain}" \
+    "${helper_eh_app}" \
+    -r="designated => identifier \"com.vivaldi.Vivaldi.helper.EH\" \
+${requirement_suffix}"
+codesign -f --sign "${codesign_id}" --keychain "${codesign_keychain}" \
+    "${helper_np_app}" \
+    -r="designated => identifier \"com.vivaldi.Vivaldi.helper.NP\" \
+${requirement_suffix}"
+codesign -f --sign "${codesign_id}" --keychain "${codesign_keychain}" \
+    "${sparkle_framework}" \
+    -r="designated => identifier \"org.andymatuschak.Sparkle\" \
+${requirement_suffix}"
+
+# Verify everything. Don't use --deep on the framework because Keystone's
+# signature is in a transitional state (radar 18474911).
+codesign --verify --deep "${crashpad_handler}"
+codesign --verify "${framework}"
+codesign --verify --deep "${helper_app}"
+codesign --verify --deep "${helper_eh_app}"
+codesign --verify --deep "${helper_np_app}"

@@ -1,0 +1,44 @@
+// Copyright (c) 2015 Vivaldi. All rights reserved.
+[
+  {
+    "namespace": "uizoom",
+    "description": "Use the <code>chrome.uizoom</code> to zoom the Vivaldi html UI.",
+    "functions": [
+      {
+        "name": "setVivaldiUIZoom",
+        "type": "function",
+        "parameters": [
+          {
+            "type": "number",
+            "name": "zoomFactor",
+            "description": "The new Vivaldi UI zoom factor."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "description": "Called after the zoom message has been sent to the guest process.",
+            "optional": true,
+            "parameters": [ ]
+          }
+        ]
+      },
+      {
+        "name": "getVivaldiUIZoom",
+        "type": "function",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "zoomLevel",
+            "description": "The zoom level.",
+            "parameters": [
+              {
+                "name": "zoomlevel",
+                "type": "number"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

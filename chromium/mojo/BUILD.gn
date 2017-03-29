@@ -1,0 +1,51 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+
+group("mojo") {
+  # Meta-target, don't link into production code.
+  testonly = true
+  deps = [
+    ":tests",
+    "//mojo/common",
+    "//mojo/services",
+    "//third_party/mojo/src/mojo/public",
+  ]
+
+  if (is_android) {
+    deps += [ "//mojo/android" ]
+  }
+
+  if (!is_component_build) {
+    deps += [ "//mojo/runner" ]
+  }
+}
+
+group("tests") {
+  testonly = true
+  deps = [
+    "//ipc/mojo:ipc_mojo_unittests",
+    "//mojo/application/public/cpp/tests:mojo_public_application_unittests",
+    "//mojo/common:mojo_common_unittests",
+    "//mojo/converters/surfaces/tests:mojo_surfaces_lib_unittests",
+    "//third_party/mojo/src/mojo/edk/js/test:js_unittests",
+    "//third_party/mojo/src/mojo/edk/system:mojo_message_pipe_perftests",
+    "//third_party/mojo/src/mojo/edk/system:mojo_system_unittests",
+    "//third_party/mojo/src/mojo/edk/test:mojo_public_bindings_unittests",
+    "//third_party/mojo/src/mojo/edk/test:mojo_public_environment_unittests",
+    "//third_party/mojo/src/mojo/edk/test:mojo_public_system_perftests",
+    "//third_party/mojo/src/mojo/edk/test:mojo_public_system_unittests",
+    "//third_party/mojo/src/mojo/edk/test:mojo_public_utility_unittests",
+  ]
+
+  if (!is_component_build) {
+    deps += [
+      "//mojo/runner:apptests",
+      "//mojo/runner:mojo_runner_unittests",
+      "//mojo/services/network:apptests",
+      "//mojo/shell:mojo_shell_unittests",
+    ]
+  }
+}

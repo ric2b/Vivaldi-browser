@@ -1,0 +1,3337 @@
+{
+  "add_to_dictionary": {
+    "message": "Tambahkan ke kamus"
+  },
+  "add_to_personal_dictionary": {
+    "message": "Tambahkan ke kamus pribadi"
+  },
+  "add_word_to_dictionary": {
+    "message": "Tambah \"$1\" ke kamus",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "advanced": {
+    "message": "Lanjutan"
+  },
+  "alt": {
+    "message": "alter"
+  },
+  "altgr": {
+    "message": "Alt Graphic"
+  },
+  "always_auto_correct": {
+    "message": "Agresif"
+  },
+  "am_phonetic_arm_settings_page": {
+    "message": "Laman Setelan Keyboard Fonetik Armenia"
+  },
+  "appnamejpkeyboard": {
+    "message": "Google Masukan Jepang (untuk keyboard Jepang)"
+  },
+  "appnameuskeyboard": {
+    "message": "Google Masukan Jepang (untuk keyboard AS)"
+  },
+  "auto_correction_level": {
+    "message": "Koreksi otomatis"
+  },
+  "backspace": {
+    "message": "backspace"
+  },
+  "basic": {
+    "message": "Dasar-Dasar"
+  },
+  "be_fra_settings_page": {
+    "message": "Laman Setelan Keyboard Belgia (Prancis)"
+  },
+  "be_ger_settings_page": {
+    "message": "Laman Setelan Keyboard Belgia (Jerman)"
+  },
+  "be_nld_settings_page": {
+    "message": "Laman Setelan Keyboard Belgia (Belanda)"
+  },
+  "bg_bul_settings_page": {
+    "message": "Laman Setelan Keyboard Bulgar"
+  },
+  "bg_phonetic_bul_settings_page": {
+    "message": "Laman Setelan Keyboard Fonetik Bulgar"
+  },
+  "br_por_settings_page": {
+    "message": "Laman Setelan Keyboard Brasil (Brasil Portugis)"
+  },
+  "by_bel_settings_page": {
+    "message": "Laman Setelan Keyboard Belarus"
+  },
+  "ca_eng_eng_settings_page": {
+    "message": "Laman Setelan Keyboard Inggris Kanada (Inggris)"
+  },
+  "ca_fra_settings_page": {
+    "message": "Laman Setelan Keyboard Prancis Kanada (Prancis)"
+  },
+  "ca_multix_fra_settings_page": {
+    "message": "Laman Setelan Keyboard Multibahasa Kanada (Prancis)"
+  },
+  "capital": {
+    "message": "kapital"
+  },
+  "capslock": {
+    "message": "capslock"
+  },
+  "ch_fr_fra_settings_page": {
+    "message": "Laman Setelan Keyboard Prancis Swiss (Prancis)"
+  },
+  "ch_ger_settings_page": {
+    "message": "Laman Setelan Keyboard Swiss (Jerman)"
+  },
+  "chos_inputtool_description": {
+    "message": "Google Input Tools untuk Chrome OS memungkinkan Anda mengetik dalam bahasa yang diinginkan pada Chrome OS."
+  },
+  "chos_inputtool_title": {
+    "message": "Google Input Tools"
+  },
+  "compositionmodedirect": {
+    "message": "Masukan langsung"
+  },
+  "compositionmodefullascii": {
+    "message": "Latin Lebar"
+  },
+  "compositionmodefullkatakana": {
+    "message": "Katakana"
+  },
+  "compositionmodehalfascii": {
+    "message": "Latin"
+  },
+  "compositionmodehalfkatakana": {
+    "message": "Katakana lebar separuh"
+  },
+  "compositionmodehiragana": {
+    "message": "Hiragana"
+  },
+  "configbasicstitle": {
+    "message": "Dasar-Dasar"
+  },
+  "configclearhistory": {
+    "message": "Hapus data hasil personalisasi..."
+  },
+  "configclearhistorycancelbutton": {
+    "message": "Batal"
+  },
+  "configclearhistoryconversionhistory": {
+    "message": "Riwayat konversi"
+  },
+  "configclearhistorymessage": {
+    "message": "Hapus item berikut:"
+  },
+  "configclearhistoryokbutton": {
+    "message": "Hapus data hasil personalisasi"
+  },
+  "configclearhistorysuggestionhistory": {
+    "message": "Riwayat saran"
+  },
+  "configclearhistorytitle": {
+    "message": "Hapus data hasil personalisasi"
+  },
+  "configcreditsdescription": {
+    "message": "Hak cipta \u00a9 2013 Google Inc. Semua Hak Dilindungi Undang-Undang."
+  },
+  "configdialogcancel": {
+    "message": "Batal"
+  },
+  "configdialogok": {
+    "message": "Oke"
+  },
+  "configdictionarytoolbutton": {
+    "message": "Kelola kamus pengguna..."
+  },
+  "configdictionarytooldescription": {
+    "message": "Tambahkan kata-kata Anda sendiri ke kamus pengguna untuk menyesuaikan kandidat konversi."
+  },
+  "configdictionarytooltitle": {
+    "message": "Kamus pengguna"
+  },
+  "configincognitomode": {
+    "message": "Nonaktifkan konversi dan saran serta kamus pengguna hasil personalisasi"
+  },
+  "configinputassistancetitle": {
+    "message": "Bantuan masukan"
+  },
+  "configosscreditsdescription": {
+    "message": "Perangkat lunak ini diwujudkan oleh <a href=\"./credits_en.html\">perangkat lunak sumber terbuka</a>."
+  },
+  "configpreeditmethod": {
+    "message": "Mode masukan:"
+  },
+  "configpreeditmethodkana": {
+    "message": "Kana"
+  },
+  "configpreeditmethodromaji": {
+    "message": "Romaji"
+  },
+  "configprivacytitle": {
+    "message": "Privasi"
+  },
+  "configpunctuationmethod": {
+    "message": "Gaya tanda baca:"
+  },
+  "configselectionshortcut": {
+    "message": "Pintasan pilihan:"
+  },
+  "configselectionshortcutno": {
+    "message": "Tidak ada pintasan"
+  },
+  "configsessionkeymap": {
+    "message": "Gaya keymap:"
+  },
+  "configsessionkeymapatok": {
+    "message": "ATOK"
+  },
+  "configsessionkeymapchromeos": {
+    "message": "Chrome OS"
+  },
+  "configsessionkeymapcustom": {
+    "message": "Keymap khusus"
+  },
+  "configsessionkeymapkotoeri": {
+    "message": "Kotoeri"
+  },
+  "configsessionkeymapmsime": {
+    "message": "MS-IME"
+  },
+  "configsettingstitle": {
+    "message": "Setelan masukan Jepang"
+  },
+  "configshiftkeymodeswitch": {
+    "message": "Sakelar mode tombol shift:"
+  },
+  "configshiftkeymodeswitchalphanumeric": {
+    "message": "Alfanumerik"
+  },
+  "configshiftkeymodeswitchkatakana": {
+    "message": "Katakana"
+  },
+  "configshiftkeymodeswitchoff": {
+    "message": "Nonaktif"
+  },
+  "configspacecharacterform": {
+    "message": "Gaya masukan spasi:"
+  },
+  "configspacecharacterformfollow": {
+    "message": "Ikuti mode masukan"
+  },
+  "configspacecharacterformfull": {
+    "message": "Lebar penuh"
+  },
+  "configspacecharacterformhalf": {
+    "message": "Lebar separuh"
+  },
+  "configsuggestionssize": {
+    "message": "Jumlah saran:"
+  },
+  "configsuggesttitle": {
+    "message": "Sarankan"
+  },
+  "configsymbolmethod": {
+    "message": "Gaya simbol:"
+  },
+  "configuploadusagestats": {
+    "message": "Otomatis kirim statistik penggunaan dan laporan kerusakan ke Google"
+  },
+  "configuseautoimeturnoff": {
+    "message": "Alihkan ke lebar separuh secara otomatis"
+  },
+  "configusedictionarysuggest": {
+    "message": "Gunakan kamus sistem"
+  },
+  "configusehistorysuggest": {
+    "message": "Gunakan riwayat masukan"
+  },
+  "ctrl": {
+    "message": "ctrl"
+  },
+  "current_keyboard_prefix": {
+    "message": "keyboard yang dipilih saat ini "
+  },
+  "current_lang": {
+    "message": "Bahasa masukan adalah China"
+  },
+  "current_punc": {
+    "message": "Lebar tanda baca Penuh"
+  },
+  "current_sbc": {
+    "message": "Lebar karakter Penuh"
+  },
+  "cz_cze_settings_page": {
+    "message": "Laman Setelan Keyboard Cheska"
+  },
+  "cz_qwerty_cze_settings_page": {
+    "message": "Laman Setelan Keyboard Qwerty Cheska"
+  },
+  "d83c_dc04": {
+    "message": "Ubin mahyong"
+  },
+  "d83c_dccf": {
+    "message": "kartu Joker"
+  },
+  "d83c_dd70": {
+    "message": "golongan darah A"
+  },
+  "d83c_dd71": {
+    "message": "golongan darah B"
+  },
+  "d83c_dd7e": {
+    "message": "golongan darah O"
+  },
+  "d83c_dd7f": {
+    "message": "parkir"
+  },
+  "d83c_dd8e": {
+    "message": "golongan darah AB"
+  },
+  "d83c_dd91": {
+    "message": "CL"
+  },
+  "d83c_dd92": {
+    "message": "wajah keren"
+  },
+  "d83c_dd93": {
+    "message": "gratis"
+  },
+  "d83c_dd94": {
+    "message": "ID"
+  },
+  "d83c_dd95": {
+    "message": "Baru"
+  },
+  "d83c_dd96": {
+    "message": "NG"
+  },
+  "d83c_dd97": {
+    "message": "Oke"
+  },
+  "d83c_dd98": {
+    "message": "SOS"
+  },
+  "d83c_dd99": {
+    "message": "KE ATAS!"
+  },
+  "d83c_dd9a": {
+    "message": "lawan"
+  },
+  "d83c_de01": {
+    "message": "Kata dalam bahasa Jepang \u00e2\u20ac\u02dcdi sini\u00e2\u20ac\u2122"
+  },
+  "d83c_de02": {
+    "message": "Kata dalam bahasa Jepang \u00e2\u20ac\u02dclayanan\u00e2\u20ac\u2122"
+  },
+  "d83c_de1a": {
+    "message": "Kata dalam bahasa Jepang 'gratis'"
+  },
+  "d83c_de2f": {
+    "message": "Kata dalam bahasa Jepang 'dipesan'"
+  },
+  "d83c_de32": {
+    "message": "Kata dalam bahasa Jepang \u00e2\u20ac\u02dcdilarang\u00e2\u20ac\u2122"
+  },
+  "d83c_de33": {
+    "message": "Kata dalam bahasa China 'ruang tersedia'"
+  },
+  "d83c_de34": {
+    "message": "Kata dalam bahasa China 'lewati'"
+  },
+  "d83c_de35": {
+    "message": "Kata dalam bahasa China 'penuh'"
+  },
+  "d83c_de36": {
+    "message": "Kata dalam bahasa Jepang 'biaya'"
+  },
+  "d83c_de37": {
+    "message": "Kata dalam bahasa Jepang 'bulanan'"
+  },
+  "d83c_de38": {
+    "message": "Kata dalam bahasa China 'aplikasi'"
+  },
+  "d83c_de39": {
+    "message": "Kata dalam bahasa Jepang 'diskon'"
+  },
+  "d83c_de3a": {
+    "message": "Kata dalam bahasa China 'dalam bisnis'"
+  },
+  "d83c_de50": {
+    "message": "Kata dalam bahasa Jepang 'manfaat'"
+  },
+  "d83c_de51": {
+    "message": "Kata dalam bahasa China 'disetujui'"
+  },
+  "d83c_df00": {
+    "message": "topan"
+  },
+  "d83c_df01": {
+    "message": "berkabut"
+  },
+  "d83c_df02": {
+    "message": "payung"
+  },
+  "d83c_df03": {
+    "message": "bintang malam"
+  },
+  "d83c_df04": {
+    "message": "matahari terbit di balik gunung"
+  },
+  "d83c_df05": {
+    "message": "matahari terbit"
+  },
+  "d83c_df06": {
+    "message": "kota saat senja"
+  },
+  "d83c_df07": {
+    "message": "matahari terbenam"
+  },
+  "d83c_df08": {
+    "message": "pelangi"
+  },
+  "d83c_df09": {
+    "message": "jembatan di malam hari"
+  },
+  "d83c_df0a": {
+    "message": "ombak"
+  },
+  "d83c_df0b": {
+    "message": "gunung berapi"
+  },
+  "d83c_df0c": {
+    "message": "Bimasakti"
+  },
+  "d83c_df0d": {
+    "message": "peta Eropa-Afrika dalam globe"
+  },
+  "d83c_df0e": {
+    "message": "peta Amerika dalam globe"
+  },
+  "d83c_df0f": {
+    "message": "peta Asia-Australia dalam globe"
+  },
+  "d83c_df10": {
+    "message": "globe dengan garis meridian"
+  },
+  "d83c_df11": {
+    "message": "bulan baru"
+  },
+  "d83c_df12": {
+    "message": "bulan sabit"
+  },
+  "d83c_df13": {
+    "message": "bulan sabit"
+  },
+  "d83c_df14": {
+    "message": "bulan lebih separuh"
+  },
+  "d83c_df15": {
+    "message": "bulan purnama"
+  },
+  "d83c_df16": {
+    "message": "bulan akan menghilang"
+  },
+  "d83c_df17": {
+    "message": "bulan separuh"
+  },
+  "d83c_df18": {
+    "message": "bulan sabit menghilang"
+  },
+  "d83c_df19": {
+    "message": "bulan sabit"
+  },
+  "d83c_df1a": {
+    "message": "wajah bulan baru"
+  },
+  "d83c_df1b": {
+    "message": "wajah bulan sabit"
+  },
+  "d83c_df1c": {
+    "message": "wajah bulan separuh"
+  },
+  "d83c_df1d": {
+    "message": "wajah bulan purnama"
+  },
+  "d83c_df1e": {
+    "message": "wajah matahari"
+  },
+  "d83c_df1f": {
+    "message": "bintang bersinar"
+  },
+  "d83c_df20": {
+    "message": "bintang jatuh"
+  },
+  "d83c_df30": {
+    "message": "kastanye"
+  },
+  "d83c_df31": {
+    "message": "tanaman muda"
+  },
+  "d83c_df32": {
+    "message": "pohon cemara"
+  },
+  "d83c_df33": {
+    "message": "pohon besar"
+  },
+  "d83c_df34": {
+    "message": "kelapa sawit"
+  },
+  "d83c_df35": {
+    "message": "kaktus"
+  },
+  "d83c_df37": {
+    "message": "bunga tulip"
+  },
+  "d83c_df38": {
+    "message": "sakura"
+  },
+  "d83c_df39": {
+    "message": "mawar"
+  },
+  "d83c_df3a": {
+    "message": "kembang sepatu"
+  },
+  "d83c_df3b": {
+    "message": "bunga matahari"
+  },
+  "d83c_df3c": {
+    "message": "mekar"
+  },
+  "d83c_df3d": {
+    "message": "jagung"
+  },
+  "d83c_df3e": {
+    "message": "padi"
+  },
+  "d83c_df3f": {
+    "message": "daun-daunan"
+  },
+  "d83c_df40": {
+    "message": "semanggi berdaun empat"
+  },
+  "d83c_df41": {
+    "message": "daun maple"
+  },
+  "d83c_df42": {
+    "message": "daun berjatuhan"
+  },
+  "d83c_df43": {
+    "message": "daun tertiup angin"
+  },
+  "d83c_df44": {
+    "message": "jamur"
+  },
+  "d83c_df45": {
+    "message": "tomat"
+  },
+  "d83c_df46": {
+    "message": "terong"
+  },
+  "d83c_df47": {
+    "message": "anggur"
+  },
+  "d83c_df48": {
+    "message": "melon"
+  },
+  "d83c_df49": {
+    "message": "semangka"
+  },
+  "d83c_df4a": {
+    "message": "jeruk keprok"
+  },
+  "d83c_df4b": {
+    "message": "lemon"
+  },
+  "d83c_df4c": {
+    "message": "pisang"
+  },
+  "d83c_df4d": {
+    "message": "nanas"
+  },
+  "d83c_df4e": {
+    "message": "apel merah"
+  },
+  "d83c_df4f": {
+    "message": "apel hijau"
+  },
+  "d83c_df50": {
+    "message": "pir"
+  },
+  "d83c_df51": {
+    "message": "pir"
+  },
+  "d83c_df52": {
+    "message": "ceri"
+  },
+  "d83c_df53": {
+    "message": "stroberi"
+  },
+  "d83c_df54": {
+    "message": "hamburger"
+  },
+  "d83c_df55": {
+    "message": "irisan pizza"
+  },
+  "d83c_df56": {
+    "message": "daging"
+  },
+  "d83c_df57": {
+    "message": "paha ayam"
+  },
+  "d83c_df58": {
+    "message": "kraker beras"
+  },
+  "d83c_df59": {
+    "message": "bola nasi"
+  },
+  "d83c_df5a": {
+    "message": "nasi"
+  },
+  "d83c_df5b": {
+    "message": "kari dan nasi"
+  },
+  "d83c_df5c": {
+    "message": "ramen"
+  },
+  "d83c_df5d": {
+    "message": "spageti"
+  },
+  "d83c_df5e": {
+    "message": "roti"
+  },
+  "d83c_df5f": {
+    "message": "kentang goreng"
+  },
+  "d83c_df60": {
+    "message": "kentang panggang"
+  },
+  "d83c_df61": {
+    "message": "mochi"
+  },
+  "d83c_df62": {
+    "message": "oden"
+  },
+  "d83c_df63": {
+    "message": "sushi"
+  },
+  "d83c_df64": {
+    "message": "udang goreng"
+  },
+  "d83c_df65": {
+    "message": "kue ikan"
+  },
+  "d83c_df66": {
+    "message": "es krim lembut"
+  },
+  "d83c_df67": {
+    "message": "es serut"
+  },
+  "d83c_df68": {
+    "message": "es krim"
+  },
+  "d83c_df69": {
+    "message": "kue donat"
+  },
+  "d83c_df6a": {
+    "message": "biskuit"
+  },
+  "d83c_df6b": {
+    "message": "cokelat"
+  },
+  "d83c_df6c": {
+    "message": "permen"
+  },
+  "d83c_df6d": {
+    "message": "lolipop"
+  },
+  "d83c_df6e": {
+    "message": "puding"
+  },
+  "d83c_df6f": {
+    "message": "wadah madu"
+  },
+  "d83c_df70": {
+    "message": "irisan kue"
+  },
+  "d83c_df71": {
+    "message": "bento"
+  },
+  "d83c_df72": {
+    "message": "rebusan"
+  },
+  "d83c_df73": {
+    "message": "wajan"
+  },
+  "d83c_df74": {
+    "message": "garpu dan pisau"
+  },
+  "d83c_df75": {
+    "message": "cangkir teh"
+  },
+  "d83c_df76": {
+    "message": "sake"
+  },
+  "d83c_df77": {
+    "message": "anggur"
+  },
+  "d83c_df78": {
+    "message": "koktail"
+  },
+  "d83c_df79": {
+    "message": "minuman tropis"
+  },
+  "d83c_df7a": {
+    "message": "bir"
+  },
+  "d83c_df7b": {
+    "message": "gelas bir"
+  },
+  "d83c_df7c": {
+    "message": "botol bayi"
+  },
+  "d83c_df80": {
+    "message": "pita"
+  },
+  "d83c_df81": {
+    "message": "hadiah"
+  },
+  "d83c_df82": {
+    "message": "kue ulang tahun"
+  },
+  "d83c_df83": {
+    "message": "jack-o-lantern"
+  },
+  "d83c_df84": {
+    "message": "pohon natal"
+  },
+  "d83c_df85": {
+    "message": "sinterklas"
+  },
+  "d83c_df86": {
+    "message": "kembang api"
+  },
+  "d83c_df87": {
+    "message": "kembang api"
+  },
+  "d83c_df88": {
+    "message": "balon"
+  },
+  "d83c_df89": {
+    "message": "penyemarak pesta"
+  },
+  "d83c_df8a": {
+    "message": "hiasan pesta"
+  },
+  "d83c_df8b": {
+    "message": "pohon dari guntingan kertas"
+  },
+  "d83c_df8c": {
+    "message": "dua bendera saling menyilang"
+  },
+  "d83c_df8d": {
+    "message": "dekorasi pinus"
+  },
+  "d83c_df8e": {
+    "message": "boneka"
+  },
+  "d83c_df8f": {
+    "message": "layangan ikan"
+  },
+  "d83c_df90": {
+    "message": "hiasan angin"
+  },
+  "d83c_df91": {
+    "message": "pemandangan bulan"
+  },
+  "d83c_df92": {
+    "message": "tas sekolah"
+  },
+  "d83c_df93": {
+    "message": "topi wisuda"
+  },
+  "d83c_dfa0": {
+    "message": "korsel"
+  },
+  "d83c_dfa1": {
+    "message": "bianglala"
+  },
+  "d83c_dfa2": {
+    "message": "rollercoaster"
+  },
+  "d83c_dfa3": {
+    "message": "memancing"
+  },
+  "d83c_dfa4": {
+    "message": "mik"
+  },
+  "d83c_dfa5": {
+    "message": "kamera film"
+  },
+  "d83c_dfa6": {
+    "message": "film"
+  },
+  "d83c_dfa7": {
+    "message": "headphone"
+  },
+  "d83c_dfa8": {
+    "message": "palet cat"
+  },
+  "d83c_dfa9": {
+    "message": "topi tinggi"
+  },
+  "d83c_dfaa": {
+    "message": "sirkus"
+  },
+  "d83c_dfab": {
+    "message": "tiket"
+  },
+  "d83c_dfac": {
+    "message": "papan sutradara"
+  },
+  "d83c_dfad": {
+    "message": "topeng"
+  },
+  "d83c_dfae": {
+    "message": "game video"
+  },
+  "d83c_dfaf": {
+    "message": "sasaran"
+  },
+  "d83c_dfb0": {
+    "message": "mesin slot"
+  },
+  "d83c_dfb1": {
+    "message": "biliar"
+  },
+  "d83c_dfb2": {
+    "message": "main game"
+  },
+  "d83c_dfb3": {
+    "message": "boling"
+  },
+  "d83c_dfb4": {
+    "message": "kartu permainan"
+  },
+  "d83c_dfb5": {
+    "message": "not balok"
+  },
+  "d83c_dfb6": {
+    "message": "beberapa not balok"
+  },
+  "d83c_dfb7": {
+    "message": "saksofon"
+  },
+  "d83c_dfb8": {
+    "message": "gitar"
+  },
+  "d83c_dfb9": {
+    "message": "piano"
+  },
+  "d83c_dfba": {
+    "message": "terompet"
+  },
+  "d83c_dfbb": {
+    "message": "biola"
+  },
+  "d83c_dfbc": {
+    "message": "notasi balok"
+  },
+  "d83c_dfbd": {
+    "message": "kaos berlari"
+  },
+  "d83c_dfbe": {
+    "message": "tenis"
+  },
+  "d83c_dfbf": {
+    "message": "ski"
+  },
+  "d83c_dfc0": {
+    "message": "bola basket"
+  },
+  "d83c_dfc1": {
+    "message": "bendera kotak"
+  },
+  "d83c_dfc2": {
+    "message": "ski salju"
+  },
+  "d83c_dfc3": {
+    "message": "pelari"
+  },
+  "d83c_dfc4": {
+    "message": "selancar"
+  },
+  "d83c_dfc6": {
+    "message": "piala"
+  },
+  "d83c_dfc7": {
+    "message": "balap kuda"
+  },
+  "d83c_dfc8": {
+    "message": "sepak bola Amerika"
+  },
+  "d83c_dfc9": {
+    "message": "sepak bola"
+  },
+  "d83c_dfca": {
+    "message": "perenang"
+  },
+  "d83c_dfe0": {
+    "message": "rumah"
+  },
+  "d83c_dfe1": {
+    "message": "home"
+  },
+  "d83c_dfe2": {
+    "message": "gedung perkantoran"
+  },
+  "d83c_dfe3": {
+    "message": "kantor pos Jepang"
+  },
+  "d83c_dfe4": {
+    "message": "kantor pos Eropa"
+  },
+  "d83c_dfe5": {
+    "message": "rumah sakit"
+  },
+  "d83c_dfe6": {
+    "message": "bank"
+  },
+  "d83c_dfe7": {
+    "message": "ATM"
+  },
+  "d83c_dfe8": {
+    "message": "hotel"
+  },
+  "d83c_dfe9": {
+    "message": "hotel cinta"
+  },
+  "d83c_dfea": {
+    "message": "toko kelontong"
+  },
+  "d83c_dfeb": {
+    "message": "sekolah"
+  },
+  "d83c_dfec": {
+    "message": "toserba"
+  },
+  "d83c_dfed": {
+    "message": "pabrik"
+  },
+  "d83c_dfee": {
+    "message": "lentera merah"
+  },
+  "d83c_dfef": {
+    "message": "istana Jepang"
+  },
+  "d83c_dff0": {
+    "message": "kastel Eropa"
+  },
+  "d83d_dc00": {
+    "message": "Tikus"
+  },
+  "d83d_dc01": {
+    "message": "Tikus"
+  },
+  "d83d_dc02": {
+    "message": "Lembu"
+  },
+  "d83d_dc03": {
+    "message": "kerbau"
+  },
+  "d83d_dc04": {
+    "message": "sapi"
+  },
+  "d83d_dc06": {
+    "message": "macan tulul"
+  },
+  "d83d_dc07": {
+    "message": "kelinci"
+  },
+  "d83d_dc08": {
+    "message": "kucing"
+  },
+  "d83d_dc09": {
+    "message": "naga"
+  },
+  "d83d_dc0a": {
+    "message": "buaya"
+  },
+  "d83d_dc0b": {
+    "message": "ikan paus"
+  },
+  "d83d_dc0c": {
+    "message": "siput"
+  },
+  "d83d_dc0d": {
+    "message": "ular"
+  },
+  "d83d_dc0e": {
+    "message": "kuda"
+  },
+  "d83d_dc0f": {
+    "message": "domba jantan"
+  },
+  "d83d_dc10": {
+    "message": "kambing"
+  },
+  "d83d_dc11": {
+    "message": "domba"
+  },
+  "d83d_dc12": {
+    "message": "monyet"
+  },
+  "d83d_dc13": {
+    "message": "ayam jantan"
+  },
+  "d83d_dc14": {
+    "message": "ayam"
+  },
+  "d83d_dc15": {
+    "message": "anjing"
+  },
+  "d83d_dc16": {
+    "message": "babi"
+  },
+  "d83d_dc17": {
+    "message": "babi jantan"
+  },
+  "d83d_dc18": {
+    "message": "gajah"
+  },
+  "d83d_dc19": {
+    "message": "gurita"
+  },
+  "d83d_dc1a": {
+    "message": "kerang"
+  },
+  "d83d_dc1b": {
+    "message": "serangga"
+  },
+  "d83d_dc1c": {
+    "message": "semut"
+  },
+  "d83d_dc1d": {
+    "message": "lebah madu"
+  },
+  "d83d_dc1e": {
+    "message": "kumbang"
+  },
+  "d83d_dc1f": {
+    "message": "ikan"
+  },
+  "d83d_dc20": {
+    "message": "ikan tropis"
+  },
+  "d83d_dc21": {
+    "message": "ikan buntal"
+  },
+  "d83d_dc22": {
+    "message": "kura-kura"
+  },
+  "d83d_dc23": {
+    "message": "ayam menetas"
+  },
+  "d83d_dc24": {
+    "message": "wajah ayam kecil"
+  },
+  "d83d_dc25": {
+    "message": "ayam kecil"
+  },
+  "d83d_dc26": {
+    "message": "burung"
+  },
+  "d83d_dc27": {
+    "message": "penguin"
+  },
+  "d83d_dc28": {
+    "message": "koala"
+  },
+  "d83d_dc29": {
+    "message": "pudel"
+  },
+  "d83d_dc2a": {
+    "message": "satu punuk unta"
+  },
+  "d83d_dc2b": {
+    "message": "dua punuk unta"
+  },
+  "d83d_dc2c": {
+    "message": "ikan lumba-lumba"
+  },
+  "d83d_dc2d": {
+    "message": "wajah tikus"
+  },
+  "d83d_dc2e": {
+    "message": "wajah sapi"
+  },
+  "d83d_dc2f": {
+    "message": "wajah harimau"
+  },
+  "d83d_dc30": {
+    "message": "wajah kelinci"
+  },
+  "d83d_dc31": {
+    "message": "wajah kucing"
+  },
+  "d83d_dc32": {
+    "message": "wajah naga"
+  },
+  "d83d_dc33": {
+    "message": "semburan paus"
+  },
+  "d83d_dc34": {
+    "message": "wajah kuda"
+  },
+  "d83d_dc35": {
+    "message": "wajah monyet"
+  },
+  "d83d_dc36": {
+    "message": "wajah anjing"
+  },
+  "d83d_dc37": {
+    "message": "wajah babi"
+  },
+  "d83d_dc38": {
+    "message": "wajah katak"
+  },
+  "d83d_dc39": {
+    "message": "wajah hamster"
+  },
+  "d83d_dc3a": {
+    "message": "wajah serigala"
+  },
+  "d83d_dc3b": {
+    "message": "wajah beruang"
+  },
+  "d83d_dc3c": {
+    "message": "wajah panda"
+  },
+  "d83d_dc3d": {
+    "message": "hidung babi"
+  },
+  "d83d_dc3e": {
+    "message": "cakar"
+  },
+  "d83d_dc40": {
+    "message": "mata"
+  },
+  "d83d_dc42": {
+    "message": "telinga"
+  },
+  "d83d_dc43": {
+    "message": "hidung"
+  },
+  "d83d_dc44": {
+    "message": "mulut"
+  },
+  "d83d_dc45": {
+    "message": "lidah"
+  },
+  "d83d_dc46": {
+    "message": "jari mengarah ke atas"
+  },
+  "d83d_dc47": {
+    "message": "jari mengarah ke bawah"
+  },
+  "d83d_dc48": {
+    "message": "jari mengarah ke kiri"
+  },
+  "d83d_dc49": {
+    "message": "jari mengarah ke kanan"
+  },
+  "d83d_dc4a": {
+    "message": "mengepalkan tinju"
+  },
+  "d83d_dc4b": {
+    "message": "lambaian tangan"
+  },
+  "d83d_dc4c": {
+    "message": "tanda oke"
+  },
+  "d83d_dc4d": {
+    "message": "jempol"
+  },
+  "d83d_dc4e": {
+    "message": "jempol ke bawah"
+  },
+  "d83d_dc4f": {
+    "message": "tepuk tangan"
+  },
+  "d83d_dc50": {
+    "message": "tangan terbuka"
+  },
+  "d83d_dc51": {
+    "message": "mahkota"
+  },
+  "d83d_dc52": {
+    "message": "topi wanita"
+  },
+  "d83d_dc53": {
+    "message": "kacamata"
+  },
+  "d83d_dc54": {
+    "message": "dasi"
+  },
+  "d83d_dc55": {
+    "message": "kaos oblong"
+  },
+  "d83d_dc56": {
+    "message": "celana panjang"
+  },
+  "d83d_dc57": {
+    "message": "gaun"
+  },
+  "d83d_dc58": {
+    "message": "kimono"
+  },
+  "d83d_dc59": {
+    "message": "bikini"
+  },
+  "d83d_dc5a": {
+    "message": "pakaian wanita"
+  },
+  "d83d_dc5b": {
+    "message": "tas dompet"
+  },
+  "d83d_dc5c": {
+    "message": "tas tangan"
+  },
+  "d83d_dc5d": {
+    "message": "kantong"
+  },
+  "d83d_dc5e": {
+    "message": "sepatu pria"
+  },
+  "d83d_dc5f": {
+    "message": "sepatu atletik"
+  },
+  "d83d_dc60": {
+    "message": "hak tinggi"
+  },
+  "d83d_dc61": {
+    "message": "sandal wanita"
+  },
+  "d83d_dc62": {
+    "message": "sepatu boot wanita"
+  },
+  "d83d_dc63": {
+    "message": "telapak kaki"
+  },
+  "d83d_dc64": {
+    "message": "siluet manusia dari kepala hingga dada"
+  },
+  "d83d_dc65": {
+    "message": "beberapa siluet manusia dari kepala hingga dada"
+  },
+  "d83d_dc66": {
+    "message": "anak laki-laki"
+  },
+  "d83d_dc67": {
+    "message": "anak perempuan"
+  },
+  "d83d_dc68": {
+    "message": "pria"
+  },
+  "d83d_dc69": {
+    "message": "wanita"
+  },
+  "d83d_dc6a": {
+    "message": "keluarga"
+  },
+  "d83d_dc6b": {
+    "message": "pria dan wanita"
+  },
+  "d83d_dc6c": {
+    "message": "dua pria"
+  },
+  "d83d_dc6d": {
+    "message": "dua wanita"
+  },
+  "d83d_dc6e": {
+    "message": "polisi"
+  },
+  "d83d_dc6f": {
+    "message": "cewek kelinci"
+  },
+  "d83d_dc70": {
+    "message": "pengantin wanita"
+  },
+  "d83d_dc71": {
+    "message": "orang berambut pirang"
+  },
+  "d83d_dc72": {
+    "message": "pria mengenakan topi china"
+  },
+  "d83d_dc73": {
+    "message": "pria bersorban"
+  },
+  "d83d_dc74": {
+    "message": "pria yang lebih tua"
+  },
+  "d83d_dc75": {
+    "message": "wanita yang lebih tua"
+  },
+  "d83d_dc76": {
+    "message": "bayi"
+  },
+  "d83d_dc77": {
+    "message": "pekerja konstruksi"
+  },
+  "d83d_dc78": {
+    "message": "puteri"
+  },
+  "d83d_dc79": {
+    "message": "raksasa"
+  },
+  "d83d_dc7a": {
+    "message": "jin"
+  },
+  "d83d_dc7b": {
+    "message": "hantu"
+  },
+  "d83d_dc7c": {
+    "message": "malaikat bayi"
+  },
+  "d83d_dc7d": {
+    "message": "makhluk asing"
+  },
+  "d83d_dc7e": {
+    "message": "monster asing"
+  },
+  "d83d_dc7f": {
+    "message": "setan"
+  },
+  "d83d_dc80": {
+    "message": "tengkorak"
+  },
+  "d83d_dc81": {
+    "message": "meja informasi"
+  },
+  "d83d_dc82": {
+    "message": "pengawal"
+  },
+  "d83d_dc83": {
+    "message": "penari"
+  },
+  "d83d_dc84": {
+    "message": "lipstik"
+  },
+  "d83d_dc85": {
+    "message": "perawatan kuku"
+  },
+  "d83d_dc86": {
+    "message": "pijat wajah"
+  },
+  "d83d_dc87": {
+    "message": "potong rambut"
+  },
+  "d83d_dc88": {
+    "message": "tempat pangkas rambut"
+  },
+  "d83d_dc89": {
+    "message": "suntik"
+  },
+  "d83d_dc8a": {
+    "message": "pil"
+  },
+  "d83d_dc8b": {
+    "message": "bekas ciuman"
+  },
+  "d83d_dc8c": {
+    "message": "surat cinta"
+  },
+  "d83d_dc8d": {
+    "message": "cincin"
+  },
+  "d83d_dc8e": {
+    "message": "batu permata"
+  },
+  "d83d_dc8f": {
+    "message": "cium"
+  },
+  "d83d_dc90": {
+    "message": "buket bunga"
+  },
+  "d83d_dc91": {
+    "message": "pasangan"
+  },
+  "d83d_dc92": {
+    "message": "kapel pernikahan"
+  },
+  "d83d_dc93": {
+    "message": "hati berdenyut"
+  },
+  "d83d_dc94": {
+    "message": "patah hati"
+  },
+  "d83d_dc95": {
+    "message": "dua hati"
+  },
+  "d83d_dc96": {
+    "message": "hati berbunga-bunga"
+  },
+  "d83d_dc97": {
+    "message": "perasaan hati yang bertumbuh"
+  },
+  "d83d_dc98": {
+    "message": "jantung dan panah"
+  },
+  "d83d_dc99": {
+    "message": "hati berwarna biru"
+  },
+  "d83d_dc9a": {
+    "message": "hati berwarna hijau"
+  },
+  "d83d_dc9b": {
+    "message": "hati berwarna kuning"
+  },
+  "d83d_dc9c": {
+    "message": "hati berwarna ungu"
+  },
+  "d83d_dc9d": {
+    "message": "hati dengan pita"
+  },
+  "d83d_dc9e": {
+    "message": "hati yang bergoyang"
+  },
+  "d83d_dc9f": {
+    "message": "hiasan hati"
+  },
+  "d83d_dca0": {
+    "message": "kelopak bunga"
+  },
+  "d83d_dca1": {
+    "message": "bola lampu"
+  },
+  "d83d_dca2": {
+    "message": "marah"
+  },
+  "d83d_dca3": {
+    "message": "bom"
+  },
+  "d83d_dca4": {
+    "message": "simbol mengantuk"
+  },
+  "d83d_dca5": {
+    "message": "tabrakan"
+  },
+  "d83d_dca6": {
+    "message": "cipratan keringat"
+  },
+  "d83d_dca7": {
+    "message": "keringat dingin"
+  },
+  "d83d_dca8": {
+    "message": "berlari"
+  },
+  "d83d_dca9": {
+    "message": "buang kotoran"
+  },
+  "d83d_dcaa": {
+    "message": "bisep"
+  },
+  "d83d_dcab": {
+    "message": "pusing"
+  },
+  "d83d_dcac": {
+    "message": "balon ucapan"
+  },
+  "d83d_dcad": {
+    "message": "balon pikiran"
+  },
+  "d83d_dcae": {
+    "message": "cap bunga"
+  },
+  "d83d_dcaf": {
+    "message": "skor lengkap"
+  },
+  "d83d_dcb0": {
+    "message": "kantong uang"
+  },
+  "d83d_dcb1": {
+    "message": "nilai tukar mata uang"
+  },
+  "d83d_dcb2": {
+    "message": "tanda dolar"
+  },
+  "d83d_dcb3": {
+    "message": "kartu kredit"
+  },
+  "d83d_dcb4": {
+    "message": "uang yen"
+  },
+  "d83d_dcb5": {
+    "message": "uang dolar"
+  },
+  "d83d_dcb6": {
+    "message": "uang Euro"
+  },
+  "d83d_dcb7": {
+    "message": "uang Pound"
+  },
+  "d83d_dcb8": {
+    "message": "uang terbang"
+  },
+  "d83d_dcb9": {
+    "message": "grafik ke atas"
+  },
+  "d83d_dcba": {
+    "message": "kursi"
+  },
+  "d83d_dcbb": {
+    "message": "PC"
+  },
+  "d83d_dcbc": {
+    "message": "koper"
+  },
+  "d83d_dcbd": {
+    "message": "diska mini"
+  },
+  "d83d_dcbe": {
+    "message": "disket"
+  },
+  "d83d_dcbf": {
+    "message": "blu-ray"
+  },
+  "d83d_dcc0": {
+    "message": "DVD"
+  },
+  "d83d_dcc1": {
+    "message": "folder file"
+  },
+  "d83d_dcc2": {
+    "message": "folder terbuka"
+  },
+  "d83d_dcc3": {
+    "message": "dokumen"
+  },
+  "d83d_dcc4": {
+    "message": "dokumen"
+  },
+  "d83d_dcc5": {
+    "message": "kalender"
+  },
+  "d83d_dcc6": {
+    "message": "kalender tersobek"
+  },
+  "d83d_dcc7": {
+    "message": "indeks kartu"
+  },
+  "d83d_dcc8": {
+    "message": "tren meningkat"
+  },
+  "d83d_dcc9": {
+    "message": "tren menurun"
+  },
+  "d83d_dcca": {
+    "message": "grafik batang"
+  },
+  "d83d_dccb": {
+    "message": "papan klip"
+  },
+  "d83d_dccc": {
+    "message": "pin"
+  },
+  "d83d_dccd": {
+    "message": "pin kepala bundar"
+  },
+  "d83d_dcce": {
+    "message": "penjepit kertas"
+  },
+  "d83d_dccf": {
+    "message": "penggaris lurus"
+  },
+  "d83d_dcd0": {
+    "message": "penggaris segitiga"
+  },
+  "d83d_dcd1": {
+    "message": "tab bookmark"
+  },
+  "d83d_dcd2": {
+    "message": "buku besar"
+  },
+  "d83d_dcd3": {
+    "message": "buku catatan"
+  },
+  "d83d_dcd4": {
+    "message": "buku catatan berhias"
+  },
+  "d83d_dcd5": {
+    "message": "buku tertutup"
+  },
+  "d83d_dcd6": {
+    "message": "buku terbuka"
+  },
+  "d83d_dcd7": {
+    "message": "buku hijau"
+  },
+  "d83d_dcd8": {
+    "message": "buku"
+  },
+  "d83d_dcd9": {
+    "message": "buku oranye"
+  },
+  "d83d_dcda": {
+    "message": "beberapa buku"
+  },
+  "d83d_dcdb": {
+    "message": "lencana nama"
+  },
+  "d83d_dcdc": {
+    "message": "gulir"
+  },
+  "d83d_dcdd": {
+    "message": "memo"
+  },
+  "d83d_dcde": {
+    "message": "telepon"
+  },
+  "d83d_dcdf": {
+    "message": "pager"
+  },
+  "d83d_dce0": {
+    "message": "faks"
+  },
+  "d83d_dce1": {
+    "message": "parabola"
+  },
+  "d83d_dce2": {
+    "message": "pengeras suara"
+  },
+  "d83d_dce3": {
+    "message": "megafon"
+  },
+  "d83d_dce4": {
+    "message": "mengirim email"
+  },
+  "d83d_dce5": {
+    "message": "Kotak masuk"
+  },
+  "d83d_dce6": {
+    "message": "paket"
+  },
+  "d83d_dce7": {
+    "message": "email"
+  },
+  "d83d_dce8": {
+    "message": "surat masuk"
+  },
+  "d83d_dce9": {
+    "message": "surat keluar"
+  },
+  "d83d_dcea": {
+    "message": "kotak surat tertutup dengan bendera menghadap bawah"
+  },
+  "d83d_dceb": {
+    "message": "kotak surat tertutup dengan bendera menghadap ke atas"
+  },
+  "d83d_dcec": {
+    "message": "kotak surat terbuka dengan bendera menghadap ke atas"
+  },
+  "d83d_dced": {
+    "message": "kotak surat terbuka dengan bendera menghadap bawah"
+  },
+  "d83d_dcee": {
+    "message": "kotak pos"
+  },
+  "d83d_dcef": {
+    "message": "terompet pos"
+  },
+  "d83d_dcf0": {
+    "message": "koran"
+  },
+  "d83d_dcf1": {
+    "message": "ponsel"
+  },
+  "d83d_dcf2": {
+    "message": "ponsel dengan panah"
+  },
+  "d83d_dcf3": {
+    "message": "mode getaran"
+  },
+  "d83d_dcf4": {
+    "message": "telepon mati"
+  },
+  "d83d_dcf5": {
+    "message": "ponsel tidak diperbolehkan"
+  },
+  "d83d_dcf6": {
+    "message": "sinyal seluler"
+  },
+  "d83d_dcf7": {
+    "message": "kamera"
+  },
+  "d83d_dcf9": {
+    "message": "kamera video"
+  },
+  "d83d_dcfa": {
+    "message": "TV"
+  },
+  "d83d_dcfb": {
+    "message": "radio"
+  },
+  "d83d_dcfc": {
+    "message": "pita video"
+  },
+  "d83d_dd00": {
+    "message": "panah menyilang"
+  },
+  "d83d_dd01": {
+    "message": "panah searah jarum jam"
+  },
+  "d83d_dd02": {
+    "message": "panah searah jarum jam"
+  },
+  "d83d_dd03": {
+    "message": "mengisi kembali"
+  },
+  "d83d_dd04": {
+    "message": "panah berlawanan arah jarum jam"
+  },
+  "d83d_dd05": {
+    "message": "kecerahan rendah"
+  },
+  "d83d_dd06": {
+    "message": "kecerahan tinggi"
+  },
+  "d83d_dd07": {
+    "message": "tidak boleh berbicara"
+  },
+  "d83d_dd08": {
+    "message": "pengeras suara"
+  },
+  "d83d_dd09": {
+    "message": "pengeras suara dengan volume rendah"
+  },
+  "d83d_dd0a": {
+    "message": "pengeras suara dengan volume tinggi"
+  },
+  "d83d_dd0b": {
+    "message": "baterai"
+  },
+  "d83d_dd0c": {
+    "message": "colokan listrik"
+  },
+  "d83d_dd0d": {
+    "message": "kaca pembesar miring ke kiri"
+  },
+  "d83d_dd0e": {
+    "message": "kaca pembesar miring kanan"
+  },
+  "d83d_dd0f": {
+    "message": "gembok dengan pena tinta"
+  },
+  "d83d_dd10": {
+    "message": "gembok terkunci dengan kunci"
+  },
+  "d83d_dd11": {
+    "message": "kunci"
+  },
+  "d83d_dd12": {
+    "message": "gembok terkunci"
+  },
+  "d83d_dd13": {
+    "message": "gembok terbuka"
+  },
+  "d83d_dd14": {
+    "message": "bel"
+  },
+  "d83d_dd15": {
+    "message": "tidak ada bel"
+  },
+  "d83d_dd16": {
+    "message": "penanda"
+  },
+  "d83d_dd17": {
+    "message": "tanda tautan"
+  },
+  "d83d_dd18": {
+    "message": "tombol radio"
+  },
+  "d83d_dd19": {
+    "message": "kembali"
+  },
+  "d83d_dd1a": {
+    "message": "akhir"
+  },
+  "d83d_dd1b": {
+    "message": "panah AKTIF"
+  },
+  "d83d_dd1c": {
+    "message": "tanda Segera"
+  },
+  "d83d_dd1d": {
+    "message": "tanda ke Atas"
+  },
+  "d83d_dd1e": {
+    "message": "Tidak ada yang berusia 18 tahun ke bawah"
+  },
+  "d83d_dd20": {
+    "message": "huruf besar"
+  },
+  "d83d_dd21": {
+    "message": "huruf kecil"
+  },
+  "d83d_dd22": {
+    "message": "angka"
+  },
+  "d83d_dd23": {
+    "message": "simbol"
+  },
+  "d83d_dd24": {
+    "message": "Alfabet Latin"
+  },
+  "d83d_dd25": {
+    "message": "api"
+  },
+  "d83d_dd26": {
+    "message": "senter"
+  },
+  "d83d_dd27": {
+    "message": "kunci inggris"
+  },
+  "d83d_dd28": {
+    "message": "palu"
+  },
+  "d83d_dd29": {
+    "message": "mur dan baut"
+  },
+  "d83d_dd2a": {
+    "message": "pisau masak"
+  },
+  "d83d_dd2b": {
+    "message": "senjata"
+  },
+  "d83d_dd2c": {
+    "message": "mikroskop"
+  },
+  "d83d_dd2d": {
+    "message": "teleskop"
+  },
+  "d83d_dd2e": {
+    "message": "bola kristal"
+  },
+  "d83d_dd2f": {
+    "message": "bintang berujung enam"
+  },
+  "d83d_dd30": {
+    "message": "daun hijau dan kuning"
+  },
+  "d83d_dd31": {
+    "message": "tanda trisula"
+  },
+  "d83d_dd32": {
+    "message": "tombol kotak dengan pinggiran solid"
+  },
+  "d83d_dd33": {
+    "message": "tombol kotak dengan pinggiran garis"
+  },
+  "d83d_dd34": {
+    "message": "lingkaran merah besar"
+  },
+  "d83d_dd35": {
+    "message": "lingkaran biru besar"
+  },
+  "d83d_dd36": {
+    "message": "berlian oranye besar"
+  },
+  "d83d_dd37": {
+    "message": "berlian biru besar"
+  },
+  "d83d_dd38": {
+    "message": "berlian oranye kecil"
+  },
+  "d83d_dd39": {
+    "message": "berlian biru kecil"
+  },
+  "d83d_dd3a": {
+    "message": "segitiga menghadap ke atas"
+  },
+  "d83d_dd3b": {
+    "message": "segitiga menghadap ke bawah"
+  },
+  "d83d_dd3c": {
+    "message": "tombol segitiga menghadap atas"
+  },
+  "d83d_dd3d": {
+    "message": "tombol segitiga menghadap bawah"
+  },
+  "d83d_dd50": {
+    "message": "1 tepat"
+  },
+  "d83d_dd51": {
+    "message": "2 tepat"
+  },
+  "d83d_dd52": {
+    "message": "3 tepat"
+  },
+  "d83d_dd53": {
+    "message": "4 tepat"
+  },
+  "d83d_dd54": {
+    "message": "5 tepat"
+  },
+  "d83d_dd55": {
+    "message": "6 tepat"
+  },
+  "d83d_dd56": {
+    "message": "7 tepat"
+  },
+  "d83d_dd57": {
+    "message": "8 tepat"
+  },
+  "d83d_dd58": {
+    "message": "9 tepat"
+  },
+  "d83d_dd59": {
+    "message": "10 tepat"
+  },
+  "d83d_dd5a": {
+    "message": "11 tepat"
+  },
+  "d83d_dd5b": {
+    "message": "12 tepat"
+  },
+  "d83d_dd5c": {
+    "message": "setengah dua"
+  },
+  "d83d_dd5d": {
+    "message": "setengah tiga"
+  },
+  "d83d_dd5e": {
+    "message": "setengah empat"
+  },
+  "d83d_dd5f": {
+    "message": "setengah lima"
+  },
+  "d83d_dd60": {
+    "message": "setengah enam"
+  },
+  "d83d_dd61": {
+    "message": "setengah tujuh"
+  },
+  "d83d_dd62": {
+    "message": "setengah delapan"
+  },
+  "d83d_dd63": {
+    "message": "setengah sembilan"
+  },
+  "d83d_dd64": {
+    "message": "setengah sepuluh"
+  },
+  "d83d_dd65": {
+    "message": "setengah sebelas"
+  },
+  "d83d_dd66": {
+    "message": "setengah dua belas"
+  },
+  "d83d_dd67": {
+    "message": "setengah satu"
+  },
+  "d83d_ddfb": {
+    "message": "Gunung Fuji"
+  },
+  "d83d_ddfc": {
+    "message": "Menara Tokyo"
+  },
+  "d83d_ddfd": {
+    "message": "Patung Liberty"
+  },
+  "d83d_ddfe": {
+    "message": "Peta Jepang"
+  },
+  "d83d_ddff": {
+    "message": "patung Moyai"
+  },
+  "d83d_de00": {
+    "message": "menyeringai"
+  },
+  "d83d_de01": {
+    "message": " menyeringai dengan mata tersenyum"
+  },
+  "d83d_de02": {
+    "message": "air mata kebahagiaan"
+  },
+  "d83d_de03": {
+    "message": "mulut tersenyum dan terbuka"
+  },
+  "d83d_de04": {
+    "message": "mulut terbuka lebar dengan mata tersenyum"
+  },
+  "d83d_de05": {
+    "message": "tersenyum dengan keringat dingin"
+  },
+  "d83d_de06": {
+    "message": " mulut tersenyum dan terbuka dengan mata tertutup"
+  },
+  "d83d_de07": {
+    "message": "tersenyum dengan halo"
+  },
+  "d83d_de08": {
+    "message": "tersenyum dengan tanduk"
+  },
+  "d83d_de09": {
+    "message": "mengedip"
+  },
+  "d83d_de0a": {
+    "message": "senyum"
+  },
+  "d83d_de0b": {
+    "message": "merasa lezat"
+  },
+  "d83d_de0c": {
+    "message": "wajah lega"
+  },
+  "d83d_de0d": {
+    "message": "wajah tersenyum"
+  },
+  "d83d_de0e": {
+    "message": "wajah keren"
+  },
+  "d83d_de0f": {
+    "message": "menyeringai"
+  },
+  "d83d_de10": {
+    "message": "wajah datar"
+  },
+  "d83d_de11": {
+    "message": "tanpa ekspresi"
+  },
+  "d83d_de12": {
+    "message": "tidak suka"
+  },
+  "d83d_de13": {
+    "message": "keringat dingin"
+  },
+  "d83d_de14": {
+    "message": "wajah termenung"
+  },
+  "d83d_de15": {
+    "message": "wajah bingung"
+  },
+  "d83d_de16": {
+    "message": "wajah malu kebingungan"
+  },
+  "d83d_de17": {
+    "message": "wajah mencium"
+  },
+  "d83d_de18": {
+    "message": "memberi ciuman"
+  },
+  "d83d_de19": {
+    "message": "cium dan senyum"
+  },
+  "d83d_de1a": {
+    "message": "ciuman"
+  },
+  "d83d_de1b": {
+    "message": "lidah menjulur"
+  },
+  "d83d_de1c": {
+    "message": "menjulurkan lidah sambil berkedip"
+  },
+  "d83d_de1d": {
+    "message": "mau muntah"
+  },
+  "d83d_de1e": {
+    "message": "kecewa"
+  },
+  "d83d_de1f": {
+    "message": "khawatir"
+  },
+  "d83d_de20": {
+    "message": "marah"
+  },
+  "d83d_de21": {
+    "message": "merajuk"
+  },
+  "d83d_de22": {
+    "message": "menangis"
+  },
+  "d83d_de23": {
+    "message": "gagal"
+  },
+  "d83d_de24": {
+    "message": "ekspresi kemenangan"
+  },
+  "d83d_de25": {
+    "message": "waduh!"
+  },
+  "d83d_de26": {
+    "message": "wajah cemberut"
+  },
+  "d83d_de27": {
+    "message": "merana"
+  },
+  "d83d_de28": {
+    "message": "cemas"
+  },
+  "d83d_de29": {
+    "message": "lelah"
+  },
+  "d83d_de2a": {
+    "message": "mengantuk"
+  },
+  "d83d_de2b": {
+    "message": "capek"
+  },
+  "d83d_de2c": {
+    "message": "meringis"
+  },
+  "d83d_de2d": {
+    "message": "menangis keras"
+  },
+  "d83d_de2e": {
+    "message": "wajah dengan mulut terbuka"
+  },
+  "d83d_de2f": {
+    "message": "ssst..."
+  },
+  "d83d_de30": {
+    "message": "wajah terburu-buru"
+  },
+  "d83d_de31": {
+    "message": "wajah takut"
+  },
+  "d83d_de32": {
+    "message": "wajah keheranan"
+  },
+  "d83d_de33": {
+    "message": "wajah memerah"
+  },
+  "d83d_de34": {
+    "message": "tidur"
+  },
+  "d83d_de35": {
+    "message": "pusing"
+  },
+  "d83d_de36": {
+    "message": "wajah tanpa mulut"
+  },
+  "d83d_de37": {
+    "message": "wajah dengan topeng"
+  },
+  "d83d_de38": {
+    "message": "wajah kucing menyeringai"
+  },
+  "d83d_de39": {
+    "message": "wajah kucing air mata kebahagiaan"
+  },
+  "d83d_de3a": {
+    "message": "wajah kucing tersenyum"
+  },
+  "d83d_de3b": {
+    "message": "wajah kucing tersenyum"
+  },
+  "d83d_de3c": {
+    "message": "wajah kucing masam"
+  },
+  "d83d_de3d": {
+    "message": "wajah kucing mencium"
+  },
+  "d83d_de3e": {
+    "message": "wajah kucing merajuk"
+  },
+  "d83d_de3f": {
+    "message": "wajah kucing menangis"
+  },
+  "d83d_de40": {
+    "message": "wajah kucing lelah"
+  },
+  "d83d_de45": {
+    "message": "Tidak boleh"
+  },
+  "d83d_de46": {
+    "message": "isyarat oke"
+  },
+  "d83d_de47": {
+    "message": "saya minta maaf"
+  },
+  "d83d_de48": {
+    "message": "menutup mata"
+  },
+  "d83d_de49": {
+    "message": "menutup telinga"
+  },
+  "d83d_de4a": {
+    "message": "menutup mulut"
+  },
+  "d83d_de4b": {
+    "message": "orang yang selalu bahagia"
+  },
+  "d83d_de4c": {
+    "message": "hore"
+  },
+  "d83d_de4d": {
+    "message": "orang yang murung"
+  },
+  "d83d_de4e": {
+    "message": "merajuk"
+  },
+  "d83d_de4f": {
+    "message": "tangan dilipat"
+  },
+  "d83d_de80": {
+    "message": "roket"
+  },
+  "d83d_de81": {
+    "message": "helikopter"
+  },
+  "d83d_de82": {
+    "message": "lokomotif uap"
+  },
+  "d83d_de83": {
+    "message": "kereta api"
+  },
+  "d83d_de84": {
+    "message": "kereta berkecepatan tinggi"
+  },
+  "d83d_de85": {
+    "message": "kereta berkecepatan tinggi dengan ujung seperti peluru"
+  },
+  "d83d_de86": {
+    "message": "kereta api"
+  },
+  "d83d_de87": {
+    "message": "kereta api bawah tanah"
+  },
+  "d83d_de88": {
+    "message": "kereta di atas rel"
+  },
+  "d83d_de89": {
+    "message": "stasiun kereta"
+  },
+  "d83d_de8a": {
+    "message": "trem"
+  },
+  "d83d_de8b": {
+    "message": "mobil trem"
+  },
+  "d83d_de8c": {
+    "message": "bus"
+  },
+  "d83d_de8d": {
+    "message": "bus melaju"
+  },
+  "d83d_de8e": {
+    "message": "bus listrik"
+  },
+  "d83d_de8f": {
+    "message": "halte bus"
+  },
+  "d83d_de90": {
+    "message": "minibus"
+  },
+  "d83d_de91": {
+    "message": "ambulans"
+  },
+  "d83d_de92": {
+    "message": "mobil pemadam kebakaran"
+  },
+  "d83d_de93": {
+    "message": "mobil polisi"
+  },
+  "d83d_de94": {
+    "message": "mobil polisi melaju"
+  },
+  "d83d_de95": {
+    "message": "taksi"
+  },
+  "d83d_de96": {
+    "message": "taksi melaju"
+  },
+  "d83d_de97": {
+    "message": "mobil"
+  },
+  "d83d_de98": {
+    "message": "mobil melaju"
+  },
+  "d83d_de99": {
+    "message": "RV"
+  },
+  "d83d_de9a": {
+    "message": "truk pengantar barang"
+  },
+  "d83d_de9b": {
+    "message": "truk box"
+  },
+  "d83d_de9c": {
+    "message": "traktor"
+  },
+  "d83d_de9d": {
+    "message": "monorel"
+  },
+  "d83d_de9e": {
+    "message": "kereta api gunung"
+  },
+  "d83d_de9f": {
+    "message": "kereta api suspensi"
+  },
+  "d83d_dea0": {
+    "message": "kereta kabel gunung"
+  },
+  "d83d_dea1": {
+    "message": "mobil kabel"
+  },
+  "d83d_dea2": {
+    "message": "kapal"
+  },
+  "d83d_dea3": {
+    "message": "perahu dayung"
+  },
+  "d83d_dea4": {
+    "message": "perahu motor cepat"
+  },
+  "d83d_dea5": {
+    "message": "lampu lalu lintas horizontal"
+  },
+  "d83d_dea6": {
+    "message": "lampu lalu lintas vertikal"
+  },
+  "d83d_dea7": {
+    "message": "sedang dibangun"
+  },
+  "d83d_dea8": {
+    "message": "cahaya berputar"
+  },
+  "d83d_dea9": {
+    "message": "tanda lokasi"
+  },
+  "d83d_deaa": {
+    "message": "pintu"
+  },
+  "d83d_deab": {
+    "message": "Tak ada tanda masuk"
+  },
+  "d83d_deac": {
+    "message": "tanda merokok"
+  },
+  "d83d_dead": {
+    "message": "tanda dilarang merokok"
+  },
+  "d83d_deae": {
+    "message": "tanda tempat sampah"
+  },
+  "d83d_deaf": {
+    "message": "tanda dilarang buang sampah"
+  },
+  "d83d_deb0": {
+    "message": "air minum"
+  },
+  "d83d_deb1": {
+    "message": "bukan air minum"
+  },
+  "d83d_deb2": {
+    "message": "sepeda"
+  },
+  "d83d_deb3": {
+    "message": "sepeda tidak diperbolehkan"
+  },
+  "d83d_deb4": {
+    "message": "pengendara sepeda"
+  },
+  "d83d_deb5": {
+    "message": "sepeda gunung"
+  },
+  "d83d_deb6": {
+    "message": "pejalan kaki"
+  },
+  "d83d_deb7": {
+    "message": "pejalan kaki tidak diperbolehkan"
+  },
+  "d83d_deb8": {
+    "message": "penyeberangan anak-anak"
+  },
+  "d83d_deb9": {
+    "message": "tanda Pria"
+  },
+  "d83d_deba": {
+    "message": "tanda Wanita"
+  },
+  "d83d_debb": {
+    "message": "tanda toilet"
+  },
+  "d83d_debc": {
+    "message": "tanda bayi"
+  },
+  "d83d_debd": {
+    "message": "toilet"
+  },
+  "d83d_debe": {
+    "message": "WC"
+  },
+  "d83d_debf": {
+    "message": "pancuran"
+  },
+  "d83d_dec0": {
+    "message": "mandi"
+  },
+  "d83d_dec1": {
+    "message": "bak mandi"
+  },
+  "d83d_dec2": {
+    "message": "pemeriksaan paspor"
+  },
+  "d83d_dec3": {
+    "message": "bea cukai"
+  },
+  "d83d_dec4": {
+    "message": "klaim bagasi"
+  },
+  "d83d_dec5": {
+    "message": "bagasi tertinggal"
+  },
+  "de_ger_settings_page": {
+    "message": "Laman Setelan Keyboard Jerman"
+  },
+  "de_neo_ger_settings_page": {
+    "message": "Laman Setelan Keyboard Neo 2 Jerman"
+  },
+  "dictionarytoolcategorytitle": {
+    "message": "Kategori"
+  },
+  "dictionarytoolcommentnewinput": {
+    "message": "Komentari"
+  },
+  "dictionarytoolcommenttitle": {
+    "message": "Komentari"
+  },
+  "dictionarytooldeletedictionaryconfirm": {
+    "message": "Apakah Anda ingin menghapus [object Object]?"
+  },
+  "dictionarytooldeletedictionarytitle": {
+    "message": "Hapus kamus"
+  },
+  "dictionarytooldictionarylisttitle": {
+    "message": "Kamus"
+  },
+  "dictionarytooldictionaryname": {
+    "message": "Nama Kamus"
+  },
+  "dictionarytooldonebutton": {
+    "message": "Selesai"
+  },
+  "dictionarytoolexportbutton": {
+    "message": "Ekspor"
+  },
+  "dictionarytoolimportbutton": {
+    "message": "Impor..."
+  },
+  "dictionarytoolmenutitle": {
+    "message": "Manajemen kamus"
+  },
+  "dictionarytoolnewdictionarynameplaceholder": {
+    "message": "Kamus baru"
+  },
+  "dictionarytoolpagetitle": {
+    "message": "Kamus pengguna"
+  },
+  "dictionarytoolreadingnewinput": {
+    "message": "Bacaan baru"
+  },
+  "dictionarytoolreadingtitle": {
+    "message": "Bacaan"
+  },
+  "dictionarytoolstatuserrordictionarynamecontainsinvalidcharacter": {
+    "message": "Nama berisi karakter yang tidak valid."
+  },
+  "dictionarytoolstatuserrordictionarynameduplicated": {
+    "message": "Nama sudah ada."
+  },
+  "dictionarytoolstatuserrordictionarynameempty": {
+    "message": "Ketikkan nama kamus."
+  },
+  "dictionarytoolstatuserrordictionarynametoolong": {
+    "message": "Nama terlalu panjang."
+  },
+  "dictionarytoolstatuserrordictionarysizelimitexceeded": {
+    "message": "Tidak dapat membuat kamus lainnya."
+  },
+  "dictionarytoolstatuserroremptyfile": {
+    "message": "File kosong."
+  },
+  "dictionarytoolstatuserrorentrysizelimitexceeded": {
+    "message": "Tidak dapat membuat entri lainnya di kamus ini."
+  },
+  "dictionarytoolstatuserrorfilenotfound": {
+    "message": "Tidak dapat membuka file."
+  },
+  "dictionarytoolstatuserrorfilesizelimitexceeded": {
+    "message": "Ukuran data melebihi batas ukuran file."
+  },
+  "dictionarytoolstatuserrorgeneral": {
+    "message": "Operasi gagal."
+  },
+  "dictionarytoolstatuserrorimportinvalidentries": {
+    "message": "Beberapa kata tidak dapat diimpor."
+  },
+  "dictionarytoolstatuserrorimporttoomanywords": {
+    "message": "Sumber impor berisi terlalu banyak kata."
+  },
+  "dictionarytoolstatuserrorinvalidfileformat": {
+    "message": "Tidak dapat membaca file."
+  },
+  "dictionarytoolstatuserrornoundohistory": {
+    "message": "Tidak ada lagi operasi yang dapat diurungkan."
+  },
+  "dictionarytoolstatuserrorreadingcontainsinvalidcharacter": {
+    "message": "Bacaan berisi karakter yang tidak valid. Anda dapat menggunakan karakter ASCII, Hiragana, tanda suara diucapkan(\u309b), tanda suara semi diucapkan(\u309c), titik tengah(\u30fb), tanda suara panjang(\u30fc), koma Jepang(\u3001), titik Jepang(\u3002), tanda kurung Jepang(\u300c\u300d\u300e\u300f), dan setrip gelombang Jepang(\u301c) dalam bacaan."
+  },
+  "dictionarytoolstatuserrorreadingempty": {
+    "message": "Ketikkan bacaan."
+  },
+  "dictionarytoolstatuserrorreadingtoolong": {
+    "message": "Bacaan terlalu panjang."
+  },
+  "dictionarytoolstatuserrortitleaddentry": {
+    "message": "Kesalahan menambah entri"
+  },
+  "dictionarytoolstatuserrortitlecreatedictionary": {
+    "message": "Kesalahan membuat kamus"
+  },
+  "dictionarytoolstatuserrortitledeletedictionary": {
+    "message": "Kesalahan menghapus kamus"
+  },
+  "dictionarytoolstatuserrortitledeleteentry": {
+    "message": "Kesalahan menghapus entri"
+  },
+  "dictionarytoolstatuserrortitleeditentry": {
+    "message": "Kesalahan mengedit entri"
+  },
+  "dictionarytoolstatuserrortitleimportdata": {
+    "message": "Kesalahan impor"
+  },
+  "dictionarytoolstatuserrortitlerenamedictionary": {
+    "message": "Kesalahan mengganti nama kamus"
+  },
+  "dictionarytoolstatuserrorwordcontainsinvalidcharacter": {
+    "message": "Kata berisi karakter tidak valid."
+  },
+  "dictionarytoolstatuserrorwordempty": {
+    "message": "Ketikkan kata."
+  },
+  "dictionarytoolstatuserrorwordtoolong": {
+    "message": "Kata terlalu panjang."
+  },
+  "dictionarytoolwordnewinput": {
+    "message": "Kata baru"
+  },
+  "dictionarytoolwordtitle": {
+    "message": "Kata"
+  },
+  "dismiss_menu": {
+    "message": "abaikan menu keyboard"
+  },
+  "dk_dan_settings_page": {
+    "message": "Laman Setelan Keyboard Dansk"
+  },
+  "double_space_period": {
+    "message": "Spasi dua kali untuk mengetik titik"
+  },
+  "down_arrow": {
+    "message": "panah bawah"
+  },
+  "ee_est_settings_page": {
+    "message": "Laman Setelan Keyboard Esti"
+  },
+  "emoji_tab_emoticon": {
+    "message": "Emoji kategori emotikon"
+  },
+  "emoji_tab_face": {
+    "message": "Emoji kategori wajah"
+  },
+  "emoji_tab_hot": {
+    "message": "Emoji kategori ngetren"
+  },
+  "emoji_tab_nature": {
+    "message": "Emoji kategori alam"
+  },
+  "emoji_tab_object": {
+    "message": "Emoji kategori objek"
+  },
+  "emoji_tab_place": {
+    "message": "Emoji kategori tempat"
+  },
+  "emoji_tab_recent": {
+    "message": "Emoji kategori baru-baru ini"
+  },
+  "emoji_tab_symbol": {
+    "message": "Emoji kategori simbol"
+  },
+  "enable_capitalization": {
+    "message": "Kapitalisasi otomatis"
+  },
+  "enable_completion": {
+    "message": "Aktifkan penyelesaian"
+  },
+  "enable_prediction": {
+    "message": "Aktifkan prediksi kata selanjutnya"
+  },
+  "enter": {
+    "message": "enter"
+  },
+  "es_cat_cat_settings_page": {
+    "message": "Laman Setelan Keyboard Katala"
+  },
+  "es_spa_settings_page": {
+    "message": "Laman Setelan Keyboard Spanyol"
+  },
+  "expand": {
+    "message": "Luaskan"
+  },
+  "expand_candidates": {
+    "message": "luaskan daftar calon"
+  },
+  "fi_fin_settings_page": {
+    "message": "Laman Setelan Keyboard Suomi"
+  },
+  "footer_emoji_button": {
+    "message": "beralih ke emoji"
+  },
+  "footer_handwriting_button": {
+    "message": "beralih ke tulisan tangan"
+  },
+  "footer_settings_button": {
+    "message": "buka setelan metode masukan"
+  },
+  "fr_fra_settings_page": {
+    "message": "Laman Setelan Keyboard Prancis"
+  },
+  "fuzzy_pinyin": {
+    "message": "Aktifkan mode Pinyin Fuzzy"
+  },
+  "gb_dvorak_eng_settings_page": {
+    "message": "Laman Setelan Keyboard Dvorak Inggris Raya (Inggris)"
+  },
+  "gb_extd_eng_settings_page": {
+    "message": "Laman Setelan Keyboard Inggris Raya (Inggris)"
+  },
+  "ge_geo_settings_page": {
+    "message": "Laman Setelan Keyboard Georgia"
+  },
+  "globe": {
+    "message": "beralih ke keyboard sebelumnya"
+  },
+  "got_it": {
+    "message": "Paham"
+  },
+  "gr_gre_settings_page": {
+    "message": "Laman Setelan Keyboard Yunani"
+  },
+  "handwriting_back": {
+    "message": "Kembali"
+  },
+  "handwriting_netowrk_error": {
+    "message": "Maaf, Anda tidak dapat menggunakan tulisan tangan, karena jaringan tidak tersedia."
+  },
+  "handwriting_privacy_info": {
+    "message": "Masukan Anda akan dikirim ke server Google untuk mengenali teks."
+  },
+  "hide_keyboard": {
+    "message": "sembunyikan keyboard"
+  },
+  "hr_scr_settings_page": {
+    "message": "Laman Setelan Keyboard Kroat"
+  },
+  "hu_hun_settings_page": {
+    "message": "Laman Setelan Keyboard Magyar"
+  },
+  "ie_ga_settings_page": {
+    "message": "Laman Setelan Keyboard Irlandia"
+  },
+  "ignore_correction": {
+    "message": "Abaikan koreksi untuk"
+  },
+  "ignore_correction_short": {
+    "message": "Abaikan koreksi"
+  },
+  "il_heb_settings_page": {
+    "message": "Laman Setelan Keyboard Ibrani"
+  },
+  "init_lang": {
+    "message": "Bahasa masukan awal adalah Aksara China"
+  },
+  "init_punc": {
+    "message": "Lebar tanda baca awal Penuh"
+  },
+  "init_sbc": {
+    "message": "Lebar karakter awal Penuh"
+  },
+  "input_hangul": {
+    "message": "Mode Hangul"
+  },
+  "input_hanja": {
+    "message": "Mode Hanja"
+  },
+  "inputmethod_array": {
+    "message": "Metode masukan Array"
+  },
+  "inputmethod_cangjie": {
+    "message": "Metode masukan Cangjie"
+  },
+  "inputmethod_dayi": {
+    "message": "Metode masukan Dayi"
+  },
+  "inputmethod_hangul": {
+    "message": "Metode masukan Korea"
+  },
+  "inputmethod_pinyin": {
+    "message": "Metode masukan Pinyin"
+  },
+  "inputmethod_quick": {
+    "message": "Metode masukan Quick"
+  },
+  "inputmethod_traditional_pinyin": {
+    "message": "Metode masukan Pinyin untuk Aks. China tradisional"
+  },
+  "inputmethod_wubi": {
+    "message": "Metode masukan Wubi"
+  },
+  "inputmethod_zhuyin": {
+    "message": "Metode masukan Zhuyin"
+  },
+  "is_ice_settings_page": {
+    "message": "Laman Setelan Keyboard Islan"
+  },
+  "it_ita_settings_page": {
+    "message": "Laman Setelan Keyboard Italia"
+  },
+  "jp_jpn_settings_page": {
+    "message": "Laman Setelan Keyboard Jepang"
+  },
+  "keyboard_arabic": {
+    "message": "Keyboard Arab"
+  },
+  "keyboard_armenian_phonetic": {
+    "message": "Keyboard Fonetik Armenia"
+  },
+  "keyboard_belarusian": {
+    "message": "Keyboard Belarus"
+  },
+  "keyboard_belgian": {
+    "message": "Keyboard Belgia"
+  },
+  "keyboard_bengali_phonetic": {
+    "message": "Keyboard Bengali (Fonetik)"
+  },
+  "keyboard_brazilian": {
+    "message": "Keyboard Brasil"
+  },
+  "keyboard_bulgarian": {
+    "message": "Keyboard Bulgar"
+  },
+  "keyboard_bulgarian_phonetic": {
+    "message": "Keyboard fonetik Bulgar"
+  },
+  "keyboard_canadian_english": {
+    "message": "Keyboard Inggris Kanada"
+  },
+  "keyboard_canadian_french": {
+    "message": "Keyboard Prancis Kanada"
+  },
+  "keyboard_canadian_multilingual": {
+    "message": "Keyboard Multibahasa Kanada"
+  },
+  "keyboard_catalan": {
+    "message": "Keyboard Katalan"
+  },
+  "keyboard_croatian": {
+    "message": "Keyboard Kroat"
+  },
+  "keyboard_czech": {
+    "message": "Keyboard Cheska"
+  },
+  "keyboard_czech_qwerty": {
+    "message": "Keyboard QWERTY Cheska"
+  },
+  "keyboard_danish": {
+    "message": "Keyboard Dansk"
+  },
+  "keyboard_devanagari_phonetic": {
+    "message": "Keyboard Devanagari (Fonetik)"
+  },
+  "keyboard_estonian": {
+    "message": "Keyboard Esti"
+  },
+  "keyboard_ethiopic": {
+    "message": "Keyboard Ethiopia"
+  },
+  "keyboard_finnish": {
+    "message": "Keyboard Suomi"
+  },
+  "keyboard_french": {
+    "message": "Keyboard Prancis"
+  },
+  "keyboard_georgian": {
+    "message": "Keyboard Georgia"
+  },
+  "keyboard_german": {
+    "message": "Keyboard Jerman"
+  },
+  "keyboard_german_neo_2": {
+    "message": "Keyboard Neo 2 Jerman"
+  },
+  "keyboard_greek": {
+    "message": "Keyboard Yunani"
+  },
+  "keyboard_gujarati_phonetic": {
+    "message": "Keyboard Gujarati (Fonetik)"
+  },
+  "keyboard_hebrew": {
+    "message": "Keyboard Ibrani"
+  },
+  "keyboard_hungarian": {
+    "message": "Keyboard Magyar"
+  },
+  "keyboard_icelandic": {
+    "message": "Keyboard Islan"
+  },
+  "keyboard_inscript": {
+    "message": "Keyboard (InScript)"
+  },
+  "keyboard_irish": {
+    "message": "Keyboard Irlandia"
+  },
+  "keyboard_italian": {
+    "message": "Keyboard Italia"
+  },
+  "keyboard_itrans": {
+    "message": "Keyboard (itrans)"
+  },
+  "keyboard_japanese": {
+    "message": "Keyboard Jepang"
+  },
+  "keyboard_kannada_phonetic": {
+    "message": "Keyboard Kannada (Fonetik)"
+  },
+  "keyboard_kedmanee": {
+    "message": "Keyboard (Kedmanee)"
+  },
+  "keyboard_khmer": {
+    "message": "Keyboard Khmer"
+  },
+  "keyboard_lao": {
+    "message": "Keyboard Laos"
+  },
+  "keyboard_latin_american": {
+    "message": "Keyboard Amerika Latin"
+  },
+  "keyboard_latvian": {
+    "message": "Keyboard Latvi"
+  },
+  "keyboard_lithuanian": {
+    "message": "Keyboard Lituavi"
+  },
+  "keyboard_malayalam_phonetic": {
+    "message": "Keyboard Malayalam (Fonetik)"
+  },
+  "keyboard_maltese": {
+    "message": "Keyboard Malta"
+  },
+  "keyboard_mongolian": {
+    "message": "Keyboard Mongol"
+  },
+  "keyboard_myanmar": {
+    "message": "Keyboard MM3 Myanmar"
+  },
+  "keyboard_myanmar_myansan": {
+    "message": "Keyboard Myansan Myanmar"
+  },
+  "keyboard_nepali_inscript": {
+    "message": "Keyboard Nepali (Dalam Skrip)"
+  },
+  "keyboard_nepali_phonetic": {
+    "message": "Keyboard Nepali (Fonetik)"
+  },
+  "keyboard_netherlands": {
+    "message": "Keyboard Belanda"
+  },
+  "keyboard_none": {
+    "message": "Keyboard"
+  },
+  "keyboard_norwegian": {
+    "message": "Keyboard Norsk"
+  },
+  "keyboard_pattachote": {
+    "message": "Keyboard (Pattachote)"
+  },
+  "keyboard_persian": {
+    "message": "Keyboard Persia"
+  },
+  "keyboard_phonetic": {
+    "message": "Keyboard (Fonetik)"
+  },
+  "keyboard_polish": {
+    "message": "Keyboard Polski"
+  },
+  "keyboard_portuguese": {
+    "message": "Keyboard Portugis"
+  },
+  "keyboard_romanian": {
+    "message": "Keyboard Rumania"
+  },
+  "keyboard_romanian_standard": {
+    "message": "Keyboard standar Rumania"
+  },
+  "keyboard_russian": {
+    "message": "Keyboard Rusia"
+  },
+  "keyboard_russian_phonetic": {
+    "message": "Keyboard fonetik Rusia"
+  },
+  "keyboard_russian_phonetic_aatseel": {
+    "message": "Keyboard fonetik Rusia (AATSEEL)"
+  },
+  "keyboard_russian_phonetic_yazhert": {
+    "message": "Keyboard fonetik Rusia (YaZHert)"
+  },
+  "keyboard_serbian": {
+    "message": "Keyboard Serb"
+  },
+  "keyboard_sinhala": {
+    "message": "Keyboard Sinhala"
+  },
+  "keyboard_slovakian": {
+    "message": "Keyboard Slovak"
+  },
+  "keyboard_slovenian": {
+    "message": "Keyboard Sloven"
+  },
+  "keyboard_soranikurdish_ar": {
+    "message": "Keyboard berbasis Arab Kurdi Sorani"
+  },
+  "keyboard_soranikurdish_en": {
+    "message": "Keyboard berbasis Inggris Kurdi Sorani"
+  },
+  "keyboard_spanish": {
+    "message": "Keyboard Spanyol"
+  },
+  "keyboard_swedish": {
+    "message": "Keyboard Swensk"
+  },
+  "keyboard_swiss": {
+    "message": "Keyboard Swiss"
+  },
+  "keyboard_swiss_french": {
+    "message": "Keyboard Prancis Swiss"
+  },
+  "keyboard_tamil99": {
+    "message": "Keyboard (Tamil99)"
+  },
+  "keyboard_tamil_inscript": {
+    "message": "Keyboard Tamil (InScript)"
+  },
+  "keyboard_tamil_itrans": {
+    "message": "Keyboard Tamil (itrans)"
+  },
+  "keyboard_tamil_phonetic": {
+    "message": "Keyboard Tamil (Fonetik)"
+  },
+  "keyboard_tamil_tamil99": {
+    "message": "Keyboard Tamil (Tamil99)"
+  },
+  "keyboard_tamil_typewriter": {
+    "message": "Keyboard Tamil (Mesin ketik)"
+  },
+  "keyboard_tcvn": {
+    "message": "Keyboard (TCVN)"
+  },
+  "keyboard_telex": {
+    "message": "Keyboard (Telex)"
+  },
+  "keyboard_telugu_phonetic": {
+    "message": "Keyboard Telugu (Fonetik)"
+  },
+  "keyboard_thai_kedmanee": {
+    "message": "Keyboard Thai (Kedmanee)"
+  },
+  "keyboard_thai_pattachote": {
+    "message": "Keyboard Thai (Pattachote)"
+  },
+  "keyboard_thai_tis": {
+    "message": "Keyboard Thai (TIS 820-2531)"
+  },
+  "keyboard_tis": {
+    "message": "Keyboard (TIS 820-2531)"
+  },
+  "keyboard_turkish": {
+    "message": "Keyboard Turki"
+  },
+  "keyboard_typewriter": {
+    "message": "Keyboard (Mesin ketik)"
+  },
+  "keyboard_uk": {
+    "message": "Keyboard Inggris"
+  },
+  "keyboard_uk_dvorak": {
+    "message": "Keyboard Dvorak Inggris"
+  },
+  "keyboard_ukrainian": {
+    "message": "Keyboard Ukraina"
+  },
+  "keyboard_us": {
+    "message": "Keyboard AS"
+  },
+  "keyboard_us_colemak": {
+    "message": "Keyboard Colemak AS"
+  },
+  "keyboard_us_dvorak": {
+    "message": "Keyboard Dvorak AS"
+  },
+  "keyboard_us_extended": {
+    "message": "Keyboard perluasan AS"
+  },
+  "keyboard_us_international": {
+    "message": "Keyboard internasional AS"
+  },
+  "keyboard_vietnamese_tcvn": {
+    "message": "Keyboard Vietnam (TCVN)"
+  },
+  "keyboard_vietnamese_telex": {
+    "message": "Keyboard Vietnam (Telex)"
+  },
+  "keyboard_vietnamese_viqr": {
+    "message": "Keyboard Vietnam (VIQR)"
+  },
+  "keyboard_vietnamese_vni": {
+    "message": "Keyboard Vietnam (VNI)"
+  },
+  "keyboard_viqr": {
+    "message": "Keyboard (VIQR)"
+  },
+  "keyboard_vni": {
+    "message": "Keyboard (VNI)"
+  },
+  "korean_hanja_display": {
+    "message": "Mode Kandidat Hanja"
+  },
+  "korean_keyboard_layout": {
+    "message": "Tata Letak Keyboard Korea"
+  },
+  "korean_settings_page": {
+    "message": "Laman Setelan Metode Masukan Korea"
+  },
+  "korean_syllable_input": {
+    "message": "Masukkan satu suku kata dalam satu waktu"
+  },
+  "latam_spa_settings_page": {
+    "message": "Laman Setelan Keyboard Amerika Latin (Spanyol)"
+  },
+  "latin_settings_page": {
+    "message": "Setelan"
+  },
+  "left_arrow": {
+    "message": "panah kiri"
+  },
+  "lt_lit_settings_page": {
+    "message": "Laman Setelan Keyboard Lituavi"
+  },
+  "lv_apostrophe_lav_settings_page": {
+    "message": "Laman Setelan Keyboard Latvi (Latvi, Leti)"
+  },
+  "menu_key": {
+    "message": "buka menu keyboard"
+  },
+  "mn_mon_settings_page": {
+    "message": "Laman Setelan Keyboard Mongol"
+  },
+  "move_page_key_above": {
+    "message": "Gunakan tombol - dan = untuk beralih halaman daftar kandidat"
+  },
+  "move_page_key_below": {
+    "message": "Gunakan tombol , dan . untuk beralih halaman daftar kandidat"
+  },
+  "never_auto_correct": {
+    "message": "Nonaktif"
+  },
+  "no_nob_settings_page": {
+    "message": "Laman Setelan Keyboard Norsk"
+  },
+  "pause": {
+    "message": "Jeda"
+  },
+  "physical_auto_correction_level": {
+    "message": "Koreksi otomatis"
+  },
+  "physical_enable_capitalization": {
+    "message": "Kapitalisasi otomatis"
+  },
+  "physical_keyboard": {
+    "message": "Keyboard fisik"
+  },
+  "pinyin_settings_page": {
+    "message": "Laman Setelan Pinyin"
+  },
+  "pl_pol_settings_page": {
+    "message": "Laman Setelan Keyboard Polski"
+  },
+  "pt_por_settings_page": {
+    "message": "Laman Setelan Keyboard Portugis"
+  },
+  "right_arrow": {
+    "message": "panah kanan"
+  },
+  "ro_rum_settings_page": {
+    "message": "Laman Setelan Keyboard Rumania"
+  },
+  "rs_srp_settings_page": {
+    "message": "Laman Setelan Keyboard Serb"
+  },
+  "ru_phonetic_rus_settings_page": {
+    "message": "Laman Setelan Keyboard Fonetik Rusia"
+  },
+  "ru_rus_settings_page": {
+    "message": "Laman Setelan Keyboard Rusia"
+  },
+  "se_swe_settings_page": {
+    "message": "Laman Setelan Keyboard Swensk"
+  },
+  "settings": {
+    "message": "Setelan"
+  },
+  "shift": {
+    "message": "shift"
+  },
+  "shift_lock": {
+    "message": "Shift Terkunci"
+  },
+  "show_candidate_mode": {
+    "message": "Penundaan tarik-turun saran"
+  },
+  "show_candidates_1000": {
+    "message": "Tampilkan tarik-turun saran setelah 1 d"
+  },
+  "show_candidates_2000": {
+    "message": "Tampilkan tarik-turun saran setelah 2 d"
+  },
+  "show_candidates_500": {
+    "message": "Tampilkan tarik-turun saran setelah 500 md"
+  },
+  "show_candidates_5000": {
+    "message": "Tampilkan tarik-turun saran setelah 5 d"
+  },
+  "show_candidates_backspace": {
+    "message": "Tampilkan tarik-turun saran dengan Backspace"
+  },
+  "show_hangul_candidate": {
+    "message": "Tampilkan kandidat dalam mode Hangul"
+  },
+  "shrink_candidates": {
+    "message": "ciutkan daftar calon"
+  },
+  "si_slv_settings_page": {
+    "message": "Laman Setelan Keyboard Sloven"
+  },
+  "sk_slo_settings_page": {
+    "message": "Laman Setelan Keyboard Slovak"
+  },
+  "smiley": {
+    "message": "wajah senyum"
+  },
+  "sometimes_auto_correct": {
+    "message": "Sederhana"
+  },
+  "sound_on_keypress": {
+    "message": "Nada saat tombol ditekan"
+  },
+  "space": {
+    "message": "spasi"
+  },
+  "switch_to": {
+    "message": "beralih ke "
+  },
+  "switch_to_compact_layout": {
+    "message": "Beralih ke tata letak rapat"
+  },
+  "switch_to_full_layout": {
+    "message": "Beralih ke tata letak penuh"
+  },
+  "switch_to_keyboard_prefix": {
+    "message": "beralih ke "
+  },
+  "switched_to": {
+    "message": "telah beralih ke "
+  },
+  "tab": {
+    "message": "tab"
+  },
+  "touch_keyboard": {
+    "message": "Keyboard di layar"
+  },
+  "tr_tur_settings_page": {
+    "message": "Laman Setelan Keyboard Turki"
+  },
+  "transliteration_am": {
+    "message": "Transliterasi (salam \u2192 \u1230\u120b\u121d)"
+  },
+  "transliteration_ar": {
+    "message": "Transliterasi (marhaban \u2190 \u0645\u0631\u062d\u0628\u0627)"
+  },
+  "transliteration_be": {
+    "message": "Transliterasi (pryvitannie \u2192 \u043f\u0440\u044b\u0432\u0456\u0442\u0430\u043d\u043d\u0435)"
+  },
+  "transliteration_bg": {
+    "message": "Transliterasi (zdrasti \u2192 \u0437\u0434\u0440\u0430\u0441\u0442\u0438)"
+  },
+  "transliteration_bn": {
+    "message": "Transliterasi (namaskar \u2192 \u09a8\u09ae\u09b8\u09cd\u0995\u09be\u09b0)"
+  },
+  "transliteration_el": {
+    "message": "Transliterasi (geia \u2192 \u03b3\u03b5\u03b9\u03b1)"
+  },
+  "transliteration_fa": {
+    "message": "Transliterasi (salam \u2190 \u0633\u0644\u0627\u0645)"
+  },
+  "transliteration_gu": {
+    "message": "Transliterasi (namaste \u2192 \u0aa8\u0aae\u0ab8\u0acd\u0aa4\u0ac7)"
+  },
+  "transliteration_he": {
+    "message": "Transliterasi (shalom \u2190 \u05e9\u05dc\u05d5\u05dd)"
+  },
+  "transliteration_hi": {
+    "message": "Transliterasi (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_kn": {
+    "message": "Transliterasi (namaskaram \u2192 \u0ca8\u0cae\u0cb8\u0ccd\u0c95\u0cbe\u0cb0)"
+  },
+  "transliteration_ml": {
+    "message": "Transliterasi (namaskar \u2192 \u0d28\u0d2e\u0d38\u0d4d\u0d15\u0d3e\u0d30\u0d02)"
+  },
+  "transliteration_mr": {
+    "message": "Transliterasi (namaste \u2192 \u0928\u092e\u0938\u094d\u0915\u093e\u0930)"
+  },
+  "transliteration_ne": {
+    "message": "Transliterasi (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_or": {
+    "message": "Transliterasi (mausam \u2192 \u0b28\u0b2e\u0b38\u0b4d\u0b24\u0b47)"
+  },
+  "transliteration_pa": {
+    "message": "Transliterasi (mausam \u2192 \u0a2e\u0a4c\u0a38\u0a2e)"
+  },
+  "transliteration_ru": {
+    "message": "Transliterasi (privet \u2192 \u043f\u0440\u0438\u0432\u0435\u0442)"
+  },
+  "transliteration_sa": {
+    "message": "Transliterasi (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_si": {
+    "message": "Transliterasi (halo \u2192 \u0dc4\u0dbd\u0ddd)"
+  },
+  "transliteration_sr": {
+    "message": "Transliterasi (zdravo \u2192 \u0437\u0434\u0440\u0430\u0432\u043e)"
+  },
+  "transliteration_ta": {
+    "message": "Transliterasi (vanakkam \u2192 \u0bb5\u0ba3\u0b95\u0bcd\u0b95\u0bae\u0bcd)"
+  },
+  "transliteration_te": {
+    "message": "Transliterasi (emandi \u2192 \u0c0f\u0c2e\u0c02\u0c21\u0c40)"
+  },
+  "transliteration_ti": {
+    "message": "Transliterasi (selam \u2192 \u1230\u120b\u121d)"
+  },
+  "transliteration_uk": {
+    "message": "Transliterasi (pryvit \u2192 \u043f\u0440\u0438\u0432\u0456\u0442)"
+  },
+  "transliteration_ur": {
+    "message": "Transliterasi (salam \u2190 \u0633\u0644\u0627\u0645)"
+  },
+  "transliteration_vi": {
+    "message": "Transliterasi (chao \u2192 ch\u00e0o)"
+  },
+  "ua_ukr_settings_page": {
+    "message": "Laman Setelan Keyboard Ukrainia"
+  },
+  "up_arrow": {
+    "message": "panah atas"
+  },
+  "us_altgr_intl_eng_settings_page": {
+    "message": "Laman Setelan Keyboard AS Diperluas (Inggris)"
+  },
+  "us_colemak_eng_settings_page": {
+    "message": "Laman Setelan Keyboard Colemak AS (Inggris)"
+  },
+  "us_dvorak_eng_settings_page": {
+    "message": "Laman Setelan Keyboard Dvorak AS (Inggris)"
+  },
+  "us_eng_settings_page": {
+    "message": "Laman Setelan Keyboard AS (Inggris)"
+  },
+  "us_fil_settings_page": {
+    "message": "Laman Setelan Keyboard AS (Filipino)"
+  },
+  "us_ind_settings_page": {
+    "message": "Laman Setelan Keyboard AS (Indonesia)"
+  },
+  "us_intl_eng_settings_page": {
+    "message": "Laman Setelan Keyboard Internasional AS (Inggris)"
+  },
+  "us_intl_nld_settings_page": {
+    "message": "Laman Setelan Keyboard Internasional AS (Belanda)"
+  },
+  "us_intl_por_settings_page": {
+    "message": "Laman Setelan Keyboard Internasional AS (Brasil Portugis)"
+  },
+  "us_msa_settings_page": {
+    "message": "Laman Setelan Keyboard AS (Malay)"
+  },
+  "user_dict": {
+    "message": "Mengaktifkan kamus pribadi"
+  },
+  "user_dict_add": {
+    "message": "Tambah"
+  },
+  "user_dict_clear": {
+    "message": "Hapus Semua"
+  },
+  "user_dict_manage": {
+    "message": "Kelola kamus pribadi..."
+  },
+  "user_dict_new_word": {
+    "message": "Kata baru"
+  },
+  "user_dict_remove": {
+    "message": "Hapus yang Dipilih"
+  },
+  "user_dict_reset": {
+    "message": "Setel Ulang Semua Entri Kamus"
+  },
+  "user_dict_save": {
+    "message": "Simpan"
+  },
+  "user_dict_sync": {
+    "message": "Sinkronkan kamus pribadi"
+  },
+  "user_dict_title": {
+    "message": "Kamus Pribadi"
+  },
+  "voice": {
+    "message": "Suara"
+  },
+  "voice_privacy_info": {
+    "message": "Masukan suara Anda akan dikirim ke server Google untuk mengenali teks."
+  },
+  "voice_turn_off": {
+    "message": "nonaktifkan alat masukan suara"
+  },
+  "voice_turn_on": {
+    "message": "aktifkan alat masukan suara"
+  },
+  "wait": {
+    "message": "Tunggu"
+  },
+  "zhuyin_keyboard_layout": {
+    "message": "Jenis keyboard"
+  },
+  "zhuyin_page_size": {
+    "message": "Jumlah kandidat yang ditampilkan per halaman"
+  },
+  "zhuyin_select_keys": {
+    "message": "Tombol pilihan"
+  },
+  "zhuyin_settings_page": {
+    "message": "Laman Setelan Zhuyin"
+  }
+}

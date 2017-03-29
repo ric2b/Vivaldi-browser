@@ -1,0 +1,7 @@
+AXWebArea
+++AXGroup
+++++AXStaticText AXValue='Before'
+++AXGroup
+++++AXStaticText AXValue='Paragraph'
+++AXGroup
+++++AXStaticText AXValue='After'

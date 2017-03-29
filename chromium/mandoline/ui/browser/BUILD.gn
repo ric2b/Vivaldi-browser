@@ -1,0 +1,82 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//mojo/public/mojo_application.gni")
+import("//third_party/mojo/src/mojo/public/tools/bindings/mojom.gni")
+
+mojo_native_application("browser") {
+  sources = [
+    "main.cc",
+  ]
+
+  deps = [
+    ":lib",
+    "//mandoline/services/navigation/public/interfaces",
+    "//mandoline/ui/common/resources",
+    "//mojo/application/public/cpp",
+    "//third_party/icu:icudata",
+  ]
+
+  resources = [
+    "$root_out_dir/icudtl.dat",
+    "$root_out_dir/mandoline_ui.pak",
+  ]
+}
+
+source_set("lib") {
+  sources = [
+    "browser.cc",
+    "browser.h",
+    "browser_delegate.h",
+    "browser_manager.cc",
+    "browser_manager.h",
+    "navigator_host_impl.cc",
+    "navigator_host_impl.h",
+  ]
+
+  deps = [
+    "public/interfaces",
+    "//base",
+    "//components/view_manager/public/cpp",
+    "//mandoline/services/navigation/public/interfaces",
+    "//mandoline/tab",
+    "//mojo/application/public/interfaces",
+    "//mojo/converters/geometry",
+    "//skia",
+    "//third_party/mojo/src/mojo/public/cpp/bindings",
+    "//ui/gfx/geometry",
+    "//ui/mojo/events:interfaces",
+  ]
+
+  if (is_mac || use_aura) {
+    sources += [
+      "desktop/desktop_ui.cc",
+      "desktop/desktop_ui.h",
+    ]
+    deps += [ "//mandoline/ui/aura" ]
+  } else {
+    assert(is_android)
+    sources += [
+      "android/android_ui.cc",
+      "android/android_ui.h",
+    ]
+  }
+}
+
+mojo_native_application("mandoline_browser_apptests") {
+  testonly = true
+
+  sources = [
+    "browser_apptest.cc",
+  ]
+
+  deps = [
+    "//base",
+    "//base/test:test_config",
+    "//mandoline/tab/public/interfaces",
+    "//mandoline/ui/browser:lib",
+    "//mojo/application/public/cpp:test_support",
+  ]
+}

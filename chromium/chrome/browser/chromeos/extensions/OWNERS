@@ -1,0 +1,21 @@
+# Extension and apps team owners. Use file history to guide reviewer selection
+# as this list is randomized. If editing, see chrome/browser/extensions/OWNERS
+mek@chromium.org
+reillyg@chromium.org
+benwells@chromium.org
+rdevlin.cronin@chromium.org
+miket@chromium.org
+finnur@chromium.org
+kalman@chromium.org
+asargent@chromium.org
+
+# Additional ChromeOS-specific reviewers
+tbarzic@chromium.org
+zelidrag@chromium.org
+
+# bshe for wallpaper related files
+bshe@chromium.org
+
+# input method related reviewers. shuchen@ is primary, and nona@ is backup.
+per-file input_method*=shuchen@chromium.org
+per-file input_method*=nona@chromium.org

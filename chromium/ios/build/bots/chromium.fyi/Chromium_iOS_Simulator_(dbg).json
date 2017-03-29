@@ -1,0 +1,38 @@
+{
+  "owners": [
+    "smut"
+  ],
+  "comments": [
+    "Tests for 32- and 64-bit iOS 8.3 simulators."
+  ],
+  "xcode version": "6.3",
+  "GYP_DEFINES": {
+    "chromium_ios_signing": "0",
+    "target_subarch": "both"
+  },
+  "compiler": "xcodebuild",
+  "configuration": "Debug",
+  "sdk": "iphonesimulator8.3",
+  "tests": [
+    {
+      "include": "common_tests.json",
+      "device type": "iPhone 5s",
+      "os": "8.3"
+    },
+    {
+      "include": "common_tests.json",
+      "device type": "iPad Retina",
+      "os": "8.3"
+    },
+    {
+      "include": "common_tests.json",
+      "device type": "iPhone 5s",
+      "os": "7.1"
+    },
+    {
+      "include": "common_tests.json",
+      "device type": "iPad Retina",
+      "os": "7.1"
+    }
+  ]
+}

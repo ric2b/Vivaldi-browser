@@ -1,0 +1,20 @@
+// Copyright (c) 2015 Vivaldi. All rights reserved.
+[
+  {
+    "namespace": "editcommand",
+    "description": "Use the <code>chrome.editcommand</code> to run edit commands.",
+    "functions": [
+      {
+        "name": "execute",
+        "type": "function",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "command",
+            "description": "The command to be executed."
+          }
+        ]
+      }
+    ]
+  }
+]

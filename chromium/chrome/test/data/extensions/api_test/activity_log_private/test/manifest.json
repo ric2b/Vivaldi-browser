@@ -1,0 +1,11 @@
+{
+  "manifest_version": 2,
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxPnXCkmm7uFGELamSYBSy29GuJx/akY2n5CrxnVvXQrFZt0sFBK+PeClSllm1M5u1YNOyYgcXmq/HxbcIGQNVHlrZZYgC7nAe3cc09lrY381a6/p7Rco2vdotbVOcY8FFav02WSsKjGv2yE2Zm7bxkuvO+05CY0tFQGTnz3xegargqYyyljErLvmdL03yzRSK1qKMQXCvx8e2jgV+hOiDKdea+unlN538r9trD6MVhiowWwgjeZslon+5sTyseT8JLcWCwsG1P/Us/3I+UUi05uF1j7UuYoK95sKMj6Tdx5aeMkm4Map+6dOPv+crfubUjZVaEJWfCw2wVDskDVfuwIDAQAB",
+  "name": "Activity Log API Tester",
+  "description": "Tests chrome.activityLogPrivate.",
+  "version": "1.0",
+  "background": {
+    "scripts": ["test.js"]
+  },
+  "permissions": ["activityLogPrivate"]
+}

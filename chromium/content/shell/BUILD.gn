@@ -1,0 +1,459 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//build/config/ui.gni")
+import("//tools/grit/repack.gni")
+import("//tools/grit/grit_rule.gni")
+if (is_android) {
+  import("//build/config/android/config.gni")
+}
+
+declare_args() {
+  content_shell_product_name = "Content Shell"
+
+  # The "19" is so that sites that sniff for version think that this is
+  # something reasonably current; the "77.34.5" is a hint that this isn't a
+  # standard Chrome.
+  content_shell_version = "19.77.34.5"
+}
+
+static_library("content_shell_lib") {
+  testonly = true
+  sources = [
+    "android/shell_jni_registrar.cc",
+    "android/shell_jni_registrar.h",
+    "android/shell_manager.cc",
+    "android/shell_manager.h",
+    "app/blink_test_platform_support.h",
+    "app/blink_test_platform_support_android.cc",
+    "app/blink_test_platform_support_linux.cc",
+    "app/blink_test_platform_support_mac.mm",
+    "app/blink_test_platform_support_win.cc",
+    "app/paths_mac.h",
+    "app/paths_mac.mm",
+    "app/shell_crash_reporter_client.cc",
+    "app/shell_crash_reporter_client.h",
+    "app/shell_main_delegate.cc",
+    "app/shell_main_delegate.h",
+    "app/shell_main_delegate_mac.h",
+    "app/shell_main_delegate_mac.mm",
+    "browser/blink_test_controller.cc",
+    "browser/blink_test_controller.h",
+    "browser/ipc_echo_message_filter.cc",
+    "browser/ipc_echo_message_filter.h",
+    "browser/layout_test/layout_test_android.cc",
+    "browser/layout_test/layout_test_android.h",
+    "browser/layout_test/layout_test_bluetooth_adapter_provider.cc",
+    "browser/layout_test/layout_test_bluetooth_adapter_provider.h",
+    "browser/layout_test/layout_test_browser_context.cc",
+    "browser/layout_test/layout_test_browser_context.h",
+    "browser/layout_test/layout_test_browser_main.cc",
+    "browser/layout_test/layout_test_browser_main.h",
+    "browser/layout_test/layout_test_browser_main_parts.cc",
+    "browser/layout_test/layout_test_browser_main_parts.h",
+    "browser/layout_test/layout_test_content_browser_client.cc",
+    "browser/layout_test/layout_test_content_browser_client.h",
+    "browser/layout_test/layout_test_devtools_frontend.cc",
+    "browser/layout_test/layout_test_devtools_frontend.h",
+    "browser/layout_test/layout_test_download_manager_delegate.cc",
+    "browser/layout_test/layout_test_download_manager_delegate.h",
+    "browser/layout_test/layout_test_javascript_dialog_manager.cc",
+    "browser/layout_test/layout_test_javascript_dialog_manager.h",
+    "browser/layout_test/layout_test_message_filter.cc",
+    "browser/layout_test/layout_test_message_filter.h",
+    "browser/layout_test/layout_test_navigator_connect_service_factory.cc",
+    "browser/layout_test/layout_test_navigator_connect_service_factory.h",
+    "browser/layout_test/layout_test_notification_manager.cc",
+    "browser/layout_test/layout_test_notification_manager.h",
+    "browser/layout_test/layout_test_permission_manager.cc",
+    "browser/layout_test/layout_test_permission_manager.h",
+    "browser/layout_test/layout_test_push_messaging_service.cc",
+    "browser/layout_test/layout_test_push_messaging_service.h",
+    "browser/layout_test/layout_test_resource_dispatcher_host_delegate.cc",
+    "browser/layout_test/layout_test_resource_dispatcher_host_delegate.h",
+    "browser/layout_test/layout_test_url_request_context_getter.cc",
+    "browser/layout_test/layout_test_url_request_context_getter.h",
+    "browser/notify_done_forwarder.cc",
+    "browser/notify_done_forwarder.h",
+    "browser/shell.cc",
+    "browser/shell.h",
+    "browser/shell_access_token_store.cc",
+    "browser/shell_access_token_store.h",
+    "browser/shell_android.cc",
+    "browser/shell_application_mac.h",
+    "browser/shell_application_mac.mm",
+    "browser/shell_browser_context.cc",
+    "browser/shell_browser_context.h",
+    "browser/shell_browser_main.cc",
+    "browser/shell_browser_main.h",
+    "browser/shell_browser_main_parts.cc",
+    "browser/shell_browser_main_parts.h",
+    "browser/shell_browser_main_parts_mac.mm",
+    "browser/shell_content_browser_client.cc",
+    "browser/shell_content_browser_client.h",
+    "browser/shell_devtools_frontend.cc",
+    "browser/shell_devtools_frontend.h",
+    "browser/shell_devtools_manager_delegate.cc",
+    "browser/shell_devtools_manager_delegate.h",
+    "browser/shell_download_manager_delegate.cc",
+    "browser/shell_download_manager_delegate.h",
+    "browser/shell_javascript_dialog.h",
+    "browser/shell_javascript_dialog_mac.mm",
+    "browser/shell_javascript_dialog_manager.cc",
+    "browser/shell_javascript_dialog_manager.h",
+    "browser/shell_javascript_dialog_win.cc",
+    "browser/shell_login_dialog.cc",
+    "browser/shell_login_dialog.h",
+    "browser/shell_login_dialog_mac.mm",
+    "browser/shell_mac.mm",
+    "browser/shell_mojo_test_utils_android.cc",
+    "browser/shell_mojo_test_utils_android.h",
+    "browser/shell_net_log.cc",
+    "browser/shell_net_log.h",
+    "browser/shell_network_delegate.cc",
+    "browser/shell_network_delegate.h",
+    "browser/shell_permission_manager.cc",
+    "browser/shell_permission_manager.h",
+    "browser/shell_platform_data_aura.cc",
+    "browser/shell_platform_data_aura.h",
+    "browser/shell_plugin_service_filter.cc",
+    "browser/shell_plugin_service_filter.h",
+    "browser/shell_quota_permission_context.cc",
+    "browser/shell_quota_permission_context.h",
+    "browser/shell_resource_dispatcher_host_delegate.cc",
+    "browser/shell_resource_dispatcher_host_delegate.h",
+    "browser/shell_speech_recognition_manager_delegate.cc",
+    "browser/shell_speech_recognition_manager_delegate.h",
+    "browser/shell_url_request_context_getter.cc",
+    "browser/shell_url_request_context_getter.h",
+    "browser/shell_web_contents_view_delegate.h",
+    "browser/shell_web_contents_view_delegate_android.cc",
+    "browser/shell_web_contents_view_delegate_creator.h",
+    "browser/shell_web_contents_view_delegate_mac.mm",
+    "browser/shell_web_contents_view_delegate_win.cc",
+    "common/layout_test/layout_test_messages.cc",
+    "common/layout_test/layout_test_messages.h",
+    "common/leak_detection_result.h",
+    "common/shell_content_client.cc",
+    "common/shell_content_client.h",
+    "common/shell_messages.cc",
+    "common/shell_messages.h",
+    "common/shell_switches.cc",
+    "common/shell_switches.h",
+    "common/shell_test_configuration.cc",
+    "common/shell_test_configuration.h",
+    "renderer/ipc_echo.cc",
+    "renderer/ipc_echo.h",
+    "renderer/layout_test/blink_test_helpers.cc",
+    "renderer/layout_test/blink_test_helpers.h",
+    "renderer/layout_test/blink_test_runner.cc",
+    "renderer/layout_test/blink_test_runner.h",
+    "renderer/layout_test/gc_controller.cc",
+    "renderer/layout_test/gc_controller.h",
+    "renderer/layout_test/layout_test_content_renderer_client.cc",
+    "renderer/layout_test/layout_test_content_renderer_client.h",
+    "renderer/layout_test/layout_test_render_frame_observer.cc",
+    "renderer/layout_test/layout_test_render_frame_observer.h",
+    "renderer/layout_test/layout_test_render_process_observer.cc",
+    "renderer/layout_test/layout_test_render_process_observer.h",
+    "renderer/layout_test/leak_detector.cc",
+    "renderer/layout_test/leak_detector.h",
+    "renderer/layout_test/test_media_stream_renderer_factory.cc",
+    "renderer/layout_test/test_media_stream_renderer_factory.h",
+    "renderer/layout_test/test_video_frame_provider.cc",
+    "renderer/layout_test/test_video_frame_provider.h",
+    "renderer/shell_content_renderer_client.cc",
+    "renderer/shell_content_renderer_client.h",
+    "renderer/shell_render_view_observer.cc",
+    "renderer/shell_render_view_observer.h",
+    "utility/shell_content_utility_client.cc",
+    "utility/shell_content_utility_client.h",
+  ]
+
+  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+
+  defines = [ "CONTENT_SHELL_VERSION=\"$content_shell_version\"" ]
+
+  public_deps = [
+    # This exposes all public content APIs.
+    "//content/public/app:both",
+    "//content/public/browser",
+    "//content/public/common",
+    "//content/public/plugin",
+    "//content/public/renderer",
+    "//content/public/utility",
+  ]
+  deps = [
+    ":resources",
+    "//base",
+    "//base:base_static",
+    "//base/allocator",
+    "//base/third_party/dynamic_annotations",
+    "//cc",
+    "//components/crash/app",
+    "//components/devtools_discovery",
+    "//components/devtools_http_handler",
+    "//components/plugins/renderer",
+    "//components/test_runner:test_runner",
+    "//components/web_cache/renderer",
+    "//content:resources",
+    "//content/app/resources",
+    "//content/app/strings",
+    "//content/gpu",
+    "//content/test:layouttest_support",
+    "//device/bluetooth",
+    "//device/bluetooth:mocks",
+    "//gin",
+    "//gpu",
+    "//ipc",
+    "//media",
+    "//net",
+    "//net:net_resources",
+    "//skia",
+    "//storage/browser",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/WebKit/public:blink",
+    "//third_party/WebKit/public:image_resources",
+    "//third_party/WebKit/public:resources",
+    "//third_party/WebKit/public:test_support",
+    "//third_party/icu",
+    "//ui/base",
+    "//ui/base/ime",
+    "//ui/events:events_base",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/gfx/ipc",
+    "//ui/gl",
+    "//url",
+    "//v8",
+
+    #'copy_test_netscape_plugin',  TODO(GYP)
+  ]
+  if (enable_plugins) {
+    deps += [ "//content/ppapi_plugin" ]
+  }
+
+  if (is_win) {
+    #'LinkIncremental': '<(msvs_large_module_debug_link_mode)',  TODO(GYP)
+    sources += [
+      "common/v8_breakpad_support_win.cc",
+      "common/v8_breakpad_support_win.h",
+    ]
+  }
+
+  if (is_linux) {
+    configs += [ "//build/config/linux:fontconfig" ]
+  }
+
+  if (use_x11) {
+    # Some tests rely on this tool at runtime. Note: it might be better if
+    # the tests that needed it had this as a dep instead of adding it here.
+    datadeps = [
+      "//tools/xdisplaycheck",
+    ]
+
+    deps += [ "//ui/events/devices" ]
+  }
+
+  if (is_android) {
+    deps += [ "//content/shell/android:content_shell_jni_headers" ]
+    #deps -= [ "copy_test_netscape_plugin" ]  TODO(GYP)
+  }
+
+  if (is_posix && !is_mac) {
+    deps += [ "//components/crash/browser" ]
+  }
+
+  if (use_aura) {
+    deps += [
+      "//ui/aura",
+      "//ui/aura:test_support",
+      "//ui/events",
+      "//ui/strings",
+      "//ui/wm",
+    ]
+
+    if (toolkit_views) {
+      sources += [ "browser/shell_views.cc" ]
+      deps += [
+        "//ui/resources",
+        "//ui/views/controls/webview",
+        "//ui/views",
+        "//ui/views:test_support",
+      ]
+    } else {
+      sources += [ "browser/shell_aura.cc" ]
+    }
+  } else {
+    sources -= [
+      "browser/shell_platform_data_aura.cc",
+      "browser/shell_platform_data_aura.h",
+    ]
+  }
+
+  # The test plugin relies on X11.
+  if (is_linux && !use_x11) {
+    #deps -= [ 'copy_test_netscape_plugin' ]  TODO(GYP)
+  }
+
+  if (is_chromeos) {
+    deps += [
+      "//chromeos",
+      "//ui/wm:test_support",
+    ]
+  }
+
+  if (is_linux) {
+    deps += [ "//third_party/freetype2" ]
+  }
+
+  if (!enable_plugins) {
+    sources -= [
+      "browser/shell_plugin_service_filter.cc",
+      "browser/shell_plugin_service_filter.h",
+    ]
+  }
+}
+
+grit("content_shell_resources_grit") {
+  visibility = [ ":*" ]
+  source = "shell_resources.grd"
+  outputs = [
+    "grit/shell_resources.h",
+    "shell_resources.pak",
+    "shell_resources.rc",
+  ]
+}
+
+copy("copy_shell_resources") {
+  sources = [
+    "$target_gen_dir/shell_resources.pak",
+  ]
+  outputs = [
+    "$root_out_dir/shell_resources.pak",
+  ]
+
+  public_deps = [
+    ":content_shell_resources_grit",
+  ]
+}
+
+group("resources") {
+  public_deps = [
+    ":copy_shell_resources",
+  ]
+  deps = [
+    "//components/test_runner:resources",
+  ]
+}
+
+repack("pak") {
+  sources = [
+    "$root_gen_dir/blink/public/resources/blink_image_resources_100_percent.pak",
+    "$root_gen_dir/blink/public/resources/blink_resources.pak",
+    "$root_gen_dir/content/app/resources/content_resources_100_percent.pak",
+    "$root_gen_dir/content/app/strings/content_strings_en-US.pak",
+    "$root_gen_dir/content/browser/tracing/tracing_resources.pak",
+    "$root_gen_dir/content/content_resources.pak",
+    "$root_gen_dir/content/shell/shell_resources.pak",
+    "$root_gen_dir/net/net_resources.pak",
+    "$root_gen_dir/ui/resources/ui_resources_100_percent.pak",
+    "$root_gen_dir/ui/resources/webui_resources.pak",
+    "$root_gen_dir/ui/strings/app_locale_settings_en-US.pak",
+    "$root_gen_dir/ui/strings/ui_strings_en-US.pak",
+  ]
+
+  deps = [
+    ":resources",
+    "//content:resources",
+    "//content/app/resources",
+    "//content/app/strings",
+    "//content/browser/tracing:resources",
+    "//net:net_resources",
+    "//third_party/WebKit/public:image_resources",
+    "//third_party/WebKit/public:resources",
+    "//ui/resources",
+    "//ui/strings",
+  ]
+
+  if (toolkit_views) {
+    deps += [ "//ui/views/resources" ]
+    sources +=
+        [ "$root_gen_dir/ui/views/resources/views_resources_100_percent.pak" ]
+  }
+
+  sources += [ "$root_gen_dir/blink/devtools_resources.pak" ]
+  deps += [ "//content/browser/devtools:resources" ]
+  output = "$root_out_dir/content_shell.pak"
+}
+
+# TODO(GYP): Figure out what this should be on android
+# and make linking this work on the Mac.
+if (!is_android && !is_mac) {
+  executable("content_shell") {
+    testonly = true
+
+    # TODO(GYP) mac resource bundle stuff for this target.
+    # TODO(GYP) Windows content shell settings:
+    #  - Manifest.
+    #  - RC file.
+    #  - 'LinkIncremental': '<(msvs_large_module_debug_link_mode)',
+    sources = [
+      "app/shell_main.cc",
+    ]
+
+    deps = [
+      ":content_shell_lib",
+      ":pak",
+      "//base/allocator",
+    ]
+
+    if (is_win) {
+      deps += [ "//sandbox" ]
+      if (!is_asan) {
+        configs -= [ "//build/config/win:console" ]
+        configs += [ "//build/config/win:windowed" ]
+      }
+    }
+
+    if (is_mac) {
+      # TODO(GYP) lots of stuff from GYP file here.
+    }
+
+    if (is_android) {
+      # Some tests rely on this tool. It might be nicer if these tests relied on
+      # image diff rather than having content shell depend on it.
+      datadeps = [
+        "//tools/imagediff($host_toolchain)",
+      ]
+    }
+  }
+} else {
+  group("content_shell") {
+    testonly = true
+    deps = [
+      ":content_shell_lib",
+    ]
+  }
+}
+
+if (is_win) {
+  # GYP version: content/content_shell_and_tests.gyp:content_shell_crash_service
+  executable("crash_service") {
+    sources = [
+      "tools/content_shell_crash_service.cc",
+    ]
+
+    deps = [
+      "//base",
+      "//components/crash/tools:crash_service",
+    ]
+
+    configs -= [ "//build/config/win:console" ]
+    configs += [ "//build/config/win:windowed" ]
+  }
+}

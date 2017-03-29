@@ -1,0 +1,4 @@
+include_rules = [
+  "+chrome/grit",  # For generated headers.
+  "+sandbox/win/src",
+]

@@ -1,0 +1,6 @@
+include_rules = [
+  "+components/filesystem",
+  "+mojo/application",
+  "+mojo/public",
+  "+mojo/util",
+]

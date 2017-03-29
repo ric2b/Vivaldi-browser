@@ -1,0 +1,55 @@
+// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved.
+
+[
+  {
+    "namespace": "thumbnails",
+    "description": "Thumbnail capture support api.",
+    "types": [
+      {
+        "id": "ThumbnailQueryResult",
+        "type": "object",
+        "description": "A structure contain the result of the isThumbnailAvailable call.",
+        "properties": {
+          "hasThumbnail": {
+            "type": "boolean",
+            "description": "true if a thumbnail is available, otherwise false."
+          },
+          "thumbnailUrl": {
+            "type": "string",
+            "description": "The url pointing to the available thumbnail"
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "isThumbnailAvailable",
+        "type": "function",
+        "description": "Checks whether a thumbnail is available for the given data",
+        "parameters": [
+          {
+            "name": "bookmarkId",
+            "type": "string",
+            "description": "The bookmark id to check for available thumbnail"
+          },
+          {
+            "name": "url",
+            "type": "string",
+            "description": "The url of a site to check for thumbnail availability"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "result",
+                "$ref": "ThumbnailQueryResult"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

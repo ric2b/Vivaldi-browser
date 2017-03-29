@@ -1,0 +1,262 @@
+<!-- Copyright 2015 The Chromium Authors. All rights reserved.
+     Use of this source code is governed by a BSD-style license that can be
+     found in the LICENSE file. -->
+
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-iconset-svg/iron-iconset-svg.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-selector/iron-selector.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/animations/fade-in-animation.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/animations/fade-out-animation.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/animations/hero-animation.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animated-pages.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-shared-element-animatable-behavior.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-item/paper-icon-item.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-material/paper-material.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-progress/paper-progress.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
+
+<!--
+List of devices.
+Published properties:
+  * devices - array of strings, the model of the list.
+  * selected - a name of the selected device ('null' if no devices are
+    selected).
+  * connecting - a binary attribute. If set, the list does not respond to the
+    user actions and a spinner is shown near selected device.
+-->
+<dom-module name="pairing-device-list">
+  <link rel="stylesheet" href="pairing_device_list.css">
+
+  <iron-iconset-svg name="pairing-device-list-icons">
+    <svg><defs><g id="circle">
+      <circle cx="12" cy="12" r="12"></circle>
+    </g></defs></svg>
+  </iron-iconset-svg>
+
+  <template>
+    <iron-selector selected="{{selected}}" attr-for-selected="name">
+      <template is="dom-repeat" items="[[devices]]">
+        <paper-icon-item name$="[[item]]" class="relative">
+          <iron-icon icon="pairing-device-list-icons:circle" item-icon
+              style$="[[getStyleForDeviceIcon_(item)]]">
+          </iron-icon>
+          <div><span>[[item]]</span></div>
+          <div class="flex horizontal end-justified layout center">
+            <div class="throbber"></div>
+          </div>
+        </paper-icon-item>
+      </template>
+    </iron-selector>
+  </template>
+</dom-module>
+
+<!--
+Single page of the controller's out-of-box flow.
+The page consists of the top part and the bottom part.
+The top part contains a title of the page. Direct successors of the
+<controller-pairing-page> having 'title' class will be inserted there.
+The bottom part contains controls that are aligned right  (all the successors
+that are <paper-button>s) and a content of the page (all the other successors).
+Special case is a help button (<paper-button> with 'help' class set) which
+is aligned left.
+There are several classes that can be used to change the page appearance:
+  * split - if this class is set, top and bottom parts will have different
+    colors.
+  * big-font - if this class is set, slightly bigger font is used on page.
+  * progress - if this class is set and 'split' is not, progress bar is shown
+    instead of top and bottom parts separator.
+
+Also height of the top part can be specified in CSS as follows:
+
+controller-pairing-page::shadow #top {
+  height: 100px;
+}
+-->
+<dom-module name="controller-pairing-page">
+  <link rel="stylesheet" href="controller_pairing_page.css">
+
+  <template>
+    <div class="vertical layout fit">
+      <div id="top" class="relative vertical end-justified layout">
+        <div id="title">
+          <content select=".title"></content>
+        </div>
+        <div id="separator">
+          <paper-progress indeterminate></paper-progress>
+        </div>
+      </div>
+      <div id="bottom" class="flex vertical layout">
+        <div class="flex vertical layout">
+          <content select=":not(paper-button)"></content>
+        </div>
+        <div id="controls" class="horizontal layout center">
+          <div class="flex">
+            <content select="paper-button.help-button"></content>
+          </div>
+          <content select="paper-button"></content>
+        </div>
+      </div>
+    </div>
+  </template>
+</dom-module>
+
+<dom-module name="controller-pairing-screen">
+  <link rel="stylesheet" href="oobe_screen_controller_pairing.css">
+
+  <template>
+    <paper-material class="fit">
+      <neon-animated-pages id="pages" selected="{{C.page}}"
+          attr-for-selected="name" class="fit">
+        <controller-pairing-page name="devices-discovery" class="big-font">
+          <div class="title"
+              i18n-content="login_ControllerPairingScreen_welcomeTitle">
+          </div>
+          <div i18n-content="login_ControllerPairingScreen_searching"></div>
+          <paper-button class="help-button" on-tap="helpButtonClicked_"
+              i18n-content="login_ControllerPairingScreen_helpBtn">
+          </paper-button>
+        </controller-pairing-page>
+
+        <controller-pairing-page name="device-select" class="split">
+          <div class="title"
+              i18n-content="login_ControllerPairingScreen_selectTitle">
+          </div>
+          <pairing-device-list devices="[[C.devices]]"
+              selected="{{selectedDevice}}">
+          </pairing-device-list>
+          <paper-button class="help-button" on-tap="helpButtonClicked_"
+              i18n-content="login_ControllerPairingScreen_helpBtn">
+          </paper-button>
+          <paper-button on-tap="userActed" action="chooseDevice"
+              disabled$="[[C.controlsDisabled]]"
+              i18n-content="login_ControllerPairingScreen_connectBtn">
+          </paper-button>
+        </controller-pairing-page>
+
+        <controller-pairing-page name="device-not-found">
+          <div class="title"
+              i18n-content="login_ControllerPairingScreen_troubleConnectingTitle">
+          </div>
+          <div i18n-content="login_ControllerPairingScreen_connectingAdvice">
+          </div>
+          <paper-button on-tap="userActed" action="repeatDiscovery"
+              i18n-content="login_ControllerPairingScreen_adviceGotItBtn">
+          </paper-button>
+        </controller-pairing-page>
+
+        <controller-pairing-page name="establishing-connection" class="split">
+          <div class="title"
+              i18n-content="login_ControllerPairingScreen_selectTitle">
+          </div>
+          <pairing-device-list devices="[[C.devices]]"
+              selected="{{selectedDevice}}" connecting>
+          </pairing-device-list>
+          <paper-button class="help-button" on-tap="helpButtonClicked_"
+              i18n-content="login_ControllerPairingScreen_helpBtn">
+          </paper-button>
+          <paper-button disabled
+              i18n-content="login_ControllerPairingScreen_connecting">
+          </paper-button>
+        </controller-pairing-page>
+
+        <controller-pairing-page name="establishing-connection-error">
+          <!-- TODO(dzhioev): Strings TBD. http://crbug.com/423740 -->
+          <div class="title">
+            Unable to connect to <span>[[selectedDevice]]<span>
+          </div>
+          <paper-button on-tap="userActed" action="repeatDiscovery">
+            Repeat discovery
+          </paper-button>
+        </controller-pairing-page>
+
+        <controller-pairing-page name="code-confirmation" class="split">
+          <div class="title"
+              i18n-content="login_ControllerPairingScreen_confirmationTitle">
+          </div>
+          <div
+              i18n-content="login_ControllerPairingScreen_confirmationQuestion">
+          </div>
+          <div id="code"><span>[[C.code]]</span></div>
+          <paper-button on-tap="userActed" action="rejectCode"
+              disabled$="[[C.controlsDisabled]"
+              i18n-content="login_ControllerPairingScreen_rejectCodeBtn">
+          </paper-button>
+          <paper-button on-tap="userActed" action="acceptCode"
+              disabled$="[[C.controlsDisabled]]"
+              i18n-content="login_ControllerPairingScreen_acceptCodeBtn">
+          </paper-button>
+        </controller-pairing-page>
+
+        <controller-pairing-page name="host-update" class="split">
+          <div class="title"
+              i18n-content="login_ControllerPairingScreen_updateTitle">
+          </div>
+          <div i18n-content="login_ControllerPairingScreen_updateText"></div>
+          <paper-progress indeterminate></paper-progress>
+        </controller-pairing-page>
+
+        <controller-pairing-page name="host-connection-lost" class="split">
+          <div class="title"
+              i18n-content="login_ControllerPairingScreen_connectionLostTitle">
+          </div>
+          <div i18n-content="login_ControllerPairingScreen_connectionLostText">
+          </div>
+          <paper-progress indeterminate></paper-progress>
+        </controller-pairing-page>
+
+        <controller-pairing-page name="enrollment-introduction" class="split">
+          <div class="title"
+              i18n-content="login_ControllerPairingScreen_enrollTitle">
+          </div>
+          <p i18n-content="login_ControllerPairingScreen_enrollText1"></p>
+          <p>
+            <strong i18n-content="login_ControllerPairingScreen_enrollText2">
+            </strong>
+          </p>
+          <paper-button on-tap="userActed" action="proceedToAuthentication"
+              disabled$="[[C.controlsDisabled]]"
+              i18n-content="login_ControllerPairingScreen_continueBtn">
+          </paper-button>
+        </controller-pairing-page>
+
+        <controller-pairing-page name="authentication" class="split">
+          <div class="title"
+              i18n-content="login_ControllerPairingScreen_enrollTitle">
+          </div>
+          <div>Not implemented.</div>
+        </controller-pairing-page>
+
+        <controller-pairing-page name="host-enrollment" class="progress">
+          <!-- This title contains <strong> tag inside. -->
+          <html-echo class="title"
+              content="[[getHostEnrollmentStepTitle_(C.enrollmentDomain)]]">
+          </html-echo>
+        </controller-pairing-page>
+
+        <controller-pairing-page name="host-enrollment-error" class="progress">
+          <div class="title"
+              i18n-content="login_ControllerPairingScreen_enrollmentErrorTitle">
+          </div>
+          <div
+              i18n-content="login_ControllerPairingScreen_enrollmentErrorHostRestarts">
+          </div>
+        </controller-pairing-page>
+
+        <controller-pairing-page name="pairing-done" class="big-font">
+          <div class="title"
+              i18n-content="login_ControllerPairingScreen_successTitle">
+          </div>
+          <div><span>[[getSuccessMessage_(selectedDevice)]]</div>
+          <paper-button on-tap="userActed" action="startSession"
+              disabled$="{{C.controlsDisabled}}"
+              i18n-content="login_ControllerPairingScreen_continueToHangoutsBtn">
+          </paper-button>
+        </controller-pairing-page>
+      </neon-animated-pages>
+    </paper-material>
+  </template>
+</dom-module>
+

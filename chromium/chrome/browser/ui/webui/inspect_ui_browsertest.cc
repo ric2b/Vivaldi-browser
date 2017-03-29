@@ -1,0 +1,94 @@
+// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "chrome/browser/devtools/device/adb/adb_device_provider.h"
+#include "chrome/browser/devtools/device/adb/mock_adb_server.h"
+#include "chrome/browser/devtools/device/devtools_android_bridge.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/common/url_constants.h"
+#include "chrome/test/base/ui_test_utils.h"
+#include "chrome/test/base/web_ui_browser_test.h"
+#include "content/public/browser/navigation_details.h"
+#include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test_utils.h"
+
+using content::WebContents;
+
+namespace {
+
+const char kSharedWorkerTestPage[] =
+    "files/workers/workers_ui_shared_worker.html";
+const char kSharedWorkerJs[] =
+    "files/workers/workers_ui_shared_worker.js";
+
+class InspectUITest : public WebUIBrowserTest {
+ public:
+  InspectUITest() {}
+
+  void SetUpOnMainThread() override {
+    WebUIBrowserTest::SetUpOnMainThread();
+    AddLibrary(base::FilePath(FILE_PATH_LITERAL("inspect_ui_test.js")));
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(InspectUITest);
+};
+
+IN_PROC_BROWSER_TEST_F(InspectUITest, InspectUIPage) {
+  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUIInspectURL));
+  ASSERT_TRUE(WebUIBrowserTest::RunJavascriptAsyncTest(
+      "testTargetListed",
+      new base::StringValue("#pages"),
+      new base::StringValue("populateWebContentsTargets"),
+      new base::StringValue(chrome::kChromeUIInspectURL)));
+}
+
+IN_PROC_BROWSER_TEST_F(InspectUITest, SharedWorker) {
+  ASSERT_TRUE(test_server()->Start());
+  GURL url = test_server()->GetURL(kSharedWorkerTestPage);
+  ui_test_utils::NavigateToURL(browser(), url);
+
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(),
+      GURL(chrome::kChromeUIInspectURL),
+      NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+
+  ASSERT_TRUE(WebUIBrowserTest::RunJavascriptAsyncTest(
+      "testTargetListed",
+      new base::StringValue("#workers"),
+      new base::StringValue("populateWorkerTargets"),
+      new base::StringValue(kSharedWorkerJs)));
+
+  ASSERT_TRUE(WebUIBrowserTest::RunJavascriptAsyncTest(
+      "testTargetListed",
+      new base::StringValue("#pages"),
+      new base::StringValue("populateWebContentsTargets"),
+      new base::StringValue(kSharedWorkerTestPage)));
+}
+
+IN_PROC_BROWSER_TEST_F(InspectUITest, AndroidTargets) {
+  DevToolsAndroidBridge* android_bridge =
+      DevToolsAndroidBridge::Factory::GetForProfile(browser()->profile());
+  AndroidDeviceManager::DeviceProviders providers;
+  providers.push_back(new AdbDeviceProvider());
+  android_bridge->set_device_providers_for_test(providers);
+
+  StartMockAdbServer(FlushWithSize);
+
+  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUIInspectURL));
+
+  ASSERT_TRUE(WebUIBrowserTest::RunJavascriptAsyncTest("testAdbTargetsListed"));
+
+  StopMockAdbServer();
+}
+
+IN_PROC_BROWSER_TEST_F(InspectUITest, ReloadCrash) {
+  ASSERT_TRUE(test_server()->Start());
+  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUIInspectURL));
+  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUIInspectURL));
+}
+
+}  // namespace

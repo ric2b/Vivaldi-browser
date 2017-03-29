@@ -1,0 +1,93 @@
+# Copyright (c) 2013 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+assert(!is_android && !is_ios)
+
+source_ids = "//third_party/usb_ids/usb.ids"
+generated_ids = "$target_gen_dir/usb_ids_gen.cc"
+
+source_set("usb") {
+  sources = [
+    "usb_context.cc",
+    "usb_context.h",
+    "usb_descriptors.cc",
+    "usb_descriptors.h",
+    "usb_device.cc",
+    "usb_device.h",
+    "usb_device_filter.cc",
+    "usb_device_filter.h",
+    "usb_device_handle.h",
+    "usb_device_handle_impl.cc",
+    "usb_device_handle_impl.h",
+    "usb_device_impl.cc",
+    "usb_device_impl.h",
+    "usb_error.cc",
+    "usb_error.h",
+    "usb_ids.cc",
+    "usb_ids.h",
+    "usb_service.cc",
+    "usb_service.h",
+    "usb_service_impl.cc",
+    "usb_service_impl.h",
+    generated_ids,
+  ]
+
+  deps = [
+    ":usb_device_ids",
+    "//base",
+    "//base/third_party/dynamic_annotations",
+    "//components/device_event_log",
+    "//device/core",
+    "//net",
+    "//third_party/libusb",
+  ]
+
+  if (is_linux) {
+    deps += [ "//device/udev_linux" ]
+  }
+  if (is_chromeos) {
+    deps += [
+      "//chromeos",
+      "//dbus",
+    ]
+  }
+}
+
+source_set("mocks") {
+  testonly = true
+
+  sources = [
+    "mock_usb_device.cc",
+    "mock_usb_device.h",
+    "mock_usb_device_handle.cc",
+    "mock_usb_device_handle.h",
+    "mock_usb_service.cc",
+    "mock_usb_service.h",
+  ]
+
+  deps = [
+    "//base",
+    "//testing/gmock",
+    ":usb",
+  ]
+}
+
+action("usb_device_ids") {
+  script = "//device/usb/tools/usb_ids.py"
+  inputs = [
+    source_ids,
+  ]
+  outputs = [
+    generated_ids,
+  ]
+  args = [
+    "-i",
+    rebase_path(source_ids, root_build_dir),
+    "-o",
+    rebase_path(generated_ids, root_build_dir),
+  ]
+
+  # Only the device_usb target can depend on us.
+  visibility = [ ":usb" ]
+}

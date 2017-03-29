@@ -1,0 +1,505 @@
+/* Copyright (c) 2012 The Chromium Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file. */
+
+/* Special attribute to hide elements. */
+[hidden] {
+  display: none !important;
+}
+
+/* This file contains "borrowed" copy of standard styles. To simplify merging,
+ * when altering, please preserve original property value by adding comments. */
+input.common[type='checkbox'],
+input.common[type='radio'] {
+  -webkit-appearance: none;
+  border: 1px solid #555;
+  border-radius: 1px;
+  box-sizing: border-box;
+  cursor: default;
+  height: 13px;
+  margin: 0;
+  opacity: 0.4;
+  width: 13px;
+}
+
+input.common[type='checkbox']:hover,
+input.common[type='checkbox']:checked,
+input.common[type='radio']:hover,
+input.common[type='radio']:checked {
+  opacity: 1;
+}
+
+input.common[type='checkbox'] {
+  position: relative;
+}
+
+input.common[type='checkbox']:checked::after {
+  background-image: -webkit-image-set(
+    url(../images/common/check_no_box.png) 1x,
+    url(../images/common/2x/check_no_box.png) 2x);
+  background-position: -3px -4px;
+  background-repeat: no-repeat;
+}
+
+input.common[type='checkbox'].white {
+  border: none;
+}
+
+input.common[type='checkbox'].white:not(:checked)::after {
+  background-image: -webkit-image-set(
+    url(../images/common/checkbox_white_unchecked.png) 1x,
+    url(../images/common/2x/checkbox_white_unchecked.png) 2x);
+  background-position: -1px 0;
+}
+
+input.common[type='checkbox'].white:checked::after {
+  background-image: -webkit-image-set(
+    url(../images/common/checkbox_white_checked.png) 1x,
+    url(../images/common/2x/checkbox_white_checked.png) 2x);
+  background-position: -1px 0;
+}
+
+input.common[type='checkbox']::after {
+  content: '';
+  display: flex;
+  height: 15px;
+  left: -2px;
+  position: absolute;
+  top: -2px;
+  width: 17px;
+}
+
+.bubble {
+  background: #FFF;
+  border-radius: 2px;
+  cursor: default;
+  outline: 1px solid rgba(0, 0, 0, 0.2);
+  padding: 16px;
+}
+
+.bubble .pointer {
+  background: -webkit-image-set(
+    url(../images/common/bubble_point_white.png) 1x,
+    url(../images/common/2x/bubble_point_white.png) 2x);
+  display: block;
+  height: 11px;
+  left: 24px;
+  margin: 0 0 0 -5px;
+  outline: none;
+  position: absolute;
+  width: 17px;
+}
+
+.bubble .pointer:not(.bottom) {
+  top: -11px;
+}
+
+.bubble .pointer.bottom {
+  -webkit-transform: rotate(180deg);
+  bottom: -11px;
+}
+
+.bubble .close-x {
+  background: -webkit-image-set(
+    url(../images/common/close_x_gray.png) 1x,
+    url(../images/common/2x/close_x_gray.png) 2x);
+  height: 21px;
+  opacity: 0.3;
+  position: absolute;
+  right: 3px;
+  top: 3px;
+  width: 21px;
+}
+
+.bubble .close-x:hover {
+  opacity: 0.7;
+}
+
+/* "chrome-menu" class overrides some standard menu.css styles, to make custom
+   menus in FileBrowser look like native ChromeOS menus. */
+
+cr-menu.chrome-menu {
+  background-color: white;
+  border-radius: 2px;
+  box-shadow: 0 1px 4px 0 rgba(0, 0, 0, .5);
+  color: rgb(51, 51, 51);
+  outline: none;
+  overflow: hidden;
+  padding: 8px 0;
+  transition: opacity 200ms ease-in;
+  z-index: 600;  /* Must be below the overlay pane (1000). */
+}
+
+cr-menu.chrome-menu[hidden] {
+  display: block !important;  /* Overrides default [hidden] for animation. */
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+cr-menu.chrome-menu.hide-delayed[hidden] {
+  transition-delay: 120ms;
+  transition-property: opacity, visibility;
+}
+
+cr-menu.chrome-menu > :not(hr) {
+  background-position: right 10px center;
+  background-repeat: no-repeat;
+  line-height: 32px;
+  outline: none;
+  padding: 0 8px;
+}
+
+html[dir='rtl'] cr-menu.chrome-menu > :not(hr) {
+  background-position: left 10px center;
+}
+
+cr-menu.chrome-menu > .menuitem-button {
+  background-position: center;
+  background-repeat: no-repeat;
+  border: 1px solid rgb(235, 235, 235);
+  height: 42px;
+  margin: -36px -1px -1px 0;
+  min-width: 60px;
+  padding: 0;
+  position: absolute;
+  width: 60px;
+}
+
+cr-menu.chrome-menu > .menuitem-button[checked] {
+  background-color: rgb(235, 235, 235);
+}
+
+cr-menu.chrome-menu > .menuitem-button.left {
+  right: 59px;
+}
+
+html[dir='rtl'] cr-menu.chrome-menu > .menuitem-button.left {
+  left: 59px;
+  right: auto;
+}
+
+cr-menu.chrome-menu > .menuitem-button.right {
+  right: 0;
+}
+
+html[dir='rtl'] cr-menu.chrome-menu > .menuitem-button.right {
+  left: 0;
+  right: auto;
+}
+
+cr-menu.chrome-menu > cr-menu-item[disabled] {
+  color: rgba(51, 51, 51, 0.20);
+}
+
+cr-menu.chrome-menu > cr-menu-item:not([disabled])[selected],
+cr-menu.chrome-menu > cr-menu-item:not([disabled]):active {
+  background-color: rgba(0, 0, 0, 0.08);
+}
+
+cr-menu.chrome-menu > hr {
+  background: rgb(219, 219, 219);
+  height: 1px;
+  margin: 4px 0;
+}
+
+cr-menu.chrome-menu > hr:first-child {
+  display: none;
+}
+
+cr-menu.chrome-menu > cr-menu-item[checked] {
+  background-image: -webkit-image-set(
+    url(../images/common/check_no_box.png) 1x,
+    url(../images/common/2x/check_no_box.png) 2x);
+}
+
+cr-menu.chrome-menu > [checked]::before {
+  display: none;
+}
+
+/**
+ * Ok/Cancel style buttons
+ * Height: 31px (content:21px + border:5px * 2)
+ * TODO(fukino): Remove these styles once our dialogs get material design.
+ **/
+.cr-dialog-buttons > button {
+  background-color: rgb(250, 250, 250);
+  background-image: none;
+  background-position: center;
+  background-repeat: no-repeat;
+  border: 5px solid transparent;
+  border-image: -webkit-image-set(
+    url(chrome://resources/images/apps/button.png) 1x,
+    url(chrome://resources/images/2x/apps/button.png)
+        2x) 5 / 5px / 2px repeat;
+  box-sizing: content-box;
+  color: rgb(34, 34, 34);
+  cursor: default;
+  height: 21px;
+  line-height: 21px;
+  margin: 0;
+  min-height: 21px;
+  min-width: 55px;
+  padding: 0 10px;
+  position: relative;
+  text-align: center;
+  z-index: 1;
+}
+
+.buttonbar button {
+  -webkit-margin-start: 12px;
+}
+
+.cr-dialog-buttons > button:hover {
+  border-image: -webkit-image-set(
+    url(chrome://resources/images/apps/button_hover.png) 1x,
+    url(chrome://resources/images/2x/apps/button_hover.png)
+        2x) 5 fill / 5px / 2px repeat;
+  color: #222;
+}
+
+.cr-dialog-buttons > button:active {
+  border-image: -webkit-image-set(
+    url(chrome://resources/images/apps/button_pressed.png) 1x,
+    url(chrome://resources/images/2x/apps/button_pressed.png)
+        2x) 5 fill / 5px / 2px repeat;
+  color: #333;
+}
+
+.cr-dialog-buttons > button[disabled],
+.cr-dialog-buttons > button[disabled]:hover {
+  background-color: rgb(250, 250, 250);
+  background-image: none;
+  border-image: -webkit-image-set(
+    url(chrome://resources/images/apps/button.png) 1x,
+    url(chrome://resources/images/2x/apps/button.png)
+        2x) 5 fill / 5px / 2px repeat;
+  color: rgb(150, 150, 150);
+}
+
+/* Style for <button>s to have similar style with Polymer's <paper-button>. */
+.imitate-paper-button {
+  -webkit-user-select: none;
+  background: transparent;
+  border: 0;
+  border-image: none;
+  border-radius: 3px;
+  box-sizing: border-box;
+  color: inherit;
+  cursor: pointer;
+  display: inline-block;
+  font: inherit;
+  height: auto;
+  margin: 0 0.29em;
+  min-width: 5.14em;
+  outline: none;
+  overflow: hidden;
+  padding: 0.7em 0.57em;
+  position: relative;
+  text-align: center;
+  text-transform: uppercase;
+  z-index: 0;
+}
+
+/* Gray progress bar. */
+.progress-bar {
+  background-color: #e6e6e6;
+  border-radius: 3px;
+  height: 6px;
+}
+
+.progress-track {
+  background-color: #888;
+  border-radius: 3px;
+  height: 6px;
+  min-width: 6px;
+}
+
+/* Entry names (File names, Folder names, Volume names, ...). */
+/* Their base bidi direction should be ltr even in RTL languages. */
+html[dir='rtl'] .entry-name {
+  direction: ltr;
+  text-align: right;
+  unicode-bidi: embed;
+}
+
+/* Pop-up dialogs. */
+
+.cr-dialog-container {
+  -webkit-user-select: none;
+  align-items: center;
+  display: flex;
+  height: 100%;
+  justify-content: center;
+  left: 0;
+  overflow: hidden;
+  position: absolute;
+  top: 0;
+  transition: opacity 250ms linear;
+  width: 100%;
+  z-index: 9999;
+}
+
+.cr-dialog-frame {
+  background-color: rgb(250, 250, 250);
+  border: 1px solid rgb(255, 255, 255);
+  border-radius: 2px;
+  box-shadow: 0 1px 4px 0 rgba(0, 0, 0, .5);
+  color: rgb(34, 34, 34);
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  position: relative;
+  width: 460px;
+}
+
+.cr-dialog-frame:focus {
+  outline: none;
+}
+
+@-webkit-keyframes pulse {
+ 0% {
+   -webkit-transform: scale(1);
+ }
+ 40% {
+   -webkit-transform: scale(1.02);
+  }
+ 60% {
+   -webkit-transform: scale(1.02);
+  }
+ 100% {
+   -webkit-transform: scale(1);
+ }
+}
+
+.cr-dialog-frame.pulse {
+  -webkit-animation-duration: 180ms;
+  -webkit-animation-iteration-count: 1;
+  -webkit-animation-name: pulse;
+  -webkit-animation-timing-function: ease-in-out;
+}
+
+.shown > .cr-dialog-frame {
+  -webkit-transform: perspective(500px) scale(1)
+                     translateY(0) rotateX(0);
+  opacity: 1;
+}
+
+.cr-dialog-frame {
+  -webkit-transform: perspective(500px) scale(0.99)
+                     translateY(-20px) rotateX(5deg);
+  opacity: 0;
+  transition: all 180ms;
+  transition-duration: 250ms;
+}
+
+.cr-dialog-shield {
+  background-color: white;
+  bottom: 0;
+  display: block;
+  left: 0;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 0;
+  transition: opacity 500ms;
+}
+
+.shown > .cr-dialog-shield {
+  opacity: 0.5;
+  transition: opacity 500ms;
+}
+
+.cr-dialog-title {
+  -webkit-margin-end: 20px;
+  display: block;
+  font-size: 125%;
+  margin-bottom: 10px;
+  white-space: nowrap;
+  word-wrap: normal;
+}
+
+.cr-dialog-text {
+  margin: 13px 0;
+}
+
+.cr-dialog-text,
+.cr-dialog-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cr-dialog-frame input {
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.cr-dialog-buttons {
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-end;
+  padding-top: 10px;
+}
+
+.cr-dialog-buttons button {
+  -webkit-margin-start: 8px;
+  line-height: 1.8;
+}
+
+.cr-dialog-close {
+  background: -webkit-image-set(
+      url(chrome://theme/IDR_CLOSE_DIALOG) 1x,
+      url(chrome://theme/IDR_CLOSE_DIALOG@2x) 2x) center no-repeat;
+  display: inline-block;
+  height: 44px;
+  opacity: 0.7;
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 44px;
+}
+
+html[dir='rtl'] .cr-dialog-close {
+  left: 0;
+  right: auto;
+}
+
+.cr-dialog-close:hover {
+  background-image: -webkit-image-set(
+      url(chrome://theme/IDR_CLOSE_DIALOG_H) 1x,
+      url(chrome://theme/IDR_CLOSE_DIALOG_H@2x) 2x);
+}
+
+.cr-dialog-close:active {
+  background-image: -webkit-image-set(
+      url(chrome://theme/IDR_CLOSE_DIALOG_P) 1x,
+      url(chrome://theme/IDR_CLOSE_DIALOG_P@2x) 2x);
+}
+
+/* Minor tweak of vertical position for texts which need to be vertically
+ * aligned with corresponding file-type icons. */
+.tree-row > .label,
+.table-row-cell .filename-label,
+.table-row-cell .size,
+.table-row-cell .type,
+.table-row-cell .date,
+.thumbnail-bottom .filename-label,
+.autocomplete-suggestions > li > .detail-text {
+  padding-top: 1px;
+}
+
+@media (-webkit-min-device-pixel-ratio: 1.5) {
+  .tree-row > .label,
+  .table-row-cell .filename-label,
+  .table-row-cell .size,
+  .table-row-cell .type,
+  .table-row-cell .date,
+  .thumbnail-bottom .filename-label,
+  .autocomplete-suggestions > li > .detail-text {
+    /* In HiDPI display, 13pt Roboto font is drawn upper than normal display,
+     * so add extra padding on top of it. */
+    padding-top: 3px;
+  }
+}

@@ -1,0 +1,19 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+static_library("browser") {
+  sources = [
+    "merge_session_observer_bridge.h",
+    "merge_session_observer_bridge.mm",
+    "oauth2_token_service_observer_bridge.h",
+    "oauth2_token_service_observer_bridge.mm",
+    "profile_oauth2_token_service_ios_delegate.h",
+    "profile_oauth2_token_service_ios_delegate.mm",
+  ]
+
+  deps = [
+    "//signin/core/browser",
+    #'../ios/provider/ios_components.gyp:ios_components',  TODO(GYP)
+  ]
+}

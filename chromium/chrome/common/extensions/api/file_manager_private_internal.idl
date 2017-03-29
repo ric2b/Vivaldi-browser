@@ -1,0 +1,37 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Internal, used by fileManagerPrivate's custom bindings.
+[platforms=("chromeos"),
+ implemented_in="chrome/browser/chromeos/extensions/file_manager/file_manager_private_api_functions.h"]
+namespace fileManagerPrivateInternal {
+  // Entry information that renderers need to create an Entry instance.
+  dictionary EntryDescription {
+    DOMString fileSystemName;
+    DOMString fileSystemRoot;
+    DOMString fileFullPath;
+    boolean fileIsDirectory;
+  };
+
+  callback ResolveIsolatedEntriesCallback = void(EntryDescription[] entries);
+  callback GetEntryPropertiesCallback = void(
+      fileManagerPrivate.EntryProperties[] entryProperties);
+  callback AddFileWatchCallback = void(optional boolean success);
+  callback RemoveFileWatchCallback = void(optional boolean success);
+
+  interface Functions {
+    static void resolveIsolatedEntries(DOMString[] urls,
+                                       ResolveIsolatedEntriesCallback callback);
+    static void getEntryProperties(
+        DOMString[] urls,
+        fileManagerPrivate.EntryPropertyName[] names,
+        GetEntryPropertiesCallback callback);
+    static void addFileWatch(
+        DOMString url,
+        AddFileWatchCallback callback);
+    static void removeFileWatch(
+        DOMString url,
+        RemoveFileWatchCallback callback);
+  };
+};

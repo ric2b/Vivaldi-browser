@@ -1,0 +1,2501 @@
+{
+  "-- Template --": {
+    "intro": "Top-level entries map a policy name to its test parameters, described below. The name of the top level entry should be of the form <policy name>[.suffix]. The optional suffix is used for defining multiple test cases for a single policy.",
+
+    "os": ["List of operating systems that support this policy. Valid values:", "win", "linux", "mac", "chromeos", "Defaults to empty if not specified."],
+    "official_only": "Whether this policy exists in official builds only. Defaults to |false| if not specified.",
+    "can_be_recommended": "Whether a recommended value may be set for the policy. Defaults to |false| if not specified.",
+    "test_policy": "A policy dictionary that should make the preferences affected by this policy become policy-controlled. Usually just sets the current policy. Defaults to an empty dictionary if not specified.",
+    "note": "If the policy affects any preferences, the following array should be specified with one entry per such preference.",
+    "pref_mappings": [
+      { "pref": "The affected preference's name.",
+        "local_state": "Whether |pref| is registered in local state's PrefService instead of the profile's PrefService. Defaults to |false| if not specified.",
+        "check_for_mandatory": "Should the preference be tested when a mandatory value is set for the policy? Defaults to |true| if not specified.",
+        "check_for_recommended": "Should the preference be tested when a recommended value is set for the policy? Defaults to |true| if not specified.",
+        "note": "When |can_be_recommended| is |false|, the policy is never set to a recommended value so |check_for_recommended| has no effect.",
+        "note": "The following entries should be specified if controlled setting indicators exist for |pref| in the settings UI.",
+        "indicator_test_setup_js": "Any JavaScript that should be executed before testing the indicators. This should be specified only if an explicit user action must be simulated (e.g. clicking a button).",
+        "indicator_selector": "A CSS selector that locates all controlled setting indicators for |pref|. This is appended to the selector 'span.controlled-setting-indicator' and if not specified, defaults to '[pref=(the value of |pref|)', e.g. '[pref=homepage]'.",
+        "note": "Any number of test cases may be specified in the following array.",
+        "indicator_tests": [
+          { "policy": "A policy dictionary that should affect |pref| when set as mandatory or recommended policy.",
+            "value": "The value that |pref| should take on. This must only be specified if |pref| has multiple controlled setting indicators, each corresponding to a specific value (e.g. indicators next to radio buttons).",
+            "readonly": "Whether setting the policy dictionary as recommended should cause |pref| to become read-only in the settings UI. This will be the case when the dictionary sets another policy that makes |pref| not applicable (e.g. setting 'homepage is NTP' makes the 'homepage URL' pref not applicable and read-only)."
+          }
+        ]
+      }
+    ],
+    "note": "The following entry should be specified if there is a controlled setting indicator that reacts to the policy directly, without a preference serving as an intermediary.",
+    "indicator_selector": "A CSS selector that locates the controlled setting indicator directly affected by the policy. This is appended to the selector 'span.controlled-setting-indicator'."
+  },
+
+  "HomepageLocation": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "HomepageLocation": "http://chromium.org" },
+    "pref_mappings": [
+      { "pref": "homepage",
+        "indicator_tests": [
+          { "policy": { "HomepageIsNewTabPage": false, "HomepageLocation": "http://chromium.org" } },
+          { "policy": { "HomepageIsNewTabPage": true, "HomepageLocation": "http://chromium.org" },
+            "readonly": true
+          }
+        ]
+      }
+    ]
+  },
+
+  "HomepageIsNewTabPage": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "HomepageIsNewTabPage": true },
+    "pref_mappings": [
+      { "pref": "homepage_is_newtabpage",
+        "indicator_tests": [
+          { "policy": { "HomepageIsNewTabPage": false },
+            "value": "false"},
+          { "policy": { "HomepageIsNewTabPage": true },
+            "value": "true"}
+        ]
+      }
+    ]
+  },
+
+  "DefaultBrowserSettingEnabled": {
+    "os": ["win", "mac", "linux"],
+    "test_policy": { "DefaultBrowserSettingEnabled": true },
+    "pref_mappings": [
+      { "pref": "browser.default_browser_setting_enabled",
+        "local_state": true
+      }
+    ]
+  },
+
+  "ApplicationLocaleValue": {
+    "os": ["win"],
+    "can_be_recommended": true,
+    "test_policy": { "ApplicationLocaleValue": "fr" },
+    "pref_mappings": [
+      { "pref": "intl.app_locale",
+        "local_state": true
+      }
+    ]
+  },
+
+  "AlternateErrorPagesEnabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "AlternateErrorPagesEnabled": false },
+    "pref_mappings": [
+      { "pref": "alternate_error_pages.enabled",
+        "indicator_tests": [
+          { "policy": { "AlternateErrorPagesEnabled": false } }
+        ]
+      }
+    ]
+  },
+
+  "SearchSuggestEnabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "SearchSuggestEnabled": false },
+    "pref_mappings": [
+      { "pref": "search.suggest_enabled",
+        "indicator_tests": [
+          { "policy": { "SearchSuggestEnabled": false } }
+        ]
+      }
+    ]
+  },
+
+  "DnsPrefetchingEnabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "DnsPrefetchingEnabled": false },
+    "pref_mappings": [
+      { "pref": "dns_prefetching.enabled" },
+      { "pref": "net.network_prediction_options",
+        "indicator_tests": [
+          { "policy": { "DnsPrefetchingEnabled": false } }
+        ]
+      }
+    ]
+  },
+
+  "NetworkPredictionOptions": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "NetworkPredictionOptions": 2 },
+    "pref_mappings": [
+      { "pref": "dns_prefetching.enabled" },
+      { "pref": "net.network_prediction_options",
+        "indicator_tests": [
+          { "policy": { "NetworkPredictionOptions": 2 } }
+        ]
+      }
+    ]
+  },
+
+  "DisableSpdy": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DisableSpdy": true },
+    "pref_mappings": [
+      { "pref": "spdy.disabled" }
+    ]
+  },
+  
+  "QuicAllowed": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "QuicAllowed": true }
+  },
+
+  "DisabledSchemes": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DisabledSchemes": ["file"] },
+    "pref_mappings": [
+      { "pref": "policy.url_blacklist" }
+    ]
+  },
+
+  "JavascriptEnabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "JavascriptEnabled": false },
+    "pref_mappings": [
+      { "pref": "profile.managed_default_content_settings.javascript",
+        "indicator_selector": "[content-setting=javascript]",
+        "indicator_tests": [
+          { "policy": { "JavascriptEnabled": false },
+            "value": "block"}
+        ]
+      }
+    ]
+  },
+
+  "IncognitoEnabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "IncognitoEnabled": false },
+    "pref_mappings": [
+      { "pref": "incognito.mode_availability" }
+    ]
+  },
+
+  "IncognitoModeAvailability": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "IncognitoModeAvailability": 1 },
+    "pref_mappings": [
+      { "pref": "incognito.mode_availability" }
+    ]
+  },
+
+  "SavingBrowserHistoryDisabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "SavingBrowserHistoryDisabled": true },
+    "pref_mappings": [
+      { "pref": "history.saving_disabled" }
+    ]
+  },
+
+  "AllowDeletingBrowserHistory": {
+    "os": [],
+    "test_policy": { "AllowDeletingBrowserHistory": false },
+    "pref_mappings": [
+      { "pref": "history.deleting_enabled" }
+    ]
+  },
+
+  "RemoteAccessClientFirewallTraversal": {
+  },
+
+  "RemoteAccessHostFirewallTraversal": {
+  },
+
+  "RemoteAccessHostRequireTwoFactor": {
+  },
+
+  "RemoteAccessHostDomain": {
+  },
+
+  "RemoteAccessHostTalkGadgetPrefix": {
+  },
+
+  "RemoteAccessHostRequireCurtain": {
+  },
+
+  "RemoteAccessHostAllowClientPairing": {
+  },
+
+  "RemoteAccessHostAllowGnubbyAuth": {
+  },
+
+  "RemoteAccessHostAllowRelayedConnection": {
+  },
+
+  "RemoteAccessHostUdpPortRange": {
+  },
+
+  "RemoteAccessHostMatchUsername": {
+  },
+
+  "RemoteAccessHostTokenUrl": {
+  },
+
+  "RemoteAccessHostTokenValidationUrl": {
+  },
+
+  "RemoteAccessHostTokenValidationCertificateIssuer": {
+  },
+
+  "RemoteAccessHostDebugOverridePolicies": {
+  },
+
+  "PrintingEnabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "PrintingEnabled": false },
+    "pref_mappings": [
+      { "pref": "printing.enabled" }
+    ]
+  },
+
+  "CloudPrintProxyEnabled": {
+    "os": [],
+    "test_policy": { "CloudPrintProxyEnabled": true },
+    "pref_mappings": [
+      { "pref": "cloud_print.enabled" }
+    ]
+  },
+
+  "CloudPrintSubmitEnabled": {
+    "os": ["win", "mac", "linux"],
+    "test_policy": { "CloudPrintSubmitEnabled": false },
+    "pref_mappings": [
+      { "pref": "cloud_print.submit_enabled" }
+    ]
+  },
+
+  "SafeBrowsingEnabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "SafeBrowsingEnabled": false },
+    "pref_mappings": [
+      { "pref": "safebrowsing.enabled",
+        "indicator_tests": [
+          { "policy": { "SafeBrowsingEnabled": false } }
+        ]
+      }
+    ]
+  },
+
+  "ForceSafeSearch": {
+    "pref": "settings.force_safesearch",
+    "test_policy": { "ForceSafeSearch": true },
+    "settings_pages": [],
+    "os": ["win", "linux", "mac", "chromeos"]
+  },
+
+  "ForceGoogleSafeSearch": {
+    "pref": "settings.force_google_safesearch",
+    "test_policy": { "ForceGoogleSafeSearch": true },
+    "settings_pages": [],
+    "os": ["win", "linux", "mac", "chromeos"]
+  },
+
+  "ForceYouTubeSafetyMode": {
+    "pref": "settings.force_youtube_safety_mode",
+    "test_policy": { "ForceYouTubeSafetyMode": true },
+    "settings_pages": [],
+    "os": ["win", "linux", "mac", "chromeos"]
+  },
+
+  "MetricsReportingEnabled": {
+    "os": ["win", "mac", "linux"],
+    "official_only": true,
+    "can_be_recommended": true,
+    "test_policy": { "MetricsReportingEnabled": false },
+    "indicator_selector": "#metrics-reporting-disabled-icon",
+    "pref_mappings": [
+      { "pref": "user_experience_metrics.reporting_enabled",
+        "local_state": true
+      }
+    ]
+  },
+
+  "PasswordManagerEnabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "PasswordManagerEnabled": false },
+    "pref_mappings": [
+      { "pref": "profile.password_manager_enabled",
+        "indicator_tests": [
+          { "policy": { "PasswordManagerEnabled": false } }
+        ]
+      }
+    ]
+  },
+
+  "PasswordManagerAllowShowPasswords": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "PasswordManagerAllowShowPasswords": false },
+    "pref_mappings": [
+      { "pref": "profile.password_manager_allow_show_passwords" }
+    ]
+  },
+
+  "ContextualSearchEnabled": {
+    "os": ["android"]
+  },
+
+  "AutoFillEnabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "AutoFillEnabled": false },
+    "pref_mappings": [
+      { "pref": "autofill.enabled",
+        "indicator_tests": [
+          { "policy": { "AutoFillEnabled": false } }
+        ]
+      }
+    ]
+  },
+
+  "DisabledPlugins": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DisabledPlugins": ["Flash"] },
+    "pref_mappings": [
+      { "pref": "plugins.plugins_disabled" }
+    ]
+  },
+
+  "EnabledPlugins": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "EnabledPlugins": ["Flash"] },
+    "pref_mappings": [
+      { "pref": "plugins.plugins_enabled" }
+    ]
+  },
+
+  "DisabledPluginsExceptions": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DisabledPluginsExceptions": ["Flash"] },
+    "pref_mappings": [
+      { "pref": "plugins.plugins_disabled_exceptions" }
+    ]
+  },
+
+  "DisablePluginFinder": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DisablePluginFinder": true },
+    "pref_mappings": [
+      { "pref": "plugins.disable_plugin_finder",
+        "local_state": true
+      }
+    ]
+  },
+
+  "SyncDisabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "SyncDisabled": true },
+    "pref_mappings": [
+      { "pref": "sync.managed" }
+    ]
+  },
+
+  "SigninAllowed": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": { "SigninAllowed": true },
+    "pref_mappings": [
+      { "pref": "signin.allowed" }
+    ]
+  },
+
+  "EnableDeprecatedWebBasedSignin": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": { "EnableDeprecatedWebBasedSignin": false }
+  },
+
+  "UserDataDir": {
+    "note": "TODO(joaodasilva): To test that this policy works correctly, it would need to be set before the browser is launched. PolicyPrefsTest should be refactored to support this and a test for this policy added."
+  },
+
+  "DiskCacheDir": {
+    "os": ["win", "mac", "linux"],
+    "test_policy": { "DiskCacheDir": "${user_home}/test-cache" },
+    "pref_mappings": [
+      { "pref": "browser.disk_cache_dir" }
+    ]
+  },
+
+  "DiskCacheSize": {
+    "os": ["win", "mac", "linux"],
+    "test_policy": { "DiskCacheSize": 100 },
+    "pref_mappings": [
+      { "pref": "browser.disk_cache_size" }
+    ]
+  },
+
+  "MediaCacheSize": {
+    "os": ["win", "mac", "linux"],
+    "test_policy": { "MediaCacheSize": 200 },
+    "pref_mappings": [
+      { "pref": "browser.media_cache_size" }
+    ]
+  },
+
+  "DownloadDirectory.0": {
+    "os": ["win", "mac", "linux", "chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "DownloadDirectory": "${user_home}/test-downloads" },
+    "pref_mappings": [
+      { "pref": "download.default_directory",
+        "indicator_tests": [
+          { "policy": { "DownloadDirectory": "${user_home}/test-downloads" } }
+        ]
+      },
+      { "pref": "download.prompt_for_download",
+        "check_for_recommended" : false,
+        "indicator_tests": [
+          { "policy": { "DownloadDirectory": "${user_home}/test-downloads" } }
+        ]
+      }
+    ]
+  },
+
+  "DownloadDirectory.1": {
+    "os": ["chromeos"],
+    "test_policy": { "DownloadDirectory": "${google_drive}/downloads" },
+    "pref_mappings": [
+      { "pref": "gdata.disabled",
+        "indicator_tests": [
+          { "policy": { "DownloadDirectory": "${google_drive}/downloads" } }
+        ]
+      }
+    ]
+  },
+
+  "ClearSiteDataOnExit": {
+    "note": "This policy is retired, see http://crbug.com/133291."
+  },
+
+  "CaptivePortalAuthenticationIgnoresProxy": {
+    "os": ["chromeos"],
+    "test_policy": { "CaptivePortalAuthenticationIgnoresProxy": true },
+    "pref_mappings": [
+      { "pref": "proxy.captive_portal_ignores_proxy" }
+    ]
+  },
+
+  "ProxyMode": {
+    "os": ["win", "mac", "linux"],
+    "test_policy": { "ProxyMode": "direct" },
+    "pref_mappings": [
+      { "pref": "proxy",
+        "indicator_tests": [
+          { "policy": { "ProxyMode": "direct" } }
+        ]
+      }
+    ]
+  },
+
+  "ProxyServerMode": {
+    "os": ["win", "mac", "linux"],
+    "test_policy": { "ProxyServerMode": 0 },
+    "pref_mappings": [
+      { "pref": "proxy",
+        "indicator_tests": [
+          { "policy": { "ProxyServerMode": 0 } }
+        ]
+      }
+    ]
+  },
+
+  "ProxyServer": {
+    "os": ["win", "mac", "linux"],
+    "test_policy": { "ProxyMode": "fixed_servers", "ProxyServer": "http://localhost:8080" },
+    "pref_mappings": [
+      { "pref": "proxy",
+        "indicator_tests": [
+          { "policy": { "ProxyMode": "fixed_servers", "ProxyServer": "http://localhost:8080" } }
+        ]
+      }
+    ]
+  },
+
+  "ProxyPacUrl": {
+    "os": ["win", "mac", "linux"],
+    "test_policy": { "ProxyMode": "pac_script", "ProxyPacUrl": "http://localhost:8080/proxy.pac" },
+    "pref_mappings": [
+      { "pref": "proxy",
+        "indicator_tests": [
+          { "policy": { "ProxyMode": "pac_script", "ProxyPacUrl": "http://localhost:8080/proxy.pac" } }
+        ]
+      }
+    ]
+  },
+
+  "ProxyBypassList": {
+    "os": ["win", "mac", "linux"],
+    "test_policy": { "ProxyMode": "fixed_servers", "ProxyServer": "http://localhost:8080", "ProxyBypassList": "localhost" },
+    "pref_mappings": [
+      { "pref": "proxy",
+        "indicator_tests": [
+          { "policy": { "ProxyMode": "fixed_servers", "ProxyServer": "http://localhost:8080", "ProxyBypassList": "localhost" } }
+        ]
+      }
+    ]
+  },
+
+  "ProxySettings": {
+    "os": ["linux", "win"],
+    "test_policy": { "ProxySettings": { "ProxyMode": "direct" } },
+    "pref_mappings": [
+      { "pref": "proxy",
+        "indicator_tests": [
+          { "policy": { "ProxySettings": { "ProxyMode": "direct" } } }
+        ]
+      }
+    ]
+  },
+
+  "EnableOriginBoundCerts": {
+    "note": "This policy is retired, see http://crbug.com/354749."
+  },
+
+  "DisableSSLRecordSplitting": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DisableSSLRecordSplitting": true },
+    "pref_mappings": [
+      { "pref": "ssl.ssl_record_splitting.disabled",
+        "local_state": true
+      }
+    ]
+  },
+
+  "EnableOnlineRevocationChecks": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "EnableOnlineRevocationChecks": true },
+    "pref_mappings": [
+      { "pref": "ssl.rev_checking.enabled",
+        "local_state": true
+      }
+    ]
+  },
+
+  "RequireOnlineRevocationChecksForLocalAnchors": {
+    "os": ["win", "linux", "chromeos"],
+    "test_policy": { "RequireOnlineRevocationChecksForLocalAnchors": true },
+    "pref_mappings": [
+      { "pref": "ssl.rev_checking.required_for_local_anchors",
+        "local_state": true
+      }
+    ]
+  },
+
+  "AuthSchemes": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "AuthSchemes": "AuthSchemes" },
+    "pref_mappings": [
+      { "pref": "auth.schemes",
+        "local_state": true
+      }
+    ]
+  },
+
+  "DisableAuthNegotiateCnameLookup": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DisableAuthNegotiateCnameLookup": true },
+    "pref_mappings": [
+      { "pref": "auth.disable_negotiate_cname_lookup",
+        "local_state": true
+      }
+    ]
+  },
+
+  "EnableAuthNegotiatePort": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "EnableAuthNegotiatePort": true },
+    "pref_mappings": [
+      { "pref": "auth.enable_negotiate_port",
+        "local_state": true
+      }
+    ]
+  },
+
+  "AuthServerWhitelist": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "AuthServerWhitelist": "localhost" },
+    "pref_mappings": [
+      { "pref": "auth.server_whitelist",
+        "local_state": true
+      }
+    ]
+  },
+
+  "AuthNegotiateDelegateWhitelist": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "AuthNegotiateDelegateWhitelist": "localhost" },
+    "pref_mappings": [
+      { "pref": "auth.negotiate_delegate_whitelist",
+        "local_state": true
+      }
+    ]
+  },
+
+  "GSSAPILibraryName": {
+    "os": ["mac", "linux"],
+    "test_policy": { "GSSAPILibraryName": "libwhatever.so" },
+    "pref_mappings": [
+      { "pref": "auth.gssapi_library_name",
+        "local_state": true
+      }
+    ]
+  },
+
+  "AllowCrossOriginAuthPrompt": {
+    "os": ["win", "mac", "linux"],
+    "test_policy": { "AllowCrossOriginAuthPrompt": true },
+    "pref_mappings": [
+      { "pref": "auth.allow_cross_origin_prompt",
+        "local_state": true
+      }
+    ]
+  },
+
+  "ExtensionInstallBlacklist": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "ExtensionInstallBlacklist": ["*"] },
+    "pref_mappings": [
+      { "pref": "extensions.install.denylist" }
+    ]
+  },
+
+  "ExtensionInstallWhitelist": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "ExtensionInstallWhitelist": ["lcncmkcnkcdbbanbjakcencbaoegdjlp"] },
+    "pref_mappings": [
+      { "pref": "extensions.install.allowlist" }
+    ]
+  },
+
+  "ExtensionInstallForcelist": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "ExtensionInstallForcelist": ["lcncmkcnkcdbbanbjakcencbaoegdjlp;https://clients2.google.com/service/update2/crx"] },
+    "pref_mappings": [
+      { "pref": "extensions.install.forcelist" }
+    ]
+  },
+
+  "ExtensionInstallSources": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "ExtensionInstallSources": ["https://www.corp.monkey.net/*"] },
+    "pref_mappings": [
+      { "pref": "extensions.allowed_install_sites" }
+    ]
+  },
+
+  "ExtensionAllowedTypes": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "ExtensionAllowedTypes": ["hosted_app"] },
+    "pref_mappings": [
+      { "pref": "extensions.allowed_types" }
+    ]
+  },
+
+  "ExtensionSettings": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": {
+      "ExtensionSettings": {
+        "abcdefghijklmnopabcdefghijklmnop" : {
+          "installation_mode": "allowed",
+          "blocked_permissions": ["history"]
+        },
+        "bcdefghijklmnopabcdefghijklmnopa" : {
+          "installation_mode": "force_installed",
+          "update_url": "http://example.com/update_url",
+          "allowed_permissions": ["downloads"]
+        },
+        "*": {
+          "installation_mode": "blocked",
+          "blocked_permissions": ["downloads", "bookmarks"],
+          "install_sources": ["http://company-intranet/chromeapps"],
+          "allowed_types": ["hosted_app"]
+        }
+      }
+    },
+    "pref_mappings": [
+      { "pref": "extensions.management" }
+    ]
+  },
+
+  "ShowHomeButton": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "ShowHomeButton": true },
+    "pref_mappings": [
+      { "pref": "browser.show_home_button",
+        "indicator_tests": [
+          { "policy": { "ShowHomeButton": true } }
+        ]
+      }
+    ]
+  },
+
+  "DeveloperToolsDisabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DeveloperToolsDisabled": true },
+    "pref_mappings": [
+      { "pref": "devtools.disabled" }
+    ]
+  },
+
+  "RestoreOnStartup": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "RestoreOnStartup": 4 },
+    "pref_mappings": [
+      { "pref": "session.restore_on_startup",
+        "indicator_tests": [
+          { "policy": { "RestoreOnStartup": 1 },
+            "value": "1"},
+          { "policy": { "RestoreOnStartup": 4 },
+            "value": "4"},
+          { "policy": { "RestoreOnStartup": 5 },
+            "value": "5"}
+        ]
+      }
+    ]
+  },
+
+  "RestoreOnStartupURLs": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "RestoreOnStartupURLs": ["chromium.org"] },
+    "pref_mappings": [
+      { "pref": "session.startup_urls",
+        "indicator_tests": [
+          { "policy": { "RestoreOnStartupURLs": ["chromium.org"] } }
+        ]
+      }
+    ]
+  },
+
+  "BlockThirdPartyCookies": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "BlockThirdPartyCookies": true },
+    "pref_mappings": [
+      { "pref": "profile.block_third_party_cookies",
+        "indicator_tests": [
+          { "policy": { "BlockThirdPartyCookies": true } }
+        ]
+      }
+    ]
+  },
+
+  "DefaultSearchProviderEnabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultSearchProviderEnabled": false },
+    "pref_mappings": [
+      { "pref": "default_search_provider_data.template_url_data",
+        "indicator_tests": [
+          { "policy": { "DefaultSearchProviderEnabled": false } },
+          { "policy": { "DefaultSearchProviderEnabled": true, "DefaultSearchProviderSearchURL": "http://www.google.com/?q={searchTerms}", "DefaultSearchProviderKeyword": "google" } }
+        ]
+      }
+    ]
+  },
+
+  "DefaultSearchProviderName": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultSearchProviderSearchURL": "http://www.google.com/?q={searchTerms}", "DefaultSearchProviderKeyword": "google", "DefaultSearchProviderName": "google.com" },
+    "pref_mappings": [
+      { "pref": "default_search_provider_data.template_url_data" }
+    ]
+  },
+
+  "DefaultSearchProviderKeyword": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultSearchProviderSearchURL": "http://www.google.com/?q={searchTerms}", "DefaultSearchProviderKeyword": "google" },
+    "pref_mappings": [
+      { "pref": "default_search_provider_data.template_url_data" }
+    ]
+  },
+
+  "DefaultSearchProviderSearchURL": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultSearchProviderSearchURL": "http://www.google.com/?q={searchTerms}", "DefaultSearchProviderKeyword": "google" },
+    "pref_mappings": [
+      { "pref": "default_search_provider_data.template_url_data",
+        "indicator_selector": "[setting=search-engine]",
+        "indicator_tests": [
+          { "policy": { "DefaultSearchProviderEnabled": true, "DefaultSearchProviderSearchURL": "http://www.google.com/?q={searchTerms}" } }
+        ]
+      }
+    ]
+  },
+
+  "DefaultSearchProviderSuggestURL": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultSearchProviderSearchURL": "http://www.google.com/?q={searchTerms}", "DefaultSearchProviderKeyword": "google", "DefaultSearchProviderSuggestURL": "http://www.google.com/suggest?q={searchTerms}" },
+    "pref_mappings": [
+      { "pref": "default_search_provider_data.template_url_data" }
+    ]
+  },
+
+  "DefaultSearchProviderInstantURL": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultSearchProviderSearchURL": "http://www.google.com/?q={searchTerms}", "DefaultSearchProviderKeyword": "google", "DefaultSearchProviderInstantURL": "http://www.google.com/instant?q={searchTerms}" },
+    "pref_mappings": [
+      { "pref": "default_search_provider_data.template_url_data" }
+    ]
+  },
+
+  "DefaultSearchProviderNewTabURL": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultSearchProviderSearchURL": "http://www.google.com/?q={searchTerms}", "DefaultSearchProviderKeyword": "google", "DefaultSearchProviderNewTabURL": "http://www.google.com/newtab" },
+    "pref_mappings": [
+      { "pref": "default_search_provider_data.template_url_data" }
+    ]
+  },
+
+  "DefaultSearchProviderIconURL": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultSearchProviderSearchURL": "http://www.google.com/?q={searchTerms}", "DefaultSearchProviderKeyword": "google", "DefaultSearchProviderIconURL": "http://www.google.com/favicon.ico" },
+    "pref_mappings": [
+      { "pref": "default_search_provider_data.template_url_data" }
+    ]
+  },
+
+  "DefaultSearchProviderEncodings": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultSearchProviderSearchURL": "http://www.google.com/?q={searchTerms}", "DefaultSearchProviderKeyword": "google", "DefaultSearchProviderEncodings": ["UTF-8"] },
+    "pref_mappings": [
+      { "pref": "default_search_provider_data.template_url_data" }
+    ]
+  },
+
+  "DefaultSearchProviderAlternateURLs": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultSearchProviderSearchURL": "http://www.google.com/?q={searchTerms}", "DefaultSearchProviderKeyword": "google", "DefaultSearchProviderAlternateURLs": ["http://www.google.com/#q={searchTerms}", "http://www.google.com/search#q={searchTerms}"] },
+    "pref_mappings": [
+      { "pref": "default_search_provider_data.template_url_data" }
+    ]
+  },
+
+  "DefaultSearchProviderSearchTermsReplacementKey": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultSearchProviderSearchURL": "http://www.google.com/?q={searchTerms}", "DefaultSearchProviderKeyword": "google", "DefaultSearchProviderSearchTermsReplacementKey": "espv" },
+    "pref_mappings": [
+      { "pref": "default_search_provider_data.template_url_data" }
+    ]
+  },
+
+  "DefaultSearchProviderImageURL": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultSearchProviderSearchURL": "http://www.google.com/?q={searchTerms}", "DefaultSearchProviderKeyword": "google", "DefaultSearchProviderImageURL": "http://www.google.com/searchbyimage/upload" },
+    "pref_mappings": [
+      { "pref": "default_search_provider_data.template_url_data" }
+    ]
+  },
+
+  "DefaultSearchProviderSearchURLPostParams": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultSearchProviderSearchURL": "http://www.google.com/?q={searchTerms}", "DefaultSearchProviderKeyword": "google", "DefaultSearchProviderSearchURLPostParams": "" },
+    "pref_mappings": [
+      { "pref": "default_search_provider_data.template_url_data" }
+    ]
+  },
+
+  "DefaultSearchProviderSuggestURLPostParams": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultSearchProviderSearchURL": "http://www.google.com/?q={searchTerms}", "DefaultSearchProviderKeyword": "google", "DefaultSearchProviderSuggestURLPostParams": "" },
+    "pref_mappings": [
+      { "pref": "default_search_provider_data.template_url_data" }
+    ]
+  },
+
+  "DefaultSearchProviderInstantURLPostParams": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultSearchProviderSearchURL": "http://www.google.com/?q={searchTerms}", "DefaultSearchProviderKeyword": "google", "DefaultSearchProviderInstantURLPostParams": "" },
+    "pref_mappings": [
+      { "pref": "default_search_provider_data.template_url_data" }
+    ]
+  },
+
+  "DefaultSearchProviderImageURLPostParams": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultSearchProviderSearchURL": "http://www.google.com/?q={searchTerms}", "DefaultSearchProviderKeyword": "google", "DefaultSearchProviderImageURLPostParams": "image_content={imageThumbnail},image_url={imageURL},sbisrc={imageSearchSource}" },
+    "pref_mappings": [
+      { "pref": "default_search_provider_data.template_url_data" }
+    ]
+  },
+
+  "DefaultCookiesSetting": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultCookiesSetting": 2 },
+    "pref_mappings": [
+      { "pref": "profile.managed_default_content_settings.cookies",
+        "indicator_selector": "[content-setting=cookies]",
+        "indicator_tests": [
+          { "policy": { "DefaultCookiesSetting": 1 },
+            "value": "allow"},
+          { "policy": { "DefaultCookiesSetting": 2 },
+            "value": "block"},
+          { "policy": { "DefaultCookiesSetting": 4 },
+            "value": "session"}
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "DefaultImagesSetting": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultImagesSetting": 2 },
+    "pref_mappings": [
+      { "pref": "profile.managed_default_content_settings.images",
+        "indicator_selector": "[content-setting=images]",
+        "indicator_tests": [
+          { "policy": { "DefaultImagesSetting": 1 },
+            "value": "allow"},
+          { "policy": { "DefaultImagesSetting": 2 },
+            "value": "block"}
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "DefaultJavaScriptSetting": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultJavaScriptSetting": 2 },
+    "pref_mappings": [
+      { "pref": "profile.managed_default_content_settings.javascript",
+        "indicator_selector": "[content-setting=javascript]",
+        "indicator_tests": [
+          { "policy": { "DefaultJavaScriptSetting": 1 },
+            "value": "allow"},
+          { "policy": { "DefaultJavaScriptSetting": 2 },
+            "value": "block"}
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "DefaultPluginsSetting": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultPluginsSetting": 2 },
+    "pref_mappings": [
+      { "pref": "profile.managed_default_content_settings.plugins",
+        "indicator_selector": "[content-setting=plugins]",
+        "indicator_tests": [
+          { "policy": { "DefaultPluginsSetting": 1 },
+            "value": "allow"},
+          { "policy": { "DefaultPluginsSetting": 2 },
+            "value": "block"}
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "DefaultPopupsSetting": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultPopupsSetting": 2 },
+    "pref_mappings": [
+      { "pref": "profile.managed_default_content_settings.popups",
+        "indicator_selector": "[content-setting=popups]",
+        "indicator_tests": [
+          { "policy": { "DefaultPopupsSetting": 1 },
+            "value": "allow"},
+          { "policy": { "DefaultPopupsSetting": 2 },
+            "value": "block"}
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "DefaultNotificationsSetting": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultNotificationsSetting": 2 },
+    "pref_mappings": [
+      { "pref": "profile.managed_default_content_settings.notifications",
+        "indicator_selector": "[content-setting=notifications]",
+        "indicator_tests": [
+          { "policy": { "DefaultNotificationsSetting": 1 },
+            "value": "allow"},
+          { "policy": { "DefaultNotificationsSetting": 2 },
+            "value": "block"},
+          { "policy": { "DefaultNotificationsSetting": 3 },
+            "value": "ask"}
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "DefaultGeolocationSetting": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultGeolocationSetting": 2 },
+    "pref_mappings": [
+      { "pref": "profile.managed_default_content_settings.geolocation",
+        "indicator_selector": "[content-setting=location]",
+        "indicator_tests": [
+          { "policy": { "DefaultGeolocationSetting": 1 },
+            "value": "allow"},
+          { "policy": { "DefaultGeolocationSetting": 2 },
+            "value": "block"},
+          { "policy": { "DefaultGeolocationSetting": 3 },
+            "value": "ask"}
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "DefaultMediaStreamSetting": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultMediaStreamSetting": 2 },
+    "pref_mappings": [
+      { "pref": "profile.managed_default_content_settings.media_stream",
+        "indicator_selector": "[content-setting=media-stream]",
+        "indicator_tests": [
+          { "policy": { "DefaultMediaStreamSetting": 2 },
+            "value": "block"
+          },
+          { "policy": { "DefaultMediaStreamSetting": 3 },
+            "value": "ask"
+          }
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "AudioCaptureAllowed": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "AudioCaptureAllowed": false },
+    "pref_mappings": [
+      { "pref": "hardware.audio_capture_enabled",
+        "indicator_selector": "#media-indicator",
+        "indicator_tests": [
+          { "policy": { "AudioCaptureAllowed": false } }
+        ]
+      }
+    ]
+  },
+
+  "AudioCaptureAllowedUrls": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "AudioCaptureAllowedUrls": ["[*.]google.com"] },
+    "pref_mappings": [
+      {
+        "pref": "hardware.audio_capture_allowed_urls"
+      }
+    ]
+  },
+
+  "VideoCaptureAllowed": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "VideoCaptureAllowed": false },
+    "pref_mappings": [
+      { "pref": "hardware.video_capture_enabled",
+        "indicator_selector": "#media-indicator",
+        "indicator_tests": [
+          { "policy": { "VideoCaptureAllowed": false } }
+        ]
+      }
+    ]
+  },
+
+  "VideoCaptureAllowedUrls": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "VideoCaptureAllowedUrls": ["[*.]google.com"] },
+    "pref_mappings": [
+      {
+        "pref": "hardware.video_capture_allowed_urls"
+      }
+    ]
+  },
+
+  "AutoSelectCertificateForUrls": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "AutoSelectCertificateForUrls": ["{'pattern':'https://example.com','filter':{'ISSUER':{'CN': 'issuer-name'}}}"] },
+    "pref_mappings": [
+      { "pref": "profile.managed_auto_select_certificate_for_urls" }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "CookiesAllowedForUrls": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "CookiesAllowedForUrls": ["[*.]google.com"] },
+    "pref_mappings": [
+      { "pref": "profile.managed_cookies_allowed_for_urls",
+        "indicator_test_setup_js": "document.querySelector('button.exceptions-list-button[contentType=cookies]').click();",
+        "indicator_selector": "[content-exception=cookies]",
+        "indicator_tests": [
+          { "policy": { "CookiesAllowedForUrls": ["[*.]google.com"] } }
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "CookiesBlockedForUrls": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "CookiesBlockedForUrls": ["[*.]google.com"] },
+    "pref_mappings": [
+      { "pref": "profile.managed_cookies_blocked_for_urls",
+        "indicator_test_setup_js": "document.querySelector('button.exceptions-list-button[contentType=cookies]').click();",
+        "indicator_selector": "[content-exception=cookies]",
+        "indicator_tests": [
+          { "policy": { "CookiesBlockedForUrls": ["[*.]google.com"] } }
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "CookiesSessionOnlyForUrls": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "CookiesSessionOnlyForUrls": ["[*.]google.com"] },
+    "pref_mappings": [
+      { "pref": "profile.managed_cookies_sessiononly_for_urls",
+        "indicator_test_setup_js": "document.querySelector('button.exceptions-list-button[contentType=cookies]').click();",
+        "indicator_selector": "[content-exception=cookies]",
+        "indicator_tests": [
+          { "policy": { "CookiesSessionOnlyForUrls": ["[*.]google.com"] } }
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "ImagesAllowedForUrls": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "ImagesAllowedForUrls": ["[*.]google.com"] },
+    "pref_mappings": [
+      { "pref": "profile.managed_images_allowed_for_urls",
+        "indicator_test_setup_js": "document.querySelector('button.exceptions-list-button[contentType=images]').click();",
+        "indicator_selector": "[content-exception=images]",
+        "indicator_tests": [
+          { "policy": { "ImagesAllowedForUrls": ["[*.]google.com"] } }
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "ImagesBlockedForUrls": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "ImagesBlockedForUrls": ["[*.]google.com"] },
+    "pref_mappings": [
+      { "pref": "profile.managed_images_blocked_for_urls",
+        "indicator_test_setup_js": "document.querySelector('button.exceptions-list-button[contentType=images]').click();",
+        "indicator_selector": "[content-exception=images]",
+        "indicator_tests": [
+          { "policy": { "ImagesBlockedForUrls": ["[*.]google.com"] } }
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "JavaScriptAllowedForUrls": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "JavaScriptAllowedForUrls": ["[*.]google.com"] },
+    "pref_mappings": [
+      { "pref": "profile.managed_javascript_allowed_for_urls",
+        "indicator_test_setup_js": "document.querySelector('button.exceptions-list-button[contentType=javascript]').click();",
+        "indicator_selector": "[content-exception=javascript]",
+        "indicator_tests": [
+          { "policy": { "JavaScriptAllowedForUrls": ["[*.]google.com"] } }
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "JavaScriptBlockedForUrls": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "JavaScriptBlockedForUrls": ["[*.]google.com"] },
+    "pref_mappings": [
+      { "pref": "profile.managed_javascript_blocked_for_urls",
+        "indicator_test_setup_js": "document.querySelector('button.exceptions-list-button[contentType=javascript]').click();",
+        "indicator_selector": "[content-exception=javascript]",
+        "indicator_tests": [
+          { "policy": { "JavaScriptBlockedForUrls": ["[*.]google.com"] } }
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "PluginsAllowedForUrls": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "PluginsAllowedForUrls": ["[*.]google.com"] },
+    "pref_mappings": [
+      { "pref": "profile.managed_plugins_allowed_for_urls",
+        "indicator_test_setup_js": "document.querySelector('button.exceptions-list-button[contentType=plugins]').click();",
+        "indicator_selector": "[content-exception=plugins]",
+        "indicator_tests": [
+          { "policy": { "PluginsAllowedForUrls": ["[*.]google.com"] } }
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "PluginsBlockedForUrls": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "PluginsBlockedForUrls": ["[*.]google.com"] },
+    "pref_mappings": [
+      { "pref": "profile.managed_plugins_blocked_for_urls",
+        "indicator_test_setup_js": "document.querySelector('button.exceptions-list-button[contentType=plugins]').click();",
+        "indicator_selector": "[content-exception=plugins]",
+        "indicator_tests": [
+          { "policy": { "PluginsBlockedForUrls": ["[*.]google.com"] } }
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "PopupsAllowedForUrls": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "PopupsAllowedForUrls": ["[*.]google.com"] },
+    "pref_mappings": [
+      { "pref": "profile.managed_popups_allowed_for_urls",
+        "indicator_test_setup_js": "document.querySelector('button.exceptions-list-button[contentType=popups]').click();",
+        "indicator_selector": "[content-exception=popups]",
+        "indicator_tests": [
+          { "policy": { "PopupsAllowedForUrls": ["[*.]google.com"] } }
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "PopupsBlockedForUrls": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "PopupsBlockedForUrls": ["[*.]google.com"] },
+    "pref_mappings": [
+      { "pref": "profile.managed_popups_blocked_for_urls",
+        "indicator_test_setup_js": "document.querySelector('button.exceptions-list-button[contentType=popups]').click();",
+        "indicator_selector": "[content-exception=popups]",
+        "indicator_tests": [
+          { "policy": { "PopupsBlockedForUrls": ["[*.]google.com"] } }
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "NotificationsAllowedForUrls": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "NotificationsAllowedForUrls": ["[*.]google.com"] },
+    "pref_mappings": [
+      { "pref": "profile.managed_notifications_allowed_for_urls",
+        "indicator_test_setup_js": "document.querySelector('button.exceptions-list-button[contentType=notifications]').click();",
+        "indicator_selector": "[content-exception=notifications]",
+        "indicator_tests": [
+          { "policy": { "NotificationsAllowedForUrls": ["[*.]google.com"] } }
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "NotificationsBlockedForUrls": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "NotificationsBlockedForUrls": ["[*.]google.com"] },
+    "pref_mappings": [
+      { "pref": "profile.managed_notifications_blocked_for_urls",
+        "indicator_test_setup_js": "document.querySelector('button.exceptions-list-button[contentType=notifications]').click();",
+        "indicator_selector": "[content-exception=notifications]",
+        "indicator_tests": [
+          { "policy": { "NotificationsBlockedForUrls": ["[*.]google.com"] } }
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "Disable3DAPIs": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "Disable3DAPIs": true },
+    "pref_mappings": [
+      { "pref": "disable_3d_apis" }
+    ]
+  },
+
+  "InstantEnabled": {
+  },
+
+  "TranslateEnabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "TranslateEnabled": false },
+    "pref_mappings": [
+      { "pref": "translate.enabled",
+        "indicator_tests": [
+          { "policy": { "TranslateEnabled": true } }
+        ]
+      }
+    ]
+  },
+
+  "AllowOutdatedPlugins": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "AllowOutdatedPlugins": true },
+    "pref_mappings": [
+      { "pref": "plugins.allow_outdated" }
+    ]
+  },
+
+  "AlwaysAuthorizePlugins": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "AlwaysAuthorizePlugins": true },
+    "pref_mappings": [
+      { "pref": "plugins.always_authorize" }
+    ]
+  },
+
+  "BookmarkBarEnabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "BookmarkBarEnabled": true },
+    "pref_mappings": [
+      { "pref": "bookmark_bar.show_on_all_tabs",
+        "indicator_tests": [
+          { "policy": { "BookmarkBarEnabled": true } }
+        ]
+      }
+    ]
+  },
+
+  "EditBookmarksEnabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "EditBookmarksEnabled": false },
+    "pref_mappings": [
+      { "pref": "bookmarks.editing_enabled" }
+    ]
+  },
+
+  "ShowAppsShortcutInBookmarkBar": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": { "ShowAppsShortcutInBookmarkBar": false },
+    "pref_mappings": [
+      { "pref": "bookmark_bar.show_apps_shortcut" }
+    ]
+  },
+
+  "AllowFileSelectionDialogs": {
+    "os": ["win", "mac", "linux"],
+    "test_policy": { "AllowFileSelectionDialogs": false },
+    "pref_mappings": [
+      { "pref": "select_file_dialogs.allowed",
+        "local_state": true
+      },
+      { "pref": "download.prompt_for_download",
+        "indicator_tests": [
+          { "policy": { "AllowFileSelectionDialogs": false } }
+        ]
+      }
+    ]
+  },
+
+  "ImportBookmarks": {
+    "os": ["win", "mac", "linux"],
+    "can_be_recommended": true,
+    "test_policy": { "ImportBookmarks": false },
+    "pref_mappings": [
+      { "pref": "import_bookmarks",
+        "indicator_tests": [
+          { "policy": { "ImportBookmarks": false } }
+        ]
+      }
+    ]
+  },
+
+  "ImportHistory": {
+    "os": ["win", "mac", "linux"],
+    "can_be_recommended": true,
+    "test_policy": { "ImportHistory": false },
+    "pref_mappings": [
+      { "pref": "import_history",
+        "indicator_tests": [
+          { "policy": { "ImportHistory": false } }
+        ]
+      }
+    ]
+  },
+
+  "ImportHomepage": {
+    "os": ["win", "mac", "linux"],
+    "test_policy": { "ImportHomepage": false },
+    "pref_mappings": [
+      { "pref": "import_home_page" }
+    ]
+  },
+
+  "ImportSearchEngine": {
+    "os": ["win", "mac", "linux"],
+    "can_be_recommended": true,
+    "test_policy": { "ImportSearchEngine": false },
+    "pref_mappings": [
+      { "pref": "import_search_engine",
+        "indicator_tests": [
+          { "policy": { "ImportSearchEngine": false } }
+        ]
+      }
+    ]
+  },
+
+  "ImportSavedPasswords": {
+    "os": ["win", "mac", "linux"],
+    "can_be_recommended": true,
+    "test_policy": { "ImportSavedPasswords": false },
+    "pref_mappings": [
+      { "pref": "import_saved_passwords",
+        "indicator_tests": [
+          { "policy": { "ImportSavedPasswords": false } }
+        ]
+      }
+    ]
+  },
+
+  "ImportNotes": {
+    "os": ["win", "mac", "linux"],
+    "can_be_recommended": true,
+    "test_policy": { "ImportNotes": false },
+    "pref_mappings": [
+      { "pref": "import_notes",
+        "indicator_tests": [
+          { "policy": { "ImportNotes": false } }
+        ]
+      }
+    ]
+  },
+
+  "ImportAutofillFormData": {
+    "os": ["win", "mac", "linux"],
+    "can_be_recommended": true,
+    "test_policy": { "ImportAutofillFormData": false },
+    "pref_mappings": [
+      { "pref": "import_autofill_form_data",
+        "indicator_tests": [
+          { "policy": { "ImportAutofillFormData": false } }
+        ]
+      }
+    ]
+  },
+
+  "MaxConnectionsPerProxy": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "MaxConnectionsPerProxy": 16 },
+    "pref_mappings": [
+      { "pref": "net.max_connections_per_proxy",
+        "local_state": true
+      }
+    ]
+  },
+
+  "HideWebStorePromo": {
+  },
+
+  "URLBlacklist": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "URLBlacklist": ["google.com"] },
+    "pref_mappings": [
+      { "pref": "policy.url_blacklist" }
+    ]
+  },
+
+  "URLWhitelist": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "URLWhitelist": ["google.com"] },
+    "pref_mappings": [
+      { "pref": "policy.url_whitelist" }
+    ]
+  },
+
+  "EnterpriseWebStoreURL": {
+    "note": "This policy is retired, see http://crbug.com/178938."
+  },
+
+  "EnterpriseWebStoreName": {
+    "note": "This policy is retired, see http://crbug.com/178938."
+  },
+
+  "EnableMemoryInfo": {
+    "note": "This policy is retired, see http://crbug.com/350339."
+  },
+
+  "DisablePrintPreview": {
+    "os": ["win", "mac", "linux"],
+    "test_policy": { "DisablePrintPreview": false },
+    "pref_mappings": [
+      { "pref": "printing.print_preview_disabled" }
+    ]
+  },
+
+  "BackgroundModeEnabled": {
+    "os": ["win", "linux"],
+    "can_be_recommended": true,
+    "test_policy": { "BackgroundModeEnabled": false },
+    "pref_mappings": [
+      { "pref": "background_mode.enabled",
+        "local_state": true,
+        "indicator_tests": [
+          { "policy": { "BackgroundModeEnabled": false } }
+        ]
+      }
+    ]
+  },
+
+  "RestrictSigninToPattern": {
+    "os": ["win", "mac", "linux"],
+    "test_policy": { "RestrictSigninToPattern": ".*@google.com" },
+    "pref_mappings": [
+      { "pref": "google.services.username_pattern",
+        "local_state": true
+      }
+    ]
+  },
+
+  "DisableSafeBrowsingProceedAnyway": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DisableSafeBrowsingProceedAnyway": true },
+    "pref_mappings": [
+      { "pref": "safebrowsing.proceed_anyway_disabled" }
+    ]
+  },
+
+  "SafeBrowsingExtendedReportingOptInAllowed": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "SafeBrowsingExtendedReportingOptInAllowed": true },
+    "pref_mappings": [
+      { "pref": "safebrowsing.extended_reporting_opt_in_allowed" }
+    ]
+  },
+
+  "SpellCheckServiceEnabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "official_only": true,
+    "can_be_recommended": true,
+    "test_policy": { "SpellCheckServiceEnabled": false },
+    "pref_mappings": [
+      { "pref": "spellcheck.use_spelling_service",
+        "indicator_tests": [
+          { "policy": { "SpellCheckServiceEnabled": false } }
+        ]
+      }
+    ]
+  },
+
+  "DisableScreenshots": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DisableScreenshots": true },
+    "pref_mappings": [
+      { "pref": "disable_screenshots" }
+    ]
+  },
+
+  "BuiltInDnsClientEnabled": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": { "BuiltInDnsClientEnabled": true },
+    "pref_mappings": [
+      { "pref": "async_dns.enabled",
+        "local_state": true
+      }
+    ]
+  },
+
+  "WPADQuickCheckEnabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "WPADQuickCheckEnabled": true },
+    "pref_mappings": [
+      { "pref": "proxy.quick_check_enabled",
+        "local_state": true
+      }
+    ]
+  },
+
+  "RegisteredProtocolHandlers": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "RegisteredProtocolHandlers": {"protocol": "test", "url": "http://example.com/%s", "default": "true"} },
+    "pref_mappings": [
+      { "pref": "custom_handlers.policy.registered_protocol_handlers",
+        "check_for_mandatory": false
+      }
+    ]
+  },
+
+  "HideWebStoreIcon": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "HideWebStoreIcon": true },
+    "pref_mappings": [
+      { "pref": "hide_web_store_icon" }
+    ]
+  },
+
+  "VariationsRestrictParameter": {
+    "test_policy": { "VariationsRestrictParameter": "restricted" },
+    "pref_mappings": [
+      { "pref": "variations_restrict_parameter",
+        "local_state": true
+      }
+    ]
+  },
+
+  "DataCompressionProxyEnabled": {
+    "os": ["android"],
+    "test_policy": { "DataCompressionProxyEnabled": false },
+    "pref_mappings": [
+      { "pref": "spdy_proxy.enabled" }
+    ]
+  },
+
+  "ForceEphemeralProfiles": {
+  },
+
+  "UserAvatarImage": {
+    "os": ["chromeos"],
+    "test_policy": {
+      "UserAvatarImage": {
+        "url": "http://localhost/",
+        "hash": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+      }
+    },
+    "indicator_selector": "#account-picture-indicator"
+  },
+
+  "WallpaperImage": {
+    "os": ["chromeos"],
+    "test_policy": {
+      "WallpaperImage": {
+        "url": "http://localhost/",
+        "hash": "baddecafbaddecafbaddecafbaddecafbaddecafbaddecafbaddecafbaddecaf"
+      }
+    },
+    "indicator_selector": "#wallpaper-indicator"
+  },
+
+  "BrowserGuestModeEnabled": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": { "BrowserGuestModeEnabled": true },
+    "pref_mappings": [
+      { "pref": "profile.browser_guest_enabled",
+        "local_state": true
+      }
+    ]
+  },
+
+  "BrowserAddPersonEnabled": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": { "BrowserAddPersonEnabled": true },
+    "pref_mappings": [
+      { "pref": "profile.add_person_enabled",
+        "local_state": true
+      }
+    ]
+  },
+
+  "SSLVersionMin": {
+  },
+
+  "SSLVersionFallbackMin": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "SSLVersionFallbackMin": "tls1.2" },
+    "pref_mappings": []
+  },
+
+  "WelcomePageOnOSUpgradeEnabled": {
+    "os": ["win"],
+    "test_policy": { "WelcomePageOnOSUpgradeEnabled": false },
+    "pref_mappings": [
+      { "pref": "browser.welcome_page_on_os_upgrade_enabled",
+        "local_state": true
+      }
+    ]
+  },
+
+  "----- Chrome OS policies ------------------------------------------------": {},
+
+  "ChromeOsLockOnIdleSuspend": {
+    "os": ["chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "ChromeOsLockOnIdleSuspend": true },
+    "pref_mappings": [
+      { "pref": "settings.enable_screen_lock",
+        "indicator_tests": [
+          { "policy": { "ChromeOsLockOnIdleSuspend": true } }
+        ]
+      }
+    ]
+  },
+
+  "PolicyRefreshRate": {
+    "os": ["chromeos"],
+    "test_policy": { "PolicyRefreshRate": 300000 },
+    "pref_mappings": [
+      { "pref": "policy.user_refresh_rate",
+        "local_state": true
+      }
+    ]
+  },
+
+  "MaxInvalidationFetchDelay": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "PolicyRefreshRate": 15000 },
+    "pref_mappings": []
+  },
+
+  "OpenNetworkConfiguration": {
+  },
+
+  "SAMLOfflineSigninTimeLimit": {
+    "os": ["chromeos"],
+    "test_policy": { "SAMLOfflineSigninTimeLimit": 0 },
+    "pref_mappings": [
+      { "pref": "saml.offline_signin_time_limit" }
+    ]
+  },
+
+  "DriveDisabled": {
+    "os": ["chromeos"],
+    "test_policy": { "DriveDisabled": true },
+    "pref_mappings": [
+      { "pref": "gdata.disabled",
+        "indicator_tests": [
+          { "policy": { "DriveDisabled": true } }
+        ]
+      }
+    ]
+  },
+
+  "DriveDisabledOverCellular": {
+    "os": ["chromeos"],
+    "test_policy": { "DriveDisabledOverCellular": true },
+    "pref_mappings": [
+      { "pref": "gdata.cellular.disabled" }
+    ]
+  },
+
+  "PinnedLauncherApps": {
+    "os": ["chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "PinnedLauncherApps": [] },
+    "pref_mappings": [
+      { "pref": "pinned_launcher_apps" }
+    ]
+  },
+
+  "ExternalStorageDisabled": {
+    "os": ["chromeos"],
+    "test_policy": { "ExternalStorageDisabled": true },
+    "pref_mappings": [
+      { "pref": "hardware.external_storage_disabled" }
+    ]
+  },
+
+  "AudioOutputAllowed": {
+    "os": ["chromeos"],
+    "test_policy": { "AudioOutputAllowed": true },
+    "pref_mappings": [
+      { "pref": "hardware.audio_output_enabled",
+        "local_state": true }
+    ]
+  },
+
+  "ShowLogoutButtonInTray": {
+    "os": ["chromeos"],
+    "test_policy": { "ShowLogoutButtonInTray": true },
+    "pref_mappings": [
+      { "pref": "show_logout_button_in_tray" }
+    ]
+  },
+
+  "ShelfAutoHideBehavior": {
+    "os": ["chromeos"],
+    "test_policy": { "ShelfAutoHideBehavior": "Always" },
+    "pref_mappings": [
+      { "pref": "auto_hide_behavior_local" }
+    ]
+  },
+
+  "UserDisplayName": {
+    "os": ["chromeos"]
+  },
+
+  "SessionLengthLimit": {
+    "os": ["chromeos"],
+    "test_policy": { "SessionLengthLimit": 3600000 },
+    "pref_mappings": [
+      { "pref": "session.length_limit",
+        "local_state": true }
+    ]
+  },
+
+  "ScreenDimDelayAC": {
+    "os": ["chromeos"],
+    "test_policy": { "ScreenDimDelayAC": 420000 },
+    "pref_mappings": [
+      { "pref": "power.ac_screen_dim_delay_ms" }
+    ]
+  },
+
+  "ScreenOffDelayAC": {
+    "os": ["chromeos"],
+    "test_policy": { "ScreenOffDelayAC": 480000 },
+    "pref_mappings": [
+      { "pref": "power.ac_screen_off_delay_ms" }
+    ]
+  },
+
+  "ScreenLockDelayAC": {
+    "os": ["chromeos"],
+    "test_policy": { "ScreenLockDelayAC": 600000 },
+    "pref_mappings": [
+      { "pref": "power.ac_screen_lock_delay_ms" }
+    ]
+  },
+
+  "IdleWarningDelayAC": {
+    "os": ["chromeos"],
+    "test_policy": { "IdleWarningDelayAC": 1800000 },
+    "pref_mappings": [
+      { "pref": "power.ac_idle_warning_delay_ms" }
+    ]
+  },
+
+  "IdleDelayAC": {
+    "os": ["chromeos"],
+    "test_policy": { "IdleDelayAC": 1800000 },
+    "pref_mappings": [
+      { "pref": "power.ac_idle_delay_ms" }
+    ]
+  },
+
+  "ScreenDimDelayBattery": {
+    "os": ["chromeos"],
+    "test_policy": { "ScreenDimDelayBattery": 300000 },
+    "pref_mappings": [
+      { "pref": "power.battery_screen_dim_delay_ms" }
+    ]
+  },
+
+  "ScreenOffDelayBattery": {
+    "os": ["chromeos"],
+    "test_policy": { "ScreenOffDelayBattery": 360000 },
+    "pref_mappings": [
+      { "pref": "power.battery_screen_off_delay_ms" }
+    ]
+  },
+
+  "ScreenLockDelayBattery": {
+    "os": ["chromeos"],
+    "test_policy": { "ScreenLockDelayBattery": 600000 },
+    "pref_mappings": [
+      { "pref": "power.battery_screen_lock_delay_ms"  }
+    ]
+  },
+
+  "IdleWarningDelayBattery": {
+    "os": ["chromeos"],
+    "test_policy": { "IdleWarningDelayBattery": 600000 },
+    "pref_mappings": [
+      { "pref": "power.battery_idle_warning_delay_ms" }
+    ]
+  },
+
+  "IdleDelayBattery": {
+    "os": ["chromeos"],
+    "test_policy": { "IdleDelayBattery": 600000 },
+    "pref_mappings": [
+      { "pref": "power.battery_idle_delay_ms" }
+    ]
+  },
+
+  "IdleAction": {
+    "os": ["chromeos"],
+    "test_policy": { "IdleAction": 0 },
+    "pref_mappings": [
+      { "pref": "power.ac_idle_action" },
+      { "pref": "power.battery_idle_action" }
+    ]
+  },
+
+  "IdleActionAC": {
+    "os": ["chromeos"],
+    "test_policy": { "IdleActionAC": 0 },
+    "pref_mappings": [
+      { "pref": "power.ac_idle_action" }
+    ]
+  },
+
+  "IdleActionBattery": {
+    "os": ["chromeos"],
+    "test_policy": { "IdleActionBattery": 0 },
+    "pref_mappings": [
+      { "pref": "power.battery_idle_action" }
+    ]
+  },
+
+  "LidCloseAction": {
+    "os": ["chromeos"],
+    "test_policy": { "LidCloseAction": 0 },
+    "pref_mappings": [
+      { "pref": "power.lid_closed_action" }
+    ]
+  },
+
+  "PowerManagementUsesAudioActivity": {
+    "os": ["chromeos"],
+    "test_policy": { "PowerManagementUsesAudioActivity": true },
+    "pref_mappings": [
+      { "pref": "power.use_audio_activity" }
+    ]
+  },
+
+  "PowerManagementUsesVideoActivity": {
+    "os": ["chromeos"],
+    "test_policy": { "PowerManagementUsesVideoActivity": true },
+    "pref_mappings": [
+      { "pref": "power.use_video_activity" }
+    ]
+  },
+
+  "PresentationIdleDelayScale": {
+  },
+
+  "PresentationScreenDimDelayScale": {
+    "os": ["chromeos"],
+    "test_policy": { "PresentationScreenDimDelayScale": 200 },
+    "pref_mappings": [
+      { "pref": "power.presentation_screen_dim_delay_factor" }
+    ]
+  },
+
+  "AllowScreenWakeLocks": {
+    "os": ["chromeos"],
+    "test_policy": { "AllowScreenWakeLocks": false },
+    "pref_mappings": [
+      { "pref": "power.allow_screen_wake_locks" }
+    ]
+  },
+
+  "UserActivityScreenDimDelayScale": {
+    "os": ["chromeos"],
+    "test_policy": { "UserActivityScreenDimDelayScale": 200 },
+    "pref_mappings": [
+      { "pref": "power.user_activity_screen_dim_delay_factor" }
+    ]
+  },
+
+  "WaitForInitialUserActivity": {
+    "os": ["chromeos"],
+    "test_policy": { "WaitForInitialUserActivity": true },
+    "pref_mappings": [
+      { "pref": "session.wait_for_initial_user_activity",
+        "local_state": true },
+      { "pref": "power.wait_for_initial_user_activity" }
+    ]
+  },
+
+  "PowerManagementIdleSettings": {
+    "os": ["chromeos"],
+    "test_policy": { "PowerManagementIdleSettings" : { "AC": { "Delays": { "ScreenDim": 5000, "ScreenOff": 7000, "IdleWarning": 8000, "Idle": 9000 }, "IdleAction": "Logout" }, "Battery": { "Delays": { "ScreenDim": 1000, "ScreenOff": 3000, "IdleWarning": 4000, "Idle": 5000 }, "IdleAction": "Logout"} } },
+    "pref_mappings": [
+      { "pref": "power.ac_screen_dim_delay_ms" },
+      { "pref": "power.ac_screen_off_delay_ms" },
+      { "pref": "power.ac_idle_warning_delay_ms" },
+      { "pref": "power.ac_idle_delay_ms" },
+      { "pref": "power.battery_screen_dim_delay_ms" },
+      { "pref": "power.battery_screen_off_delay_ms" },
+      { "pref": "power.battery_idle_warning_delay_ms" },
+      { "pref": "power.battery_idle_delay_ms" }
+    ]
+  },
+
+  "ScreenLockDelays": {
+    "os": ["chromeos"],
+    "test_policy": { "ScreenLockDelays": { "AC": 6000, "Battery": 2000 } },
+    "pref_mappings": [
+      { "pref": "power.ac_screen_lock_delay_ms" },
+      { "pref": "power.battery_screen_lock_delay_ms" }
+    ]
+  },
+
+  "TermsOfServiceURL": {
+    "os": ["chromeos"],
+    "test_policy": { "TermsOfServiceURL": "http://www.example.com/terms_of_service.txt" },
+    "pref_mappings": [
+      { "pref": "terms_of_service.url" }
+    ]
+  },
+
+  "ShowAccessibilityOptionsInSystemTrayMenu": {
+    "os": ["chromeos"],
+    "test_policy": { "ShowAccessibilityOptionsInSystemTrayMenu": true },
+    "pref_mappings": [
+      { "pref": "settings.a11y.enable_menu",
+        "indicator_tests": [
+          { "policy": { "ShowAccessibilityOptionsInSystemTrayMenu": true } }
+        ]
+      }
+    ]
+  },
+
+  "LargeCursorEnabled": {
+    "os": ["chromeos"],
+    "test_policy": { "LargeCursorEnabled": true },
+    "pref_mappings": [
+      { "pref": "settings.a11y.large_cursor_enabled",
+        "indicator_tests": [
+          { "policy": { "LargeCursorEnabled": true } }
+        ]
+      }
+    ]
+  },
+
+  "SpokenFeedbackEnabled": {
+    "os": ["chromeos"],
+    "test_policy": { "SpokenFeedbackEnabled": true },
+    "pref_mappings": [
+      { "pref": "settings.accessibility",
+        "indicator_tests": [
+          { "policy": { "SpokenFeedbackEnabled": true } }
+        ]
+      }
+    ]
+  },
+
+  "HighContrastEnabled": {
+    "os": ["chromeos"],
+    "test_policy": { "HighContrastEnabled": true },
+    "pref_mappings": [
+      { "pref": "settings.a11y.high_contrast_enabled",
+        "indicator_tests": [
+          { "policy": { "HighContrastEnabled": true } }
+        ]
+      }
+    ]
+  },
+
+  "ScreenMagnifierType": {
+    "os": ["chromeos"],
+    "test_policy": { "ScreenMagnifierType": 1 },
+    "pref_mappings": [
+      { "pref": "settings.a11y.screen_magnifier",
+        "indicator_tests": [
+          { "policy": { "ScreenMagnifierType": 1 } }
+        ]
+      },
+      { "pref": "settings.a11y.screen_magnifier_type2" }
+    ]
+  },
+
+  "VirtualKeyboardEnabled": {
+    "os": ["chromeos"],
+    "test_policy": { "VirtualKeyboardEnabled": true },
+    "pref_mappings": [
+      { "pref": "settings.a11y.virtual_keyboard",
+        "indicator_tests": [
+          { "policy": { "VirtualKeyboardEnabled": true } }
+        ]
+      }
+    ]
+  },
+
+  "KeyboardDefaultToFunctionKeys": {
+    "os": ["chromeos"],
+    "test_policy": { "KeyboardDefaultToFunctionKeys": true },
+    "pref_mappings": [
+      { "pref": "settings.language.send_function_keys",
+        "indicator_tests": [
+          { "policy": { "KeyboardDefaultToFunctionKeys": true } }
+        ]
+      }
+    ]
+  },
+
+  "AttestationEnabledForUser": {
+    "os": ["chromeos"],
+    "test_policy": { "AttestationEnabledForUser": true },
+    "pref_mappings": [
+      { "pref": "attestation.enabled" }
+    ]
+  },
+
+  "AttestationExtensionWhitelist": {
+    "os": ["chromeos"],
+    "test_policy": { "AttestationExtensionWhitelist": ["test_ext_id1", "test_ext_id2"] },
+    "pref_mappings": [
+      { "pref": "attestation.extension_whitelist" }
+    ]
+  },
+
+  "ContentPackDefaultFilteringBehavior": {
+  },
+
+  "ContentPackManualBehaviorHosts": {
+  },
+
+  "ContentPackManualBehaviorURLs": {
+  },
+
+  "ManagedBookmarks": {
+  },
+
+  "FullscreenAllowed": {
+    "os": ["win", "linux", "chromeos"],
+    "test_policy": { "FullscreenAllowed": false },
+    "pref_mappings": [
+      { "pref": "fullscreen.allowed" },
+      { "pref": "apps.fullscreen.allowed" }
+    ]
+  },
+
+  "ChromeOsMultiProfileUserBehavior": {
+    "os": ["chromeos"],
+    "test_policy": { "ChromeOsMultiProfileUserBehavior": "unrestricted" },
+    "pref_mappings": [
+      { "pref": "settings.multiprofile_user_behavior" }
+    ]
+  },
+
+  "NativeMessagingBlacklist": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": { "NativeMessagingBlacklist": ["*"] },
+    "pref_mappings": [
+      { "pref": "native_messaging.blacklist" }
+    ]
+  },
+
+  "NativeMessagingWhitelist": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": { "NativeMessagingWhitelist": ["native.messaging.host.name"] },
+    "pref_mappings": [
+      { "pref": "native_messaging.whitelist" }
+    ]
+  },
+
+  "NativeMessagingUserLevelHosts": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": { "NativeMessagingUserLevelHosts": false },
+    "pref_mappings": [
+      { "pref": "native_messaging.user_level_hosts" }
+    ]
+  },
+
+  "EnableDeprecatedWebPlatformFeatures": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": {
+      "EnableDeprecatedWebPlatformFeatures": [
+        "ShowModalDialog_EffectiveUntil20150430"
+      ]
+    },
+    "pref_mappings": [
+      { "pref": "enable_deprecated_web_platform_features" }
+    ]
+  },
+
+  "TouchVirtualKeyboardEnabled": {
+    "os": ["chromeos"],
+    "test_policy": { "TouchVirtualKeyboardEnabled": false },
+    "pref_mappings": [
+      { "pref": "ui.touch_virtual_keyboard_enabled" }
+    ]
+  },
+
+  "EasyUnlockAllowed": {
+    "os": ["chromeos"],
+    "test_policy": { "EasyUnlockAllowed": false },
+    "pref_mappings": [
+      { "pref": "easy_unlock.allowed" }
+    ]
+  },
+
+  "SessionLocales": {
+    "os": ["chromeos"],
+    "can_be_recommended": true
+  },
+
+  "ForceMaximizeOnFirstRun": {
+    "os": ["chromeos"],
+    "test_policy": { "ForceMaximizeOnFirstRun": true },
+    "pref_mappings": [
+      { "pref": "ui.force_maximize_on_first_run" }
+    ]
+  },
+
+  "SSLErrorOverrideAllowed": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "SSLErrorOverrideAllowed": true },
+    "pref_mappings": [
+      { "pref": "ssl.error_override_allowed" }
+    ]
+  },
+
+  "KeyPermissions": {
+  },
+
+  "----- Chrome OS device policies ---------------------------------------": {},
+
+  "DevicePolicyRefreshRate": {
+    "os": ["chromeos"],
+    "test_policy": { "DevicePolicyRefreshRate": 300000 },
+    "pref_mappings": [
+      { "pref": "policy.device_refresh_rate",
+        "local_state": true }
+    ]
+  },
+
+  "ChromeOsReleaseChannel": {
+  },
+
+  "ChromeOsReleaseChannelDelegated": {
+  },
+
+  "DeviceOpenNetworkConfiguration": {
+  },
+
+  "HeartbeatEnabled": {
+  },
+
+  "HeartbeatFrequency": {
+  },
+
+  "ReportDeviceVersionInfo": {
+  },
+
+  "ReportDeviceActivityTimes": {
+  },
+
+  "ReportDeviceBootMode": {
+  },
+
+  "ReportDeviceNetworkInterfaces": {
+  },
+
+  "ReportDeviceUsers": {
+  },
+
+  "ReportDeviceHardwareStatus": {
+  },
+
+  "ReportDeviceSessionStatus": {
+  },
+
+  "ReportUploadFrequency": {
+  },
+
+  "DeviceAllowNewUsers": {
+  },
+
+  "DeviceUserWhitelist": {
+  },
+
+  "DeviceGuestModeEnabled": {
+  },
+
+  "DeviceShowUserNamesOnSignin": {
+  },
+
+  "DeviceDataRoamingEnabled": {
+  },
+
+  "DeviceMetricsReportingEnabled": {
+    "os": ["chromeos"],
+    "official_only": true,
+    "test_policy": { "DeviceMetricsReportingEnabled": true },
+    "pref_mappings": [
+      { "pref": "cros.metrics.reportingEnabled",
+        "indicator_test_setup_js": "var controllingPref = 'spellcheck.use_spelling_service'; var testedPref = 'cros.metrics.reportingEnabled'; Preferences.prefsChangedCallback([testedPref, Preferences.getInstance().registeredPreferences_[controllingPref].orig]); Preferences.getInstance().addEventListener(controllingPref, function(event) {Preferences.prefsChangedCallback([testedPref, {value: event.value.value, controlledBy: event.value.controlledBy, disabled: event.value.disabled}]);});",
+        "indicator_tests": [
+          { "policy": { "SpellCheckServiceEnabled": true } }
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): The |indicator_test_setup_js| above is a hack that makes |cros.metrics.reportingEnabled| track the status of the entirely unrelated |spellcheck.use_spelling_service| pref. This is because cros settings cannot currently be made policy-controlled in browser tests. Remove this hack once that restriction is lifted."
+  },
+
+  "DeviceEphemeralUsersEnabled": {
+  },
+
+  "DeviceRebootOnShutdown": {
+  },
+
+  "DeviceIdleLogoutTimeout": {
+  },
+
+  "DeviceIdleLogoutWarningDuration": {
+  },
+
+  "DeviceLoginScreenSaverId": {
+  },
+
+  "DeviceLoginScreenSaverTimeout": {
+  },
+
+  "DeviceStartUpUrls": {
+  },
+
+  "DeviceAppPack": {
+  },
+
+  "DeviceAutoUpdateDisabled": {
+  },
+
+  "DeviceAutoUpdateP2PEnabled": {
+  },
+
+  "DeviceTargetVersionPrefix": {
+  },
+
+  "DeviceUpdateScatterFactor": {
+  },
+
+  "DeviceUpdateAllowedConnectionTypes": {
+  },
+
+  "DeviceUpdateHttpDownloadsEnabled": {
+  },
+
+  "ReportDeviceLocation": {
+  },
+
+  "SystemTimezone": {
+  },
+
+  "SystemUse24HourClock": {
+  },
+
+  "DeviceLocalAccounts": {
+  },
+
+  "DeviceLocalAccountAutoLoginId": {
+  },
+
+  "DeviceLocalAccountAutoLoginDelay": {
+  },
+
+  "DeviceLocalAccountAutoLoginBailoutEnabled": {
+  },
+
+  "DeviceLocalAccountPromptForNetworkWhenOffline": {
+  },
+
+  "DeviceBlockDevmode": {
+  },
+
+  "DeviceLoginScreenPowerManagement": {
+  },
+
+  "DeviceAllowRedeemChromeOsRegistrationOffers": {
+  },
+
+  "DeviceStartUpFlags": {
+  },
+
+  "DeviceVariationsRestrictParameter" : {
+  },
+
+  "DeviceLoginScreenDefaultLargeCursorEnabled" : {
+  },
+
+  "DeviceLoginScreenDefaultSpokenFeedbackEnabled" : {
+  },
+
+  "DeviceLoginScreenDefaultHighContrastEnabled" : {
+  },
+
+  "DeviceLoginScreenDefaultScreenMagnifierType" : {
+  },
+
+  "DeviceLoginScreenDefaultVirtualKeyboardEnabled" : {
+  },
+
+  "UptimeLimit": {
+  },
+
+  "RebootAfterUpdate": {
+  },
+
+  "AttestationEnabledForDevice": {
+  },
+
+  "AttestationForContentProtectionEnabled": {
+  },
+
+  "SupervisedUsersEnabled": {
+  },
+
+  "SupervisedUserCreationEnabled": {
+  },
+
+  "AutoCleanUpStrategy": {
+  },
+
+  "DeviceTransferSAMLCookies": {
+  },
+
+  "ExtensionCacheSize": {
+  },
+
+  "DeviceLoginScreenDomainAutoComplete": {
+  },
+
+  "----- Chrome Frame policies -------------------------------------------": {},
+
+  "ChromeFrameRendererSettings": {
+  },
+
+  "RenderInChromeFrameList": {
+  },
+
+  "RenderInHostList": {
+  },
+
+  "ChromeFrameContentTypes": {
+  },
+
+  "GCFUserDataDir": {
+  },
+
+  "AdditionalLaunchParameters": {
+  },
+
+  "SuppressChromeFrameTurndownPrompt": {
+  },
+
+  "SkipMetadataCheck": {
+  }
+}

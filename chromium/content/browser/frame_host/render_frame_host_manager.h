@@ -1,0 +1,815 @@
+// Copyright 2013 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef CONTENT_BROWSER_FRAME_HOST_RENDER_FRAME_HOST_MANAGER_H_
+#define CONTENT_BROWSER_FRAME_HOST_RENDER_FRAME_HOST_MANAGER_H_
+
+#include <list>
+
+#include "base/basictypes.h"
+#include "base/logging.h"
+#include "base/memory/scoped_ptr.h"
+#include "base/memory/weak_ptr.h"
+#include "content/browser/renderer_host/render_view_host_delegate.h"
+#include "content/browser/site_instance_impl.h"
+#include "content/common/content_export.h"
+#include "content/public/browser/global_request_id.h"
+#include "content/public/browser/notification_observer.h"
+#include "content/public/browser/notification_registrar.h"
+#include "content/public/common/referrer.h"
+#include "ui/base/page_transition_types.h"
+#include "url/origin.h"
+
+namespace content {
+class BrowserContext;
+class CrossProcessFrameConnector;
+class CrossSiteTransferringRequest;
+class FrameNavigationEntry;
+class FrameTreeNode;
+class InterstitialPageImpl;
+class NavigationControllerImpl;
+class NavigationEntry;
+class NavigationEntryImpl;
+class NavigationRequest;
+class NavigatorTestWithBrowserSideNavigation;
+class RenderFrameHost;
+class RenderFrameHostDelegate;
+class RenderFrameHostImpl;
+class RenderFrameHostManagerTest;
+class RenderFrameProxyHost;
+class RenderViewHost;
+class RenderViewHostImpl;
+class RenderWidgetHostDelegate;
+class RenderWidgetHostView;
+class TestWebContents;
+class WebUIImpl;
+struct CommonNavigationParams;
+struct FrameReplicationState;
+
+// Manages RenderFrameHosts for a FrameTreeNode. It maintains a
+// current_frame_host() which is the content currently visible to the user. When
+// a frame is told to navigate to a different web site (as determined by
+// SiteInstance), it will replace its current RenderFrameHost with a new
+// RenderFrameHost dedicated to the new SiteInstance, possibly in a new process.
+//
+// Cross-process navigation works like this:
+//
+// - RFHM::Navigate determines whether the destination is cross-site, and if so,
+//   it creates a pending_render_frame_host_.
+//
+// - The pending RFH is created in the "navigations suspended" state, meaning no
+//   navigation messages are sent to its renderer until the beforeunload handler
+//   has a chance to run in the current RFH.
+//
+// - The current RFH runs its beforeunload handler. If it returns false, we
+//   cancel all the pending logic. Otherwise we allow the pending RFH to send
+//   the navigation request to its renderer.
+//
+// - ResourceDispatcherHost receives a ResourceRequest on the IO thread for the
+//   main resource load from the pending RFH. It creates a
+//   CrossSiteResourceHandler to check whether a process transfer is needed when
+//   the request is ready to commit.
+//
+// - When RDH receives a response, the MimeTypeResourceHandler determines
+//   whether it is a navigation type that doesn't commit (e.g. download, 204 or
+//   error page). If so, it sends a message to the new renderer causing it to
+//   cancel the request, and the request (e.g. the download) proceeds. In this
+//   case, the pending RFH will never become the current RFH, but it remains
+//   until the next DidNavigate event for this WebContentsImpl.
+//
+// - After RDH receives a response and determines that it is safe and not a
+//   download, the CrossSiteResourceHandler checks whether a transfer for a
+//   redirect is needed. If so, it pauses the network response and starts an
+//   identical navigation in a new pending RFH. When the identical request is
+//   later received by RDH, the response is transferred and unpaused.
+//
+// - Otherwise, the network response commits in the pending RFH's renderer,
+//   which sends a DidCommitProvisionalLoad message back to the browser process.
+//
+// - RFHM::CommitPending makes visible the new RFH, and initiates the unload
+//   handler in the old RFH. The unload handler will complete in the background.
+//
+// - RenderFrameHostManager may keep the previous RFH alive as a
+//   RenderFrameProxyHost, to be used (for example) if the user goes back. The
+//   process only stays live if another tab is using it, but if so, the existing
+//   frame relationships will be maintained.
+class CONTENT_EXPORT RenderFrameHostManager : public NotificationObserver {
+ public:
+  // Functions implemented by our owner that we need.
+  //
+  // TODO(brettw) Clean this up! These are all the functions in WebContentsImpl
+  // that are required to run this class. The design should probably be better
+  // such that these are more clear.
+  //
+  // There is additional complexity that some of the functions we need in
+  // WebContentsImpl are inherited and non-virtual. These are named with
+  // "RenderManager" so that the duplicate implementation of them will be clear.
+  //
+  // Functions and parameters whose description are prefixed by PlzNavigate are
+  // part of a navigation refactoring project, currently behind the
+  // enable-browser-side-navigation flag. The idea is to move the logic behind
+  // driving navigations from the renderer to the browser.
+  class CONTENT_EXPORT Delegate {
+   public:
+    // Initializes the given renderer if necessary and creates the view ID
+    // corresponding to this view host. If this method is not called and the
+    // process is not shared, then the WebContentsImpl will act as though the
+    // renderer is not running (i.e., it will render "sad tab"). This method is
+    // automatically called from LoadURL. |for_main_frame_navigation| indicates
+    // whether this RenderViewHost is used to render a top-level frame, so the
+    // appropriate RenderWidgetHostView type is used.
+    virtual bool CreateRenderViewForRenderManager(
+        RenderViewHost* render_view_host,
+        int opener_frame_routing_id,
+        int proxy_routing_id,
+        const FrameReplicationState& replicated_frame_state,
+        bool for_main_frame_navigation) = 0;
+    virtual bool CreateRenderFrameForRenderManager(
+        RenderFrameHost* render_frame_host,
+        int parent_routing_id,
+        int previous_sibling_routing_id,
+        int proxy_routing_id) = 0;
+    virtual void BeforeUnloadFiredFromRenderManager(
+        bool proceed, const base::TimeTicks& proceed_time,
+        bool* proceed_to_fire_unload) = 0;
+    virtual void RenderProcessGoneFromRenderManager(
+        RenderViewHost* render_view_host) = 0;
+    virtual void UpdateRenderViewSizeForRenderManager() = 0;
+    virtual void CancelModalDialogsForRenderManager() = 0;
+    virtual void NotifySwappedFromRenderManager(RenderFrameHost* old_host,
+                                                RenderFrameHost* new_host,
+                                                bool is_main_frame) = 0;
+    // TODO(nasko): This should be removed once extensions no longer use
+    // NotificationService. See https://crbug.com/462682.
+    virtual void NotifyMainFrameSwappedFromRenderManager(
+        RenderViewHost* old_host,
+        RenderViewHost* new_host) = 0;
+    virtual NavigationControllerImpl&
+        GetControllerForRenderManager() = 0;
+
+    // Creates a WebUI object for the given URL if one applies. Ownership of the
+    // returned pointer will be passed to the caller. If no WebUI applies,
+    // returns NULL.
+    virtual scoped_ptr<WebUIImpl> CreateWebUIForRenderManager(
+        const GURL& url) = 0;
+
+    // Returns the navigation entry of the current navigation, or NULL if there
+    // is none.
+    virtual NavigationEntry*
+        GetLastCommittedNavigationEntryForRenderManager() = 0;
+
+    // Returns true if the location bar should be focused by default rather than
+    // the page contents. The view calls this function when the tab is focused
+    // to see what it should do.
+    virtual bool FocusLocationBarByDefault() = 0;
+
+    // Focuses the location bar.
+    virtual void SetFocusToLocationBar(bool select_all) = 0;
+
+    // Returns true if views created for this delegate should be created in a
+    // hidden state.
+    virtual bool IsHidden() = 0;
+
+    // If the delegate is an inner WebContents, this method returns the
+    // FrameTreeNode ID of the frame in the outer WebContents which hosts
+    // the inner WebContents. Returns FrameTreeNode::kFrameTreeNodeInvalidID
+    // if the delegate does not have an outer WebContents.
+    virtual int GetOuterDelegateFrameTreeNodeID() = 0;
+
+   protected:
+    virtual ~Delegate() {}
+  };
+
+  // Used with FrameTree::ForEach to delete RenderFrameHosts pending shutdown
+  // from a FrameTreeNode's RenderFrameHostManager. Used during destruction of
+  // WebContentsImpl.
+  static bool ClearRFHsPendingShutdown(FrameTreeNode* node);
+
+  // Returns true if we are currently in a mode where the swapped out state
+  // should not be used. Currently (as an implementation strategy) swapped out
+  // is forbidden under --site-per-process, but our goal is to eliminate the
+  // mode entirely. In code that deals with the swapped out state, prefer calls
+  // to this function over consulting the switches directly. It will be easier
+  // to grep, and easier to rip out.
+  //
+  // TODO(nasko): When swappedout:// is eliminated entirely, this function (and
+  // its equivalent in RenderFrameProxy) should be removed and its callers
+  // cleaned up.
+  static bool IsSwappedOutStateForbidden();
+
+  // All three delegate pointers must be non-NULL and are not owned by this
+  // class.  They must outlive this class. The RenderViewHostDelegate and
+  // RenderWidgetHostDelegate are what will be installed into all
+  // RenderViewHosts that are created.
+  //
+  // You must call Init() before using this class.
+  RenderFrameHostManager(
+      FrameTreeNode* frame_tree_node,
+      RenderFrameHostDelegate* render_frame_delegate,
+      RenderViewHostDelegate* render_view_delegate,
+      RenderWidgetHostDelegate* render_widget_delegate,
+      Delegate* delegate);
+  ~RenderFrameHostManager() override;
+
+  // For arguments, see WebContentsImpl constructor.
+  void Init(BrowserContext* browser_context,
+            SiteInstance* site_instance,
+            int view_routing_id,
+            int frame_routing_id);
+
+  // Returns the currently active RenderFrameHost.
+  //
+  // This will be non-NULL between Init() and Shutdown(). You may want to NULL
+  // check it in many cases, however. Windows can send us messages during the
+  // destruction process after it has been shut down.
+  RenderFrameHostImpl* current_frame_host() const {
+    return render_frame_host_.get();
+  }
+
+  // TODO(creis): Remove this when we no longer use RVH for navigation.
+  RenderViewHostImpl* current_host() const;
+
+  // Returns the view associated with the current RenderViewHost, or NULL if
+  // there is no current one.
+  RenderWidgetHostView* GetRenderWidgetHostView() const;
+
+  // Returns whether this manager belongs to a FrameTreeNode that is a main
+  // frame in an inner WebContents.
+  // TODO(lazyboy): Make this work correctly for subframes inside inner
+  // WebContents too.
+  bool ForInnerDelegate();
+
+  // Returns the RenderWidgetHost of the outer WebContents (if any) that can be
+  // used to fetch the last keyboard event.
+  // TODO(lazyboy): This can be removed once input events are sent directly to
+  // remote frames.
+  RenderWidgetHostImpl* GetOuterRenderWidgetHostForKeyboardInput();
+
+  RenderFrameProxyHost* GetProxyToParent();
+
+  // Returns the proxy to inner WebContents in the outer WebContents's
+  // SiteInstance. Returns nullptr if this WebContents isn't part of inner/outer
+  // relationship.
+  RenderFrameProxyHost* GetProxyToOuterDelegate();
+
+  // Removes the FrameTreeNode in the outer WebContents that represents this
+  // FrameTreeNode.
+  // TODO(lazyboy): This does not belong to RenderFrameHostManager, move it to
+  // somehwere else.
+  void RemoveOuterDelegateFrame();
+
+  // Returns the pending RenderFrameHost, or NULL if there is no pending one.
+  RenderFrameHostImpl* pending_frame_host() const {
+    return pending_render_frame_host_.get();
+  }
+
+  // Returns the speculative RenderFrameHost, or null if there is no speculative
+  // one.
+  RenderFrameHostImpl* speculative_frame_host() const {
+    return speculative_render_frame_host_.get();
+  }
+
+  // TODO(creis): Remove this when we no longer use RVH for navigation.
+  RenderViewHostImpl* pending_render_view_host() const;
+
+  // Returns the current committed Web UI or NULL if none applies.
+  WebUIImpl* web_ui() const { return web_ui_.get(); }
+
+  // Returns the Web UI for the pending navigation, or NULL of none applies.
+  WebUIImpl* pending_web_ui() const {
+    return pending_web_ui_.get() ? pending_web_ui_.get() :
+                                   pending_and_current_web_ui_.get();
+  }
+
+  // PlzNavigate
+  // Returns the speculative WebUI for the navigation (a newly created one or
+  // the current one if it should be reused). If none is set returns nullptr.
+  WebUIImpl* speculative_web_ui() const {
+    return should_reuse_web_ui_ ? web_ui_.get() : speculative_web_ui_.get();
+  }
+
+  // Called when we want to instruct the renderer to navigate to the given
+  // navigation entry. It may create a new RenderFrameHost or re-use an existing
+  // one. The RenderFrameHost to navigate will be returned. Returns NULL if one
+  // could not be created. |dest_url| takes precedence over the |frame_entry|'s
+  // url (this is necessary because ReloadOriginalRequest navigates to a
+  // different URL than the last committed entry, without modifying it).
+  RenderFrameHostImpl* Navigate(const GURL& dest_url,
+                                const FrameNavigationEntry& frame_entry,
+                                const NavigationEntryImpl& entry);
+
+  // Instructs the various live views to stop. Called when the user directed the
+  // page to stop loading.
+  void Stop();
+
+  // Notifies the regular and pending RenderViewHosts that a load is or is not
+  // happening. Even though the message is only for one of them, we don't know
+  // which one so we tell both.
+  void SetIsLoading(bool is_loading);
+
+  // Whether to close the tab or not when there is a hang during an unload
+  // handler. If we are mid-crosssite navigation, then we should proceed
+  // with the navigation instead of closing the tab.
+  bool ShouldCloseTabOnUnresponsiveRenderer();
+
+  // Confirms whether we should close the page or navigate away.  This is called
+  // before a cross-site request or before a tab/window is closed (as indicated
+  // by the first parameter) to allow the appropriate renderer to approve or
+  // deny the request.  |proceed| indicates whether the user chose to proceed.
+  // |proceed_time| is the time when the request was allowed to proceed.
+  void OnBeforeUnloadACK(bool for_cross_site_transition,
+                         bool proceed,
+                         const base::TimeTicks& proceed_time);
+
+  // The |pending_render_frame_host| is ready to commit a page.  We should
+  // ensure that the old RenderFrameHost runs its unload handler first and
+  // determine whether a RenderFrameHost transfer is needed.
+  // |cross_site_transferring_request| is NULL if a request is not being
+  // transferred between renderers.
+  void OnCrossSiteResponse(
+      RenderFrameHostImpl* pending_render_frame_host,
+      const GlobalRequestID& global_request_id,
+      scoped_ptr<CrossSiteTransferringRequest> cross_site_transferring_request,
+      const std::vector<GURL>& transfer_url_chain,
+      const Referrer& referrer,
+      ui::PageTransition page_transition,
+      bool should_replace_current_entry);
+
+  // Called when a renderer's frame navigates.
+  void DidNavigateFrame(RenderFrameHostImpl* render_frame_host,
+                        bool was_caused_by_user_gesture);
+
+  // Called when a renderer sets its opener to null.
+  void DidDisownOpener(RenderFrameHost* render_frame_host);
+
+  // Sets the pending Web UI for the pending navigation, ensuring that the
+  // bindings are appropriate compared to |bindings|.
+  void SetPendingWebUI(const GURL& url, int bindings);
+
+  // Creates and initializes a RenderFrameHost. The |web_ui| is an optional
+  // input parameter used to double check bindings when swapping back in a
+  // previously existing RenderFrameHost. If |flags| has the
+  // CREATE_RF_SWAPPED_OUT bit set from the CreateRenderFrameFlags enum, it will
+  // initially be placed on the swapped out hosts list. If |view_routing_id_ptr|
+  // is not nullptr it will be set to the routing id of the view associated with
+  // the frame.
+  scoped_ptr<RenderFrameHostImpl> CreateRenderFrame(SiteInstance* instance,
+                                                    WebUIImpl* web_ui,
+                                                    int flags,
+                                                    int* view_routing_id_ptr);
+
+  // Helper method to create and initialize a RenderFrameProxyHost and return
+  // its routing id.
+  int CreateRenderFrameProxy(SiteInstance* instance);
+
+  // Creates proxies for a new child frame at FrameTreeNode |child| in all
+  // SiteInstances for which the current frame has proxies.  This method is
+  // called on the parent of a new child frame before the child leaves the
+  // SiteInstance.
+  void CreateProxiesForChildFrame(FrameTreeNode* child);
+
+  // Sets the passed passed interstitial as the currently showing interstitial.
+  // |interstitial_page| should be non NULL (use the remove_interstitial_page
+  // method to unset the interstitial) and no interstitial page should be set
+  // when there is already a non NULL interstitial page set.
+  void set_interstitial_page(InterstitialPageImpl* interstitial_page) {
+    DCHECK(!interstitial_page_ && interstitial_page);
+    interstitial_page_ = interstitial_page;
+  }
+
+  // Unsets the currently showing interstitial.
+  void remove_interstitial_page() {
+    DCHECK(interstitial_page_);
+    interstitial_page_ = NULL;
+  }
+
+  // Returns the currently showing interstitial, NULL if no interstitial is
+  // showing.
+  InterstitialPageImpl* interstitial_page() const { return interstitial_page_; }
+
+  // NotificationObserver implementation.
+  void Observe(int type,
+               const NotificationSource& source,
+               const NotificationDetails& details) override;
+
+  // Returns whether the given RenderFrameHost (or its associated
+  // RenderViewHost) is on the list of swapped out RenderFrameHosts.
+  bool IsRVHOnSwappedOutList(RenderViewHostImpl* rvh) const;
+  bool IsOnSwappedOutList(RenderFrameHostImpl* rfh) const;
+
+  // Returns the swapped out RenderViewHost or RenderFrameHost for the given
+  // SiteInstance, if any. This method is *deprecated* and
+  // GetRenderFrameProxyHost should be used.
+  RenderViewHostImpl* GetSwappedOutRenderViewHost(SiteInstance* instance) const;
+  RenderFrameProxyHost* GetRenderFrameProxyHost(
+      SiteInstance* instance) const;
+
+  // Returns whether |render_frame_host| is on the pending deletion list.
+  bool IsPendingDeletion(RenderFrameHostImpl* render_frame_host);
+
+  // If |render_frame_host| is on the pending deletion list, this deletes it.
+  // Returns whether it was deleted.
+  bool DeleteFromPendingList(RenderFrameHostImpl* render_frame_host);
+
+  // Deletes any proxy hosts associated with this node. Used during destruction
+  // of WebContentsImpl.
+  void ResetProxyHosts();
+
+  // Returns the routing id for a RenderFrameHost or RenderFrameProxyHost
+  // that has the given SiteInstance and is associated with this
+  // RenderFrameHostManager. Returns MSG_ROUTING_NONE if none is found.
+  int GetRoutingIdForSiteInstance(SiteInstance* site_instance);
+
+  // PlzNavigate
+  // Notifies the RenderFrameHostManager that a new NavigationRequest has been
+  // created and set in the FrameTreeNode so that it can speculatively create a
+  // new RenderFrameHost (and potentially a new process) if needed.
+  void DidCreateNavigationRequest(const NavigationRequest& request);
+
+  // PlzNavigate
+  // Called (possibly several times) during a navigation to select or create an
+  // appropriate RenderFrameHost for the provided URL. The returned pointer will
+  // be for the current or the speculative RenderFrameHost and the instance is
+  // owned by this manager.
+  RenderFrameHostImpl* GetFrameHostForNavigation(
+      const NavigationRequest& request);
+
+  // PlzNavigate
+  // Clean up any state for any ongoing navigation.
+  void CleanUpNavigation();
+
+  // PlzNavigate
+  // Clears the speculative members, returning the RenderFrameHost to the caller
+  // for disposal.
+  scoped_ptr<RenderFrameHostImpl> UnsetSpeculativeRenderFrameHost();
+
+  // Notification methods to tell this RenderFrameHostManager that the frame it
+  // is responsible for has started or stopped loading a document.
+  void OnDidStartLoading();
+  void OnDidStopLoading();
+
+  // Send updated frame name to all frame proxies when the frame changes its
+  // window.name property.
+  void OnDidUpdateName(const std::string& name);
+
+  // Send updated origin to all frame proxies when the frame navigates to a new
+  // origin.
+  void OnDidUpdateOrigin(const url::Origin& origin);
+
+  void EnsureRenderViewInitialized(RenderViewHostImpl* render_view_host,
+                                   SiteInstance* instance);
+
+  // Recursively creates swapped out RenderViews and RenderFrameProxies for
+  // this frame's FrameTree and for its opener chain in the given SiteInstance.
+  // This allows other tabs to send cross-process JavaScript calls to their
+  // opener(s) and to any other frames in the opener's FrameTree (e.g.,
+  // supporting calls like window.opener.opener.frames[x][y]).
+  void CreateOpenerProxies(SiteInstance* instance);
+
+  // Returns a routing ID for the current FrameTreeNode's opener node in the
+  // given SiteInstance.  May return a routing ID of either a RenderFrameHost
+  // (if opener's current or pending RFH has SiteInstance |instance|) or a
+  // RenderFrameProxyHost.  Returns MSG_ROUTING_NONE if there is no opener, or
+  // if the opener node doesn't have a proxy for |instance|.
+  int GetOpenerRoutingID(SiteInstance* instance);
+
+  // Called on the RFHM of the inner WebContents to create a
+  // RenderFrameProxyHost in its outer WebContents's SiteInstance,
+  // |outer_contents_site_instance|. The frame in outer WebContents that is
+  // hosting the inner WebContents is |render_frame_host|, and the frame will
+  // be swapped out with the proxy.
+  void CreateOuterDelegateProxy(SiteInstance* outer_contents_site_instance,
+                                RenderFrameHostImpl* render_frame_host);
+
+  // Sets the child RenderWidgetHostView for this frame, which must be part of
+  // an inner WebContents.
+  void SetRWHViewForInnerContents(RenderWidgetHostView* child_rwhv);
+
+ private:
+  friend class FrameTreeVisualizer;
+  friend class NavigatorTestWithBrowserSideNavigation;
+  friend class RenderFrameHostManagerTest;
+  friend class TestWebContents;
+
+  // Stores information regarding a SiteInstance targeted at a specific URL to
+  // allow for comparisons without having to actually create new instances. It
+  // can point to an existing one or store the details needed to create a new
+  // one.
+  struct CONTENT_EXPORT SiteInstanceDescriptor {
+    explicit SiteInstanceDescriptor(content::SiteInstance* site_instance)
+        : existing_site_instance(site_instance),
+          new_is_related_to_current(false) {}
+
+    SiteInstanceDescriptor(BrowserContext* browser_context,
+                           GURL dest_url,
+                           bool related_to_current);
+
+    // Set with an existing SiteInstance to be reused.
+    content::SiteInstance* existing_site_instance;
+
+    // In case |existing_site_instance| is null, specify a new site URL.
+    GURL new_site_url;
+
+    // In case |existing_site_instance| is null, specify if the new site should
+    // be created in a new BrowsingInstance or not.
+    bool new_is_related_to_current;
+  };
+
+  // Used with FrameTree::ForEach to erase RenderFrameProxyHosts from a
+  // FrameTreeNode's RenderFrameHostManager.
+  static bool ClearProxiesInSiteInstance(int32 site_instance_id,
+                                         FrameTreeNode* node);
+  // Used with FrameTree::ForEach to reset initialized state of
+  // RenderFrameProxyHosts from a FrameTreeNode's RenderFrameHostManager.
+  static bool ResetProxiesInSiteInstance(int32 site_instance_id,
+                                         FrameTreeNode* node);
+
+  // Returns whether this tab should transition to a new renderer for
+  // cross-site URLs.  Enabled unless we see the --process-per-tab command line
+  // switch.  Can be overridden in unit tests.
+  bool ShouldTransitionCrossSite();
+
+  // Returns true if for the navigation from |current_effective_url| to
+  // |new_effective_url|, a new SiteInstance and BrowsingInstance should be
+  // created (even if we are in a process model that doesn't usually swap).
+  // This forces a process swap and severs script connections with existing
+  // tabs.  Cases where this can happen include transitions between WebUI and
+  // regular web pages. |new_site_instance| may be null.
+  // If there is no current NavigationEntry, then |current_is_view_source_mode|
+  // should be the same as |new_is_view_source_mode|.
+  //
+  // We use the effective URL here, since that's what is used in the
+  // SiteInstance's site and when we later call IsSameWebSite.  If there is no
+  // current NavigationEntry, check the current SiteInstance's site, which might
+  // already be committed to a Web UI URL (such as the NTP).
+  bool ShouldSwapBrowsingInstancesForNavigation(
+      const GURL& current_effective_url,
+      bool current_is_view_source_mode,
+      SiteInstance* new_site_instance,
+      const GURL& new_effective_url,
+      bool new_is_view_source_mode) const;
+
+  // Creates a new Web UI, ensuring that the bindings are appropriate compared
+  // to |bindings|.
+  scoped_ptr<WebUIImpl> CreateWebUI(const GURL& url, int bindings);
+
+  // Returns true if it is safe to reuse the current WebUI when navigating from
+  // |current_entry| to |new_url|.
+  bool ShouldReuseWebUI(
+      const NavigationEntry* current_entry,
+      const GURL& new_url) const;
+
+  // Returns the SiteInstance to use for the navigation.
+  SiteInstance* GetSiteInstanceForNavigation(const GURL& dest_url,
+                                             SiteInstance* source_instance,
+                                             SiteInstance* dest_instance,
+                                             SiteInstance* candidate_instance,
+                                             ui::PageTransition transition,
+                                             bool dest_is_restore,
+                                             bool dest_is_view_source_mode);
+
+  // Returns a descriptor of the appropriate SiteInstance object for the given
+  // |dest_url|, possibly reusing the current, source or destination
+  // SiteInstance. The actual SiteInstance can then be obtained calling
+  // ConvertToSiteInstance with the descriptor.
+  //
+  // |source_instance| is the SiteInstance of the frame that initiated the
+  // navigation. |current_instance| is the SiteInstance of the frame that is
+  // currently navigating. |dest_instance| is a predetermined SiteInstance that
+  // will be used if not null.
+  // For example, if you have a parent frame A, which has a child frame B, and
+  // A is trying to change the src attribute of B, this will cause a navigation
+  // where the source SiteInstance is A and B is the current SiteInstance.
+  //
+  // This is a helper function for GetSiteInstanceForNavigation.
+  SiteInstanceDescriptor DetermineSiteInstanceForURL(
+      const GURL& dest_url,
+      SiteInstance* source_instance,
+      SiteInstance* current_instance,
+      SiteInstance* dest_instance,
+      ui::PageTransition transition,
+      bool dest_is_restore,
+      bool dest_is_view_source_mode,
+      bool force_browsing_instance_swap);
+
+  // Converts a SiteInstanceDescriptor to the actual SiteInstance it describes.
+  // If a |candidate_instance| is provided (is not nullptr) and it matches the
+  // description, it is returned as is.
+  SiteInstance* ConvertToSiteInstance(const SiteInstanceDescriptor& descriptor,
+                                      SiteInstance* candidate_instance);
+
+  // Determines the appropriate url to use as the current url for SiteInstance
+  // selection.
+  const GURL& GetCurrentURLForSiteInstance(
+      SiteInstance* current_instance,
+      NavigationEntry* current_entry);
+
+  // Creates a new RenderFrameHostImpl for the |new_instance| and assign it to
+  // |pending_render_frame_host_| while respecting the opener route if needed
+  // and stores it in pending_render_frame_host_.
+  void CreatePendingRenderFrameHost(SiteInstance* old_instance,
+                                    SiteInstance* new_instance,
+                                    bool is_main_frame);
+
+  // Ensure that we have created all needed proxies for a new RFH with
+  // SiteInstance |new_instance|: (1) create swapped-out RVHs and proxies for
+  // the new RFH's opener chain if we are staying in the same BrowsingInstance;
+  // (2) Create proxies for the new RFH's SiteInstance in its own frame tree;
+  // (3) set any additional flags for the new RenderFrame with
+  // |create_render_frame_flags|.
+  void CreateProxiesForNewRenderFrameHost(SiteInstance* old_instance,
+                                          SiteInstance* new_instance,
+                                          int* create_render_frame_flags);
+
+  // Create swapped out RenderViews and RenderFrameProxies in the given
+  // SiteInstance for all frames on the opener chain of this frame.  Same as
+  // CreateOpenerProxies, but starts from this frame's opener, calling
+  // CreateOpenerProxies on it if it exists and returning otherwise.
+  void CreateOpenerProxiesIfNeeded(SiteInstance* instance);
+
+  // Creates a RenderFrameHost and corresponding RenderViewHost if necessary.
+  scoped_ptr<RenderFrameHostImpl> CreateRenderFrameHost(SiteInstance* instance,
+                                                        int view_routing_id,
+                                                        int frame_routing_id,
+                                                        int flags);
+
+  // PlzNavigate
+  // Creates and initializes a speculative RenderFrameHost and/or WebUI for an
+  // ongoing navigation. They might be destroyed and re-created later if the
+  // navigation is redirected to a different SiteInstance.
+  bool CreateSpeculativeRenderFrameHost(const GURL& url,
+                                        SiteInstance* old_instance,
+                                        SiteInstance* new_instance,
+                                        int bindings);
+
+  // Sets up the necessary state for a new RenderViewHost.  Creates a
+  // RenderFrameProxy in the target renderer process with the given
+  // |proxy_routing_id|, which is used to route IPC messages when in swapped
+  // out state.  Returns early if the RenderViewHost has already been
+  // initialized for another RenderFrameHost.
+  bool InitRenderView(RenderViewHostImpl* render_view_host,
+                      int proxy_routing_id,
+                      bool for_main_frame_navigation);
+
+  // Initialization for RenderFrameHost uses the same sequence as InitRenderView
+  // above.
+  bool InitRenderFrame(RenderFrameHostImpl* render_frame_host);
+
+  // Sets the pending RenderFrameHost/WebUI to be the active one. Note that this
+  // doesn't require the pending render_frame_host_ pointer to be non-NULL,
+  // since there could be Web UI switching as well. Call this for every commit.
+  // If PlzNavigate is enabled the method will set the speculative (not pending)
+  // RenderFrameHost to be the active one.
+  void CommitPending();
+
+  // Helper to call CommitPending() in all necessary cases.
+  void CommitPendingIfNecessary(RenderFrameHostImpl* render_frame_host,
+                                bool was_caused_by_user_gesture);
+
+  // Commits any pending sandbox flag updates when the renderer's frame
+  // navigates.
+  void CommitPendingSandboxFlags();
+
+  // Runs the unload handler in the old RenderFrameHost, after the new
+  // RenderFrameHost has committed.  |old_render_frame_host| will either be
+  // deleted or put on the pending delete list during this call.
+  void SwapOutOldFrame(scoped_ptr<RenderFrameHostImpl> old_render_frame_host);
+
+  // Discards a RenderFrameHost that was never made active (for active ones
+  // SwapOutOldFrame is used instead).
+  void DiscardUnusedFrame(scoped_ptr<RenderFrameHostImpl> render_frame_host);
+
+  // Holds |render_frame_host| until it can be deleted when its swap out ACK
+  // arrives.
+  void MoveToPendingDeleteHosts(
+      scoped_ptr<RenderFrameHostImpl> render_frame_host);
+
+  // If |render_frame_host| is the last remaining active frame in its
+  // SiteInstance, this will shutdown all the RenderFrameProxyHosts in the
+  // SiteInstance. This is appropriate if |render_frame_host| is about to be
+  // destroyed.
+  void ShutdownProxiesIfLastActiveFrameInSiteInstance(
+      RenderFrameHostImpl* render_frame_host);
+
+  // Helper method to terminate the pending RenderFrameHost. The frame may be
+  // deleted immediately, or it may be kept around in hopes of later reuse.
+  void CancelPending();
+
+  // Clears pending_render_frame_host_, returning it to the caller for disposal.
+  scoped_ptr<RenderFrameHostImpl> UnsetPendingRenderFrameHost();
+
+  // Helper method to set the active RenderFrameHost. Returns the old
+  // RenderFrameHost and updates counts.
+  scoped_ptr<RenderFrameHostImpl> SetRenderFrameHost(
+      scoped_ptr<RenderFrameHostImpl> render_frame_host);
+
+  RenderFrameHostImpl* UpdateStateForNavigate(
+      const GURL& dest_url,
+      SiteInstance* source_instance,
+      SiteInstance* dest_instance,
+      ui::PageTransition transition,
+      bool dest_is_restore,
+      bool dest_is_view_source_mode,
+      const GlobalRequestID& transferred_request_id,
+      int bindings);
+
+  // Called when a renderer process is starting to close.  We should not
+  // schedule new navigations in its swapped out RenderFrameHosts after this.
+  void RendererProcessClosing(RenderProcessHost* render_process_host);
+
+  // Helper method to delete a RenderFrameProxyHost from the list, if one exists
+  // for the given |instance|.
+  void DeleteRenderFrameProxyHost(SiteInstance* instance);
+
+  // For use in creating RenderFrameHosts.
+  FrameTreeNode* frame_tree_node_;
+
+  // Our delegate, not owned by us. Guaranteed non-NULL.
+  Delegate* delegate_;
+
+  // Implemented by the owner of this class.  These delegates are installed into
+  // all the RenderFrameHosts that we create.
+  RenderFrameHostDelegate* render_frame_delegate_;
+  RenderViewHostDelegate* render_view_delegate_;
+  RenderWidgetHostDelegate* render_widget_delegate_;
+
+  // Our RenderFrameHost and its associated Web UI (if any, will be NULL for
+  // non-WebUI pages). This object is responsible for all communication with
+  // a child RenderFrame instance.
+  // For now, RenderFrameHost keeps a RenderViewHost in its SiteInstance alive.
+  // Eventually, RenderViewHost will be replaced with a page context.
+  scoped_ptr<RenderFrameHostImpl> render_frame_host_;
+  scoped_ptr<WebUIImpl> web_ui_;
+
+  // A RenderFrameHost used to load a cross-site page. This remains hidden
+  // while a cross-site request is pending until it calls DidNavigate. It may
+  // have an associated Web UI, in which case the Web UI pointer will be non-
+  // NULL.
+  //
+  // The |pending_web_ui_| may be non-NULL even when the
+  // |pending_render_frame_host_| is NULL. This will happen when we're
+  // transitioning between two Web UI pages: the RFH won't be swapped, so the
+  // pending pointer will be unused, but there will be a pending Web UI
+  // associated with the navigation.
+  // Note: This is not used in PlzNavigate.
+  scoped_ptr<RenderFrameHostImpl> pending_render_frame_host_;
+
+  // If a pending request needs to be transferred to another process, this
+  // owns the request until it's transferred to the new process, so it will be
+  // cleaned up if the navigation is cancelled.  Otherwise, this is NULL.
+  scoped_ptr<CrossSiteTransferringRequest> cross_site_transferring_request_;
+
+  // If either of these is non-NULL, the pending navigation is to a chrome:
+  // page. The scoped_ptr is used if pending_web_ui_ != web_ui_, the WeakPtr is
+  // used for when they reference the same object. If either is non-NULL, the
+  // other should be NULL.
+  // Note: These are not used in PlzNavigate.
+  scoped_ptr<WebUIImpl> pending_web_ui_;
+  base::WeakPtr<WebUIImpl> pending_and_current_web_ui_;
+
+  // A map of site instance ID to RenderFrameProxyHosts.
+  typedef base::hash_map<int32, RenderFrameProxyHost*> RenderFrameProxyHostMap;
+  RenderFrameProxyHostMap proxy_hosts_;
+
+  // A list of RenderFrameHosts waiting to shut down after swapping out.  We use
+  // a linked list since we expect frequent deletes and no indexed access, and
+  // because sets don't appear to support linked_ptrs.
+  typedef std::list<linked_ptr<RenderFrameHostImpl> > RFHPendingDeleteList;
+  RFHPendingDeleteList pending_delete_hosts_;
+
+  // The intersitial page currently shown if any, not own by this class
+  // (the InterstitialPage is self-owned, it deletes itself when hidden).
+  InterstitialPageImpl* interstitial_page_;
+
+  NotificationRegistrar registrar_;
+
+  // PlzNavigate
+  // These members store a speculative RenderFrameHost and WebUI. They are
+  // created early in a navigation so a renderer process can be started in
+  // parallel, if needed. This is purely a performance optimization and is not
+  // required for correct behavior. The created RenderFrameHost might be
+  // discarded later on if the final URL's SiteInstance isn't compatible with
+  // what was used to create it.
+  // Note: PlzNavigate only uses speculative RenderFrameHost and WebUI, not
+  // the pending ones.
+  scoped_ptr<RenderFrameHostImpl> speculative_render_frame_host_;
+  scoped_ptr<WebUIImpl> speculative_web_ui_;
+
+  // PlzNavigate
+  // If true at navigation commit time the current WebUI will be kept instead of
+  // creating a new one.
+  bool should_reuse_web_ui_;
+
+  // Vivaldi specific. We need to call |Init()| multiple times. Make sure
+  // process notifications are registred only once.
+  bool notifications_is_registred_;
+
+  base::WeakPtrFactory<RenderFrameHostManager> weak_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(RenderFrameHostManager);
+};
+
+}  // namespace content
+
+#endif  // CONTENT_BROWSER_FRAME_HOST_RENDER_FRAME_HOST_MANAGER_H_

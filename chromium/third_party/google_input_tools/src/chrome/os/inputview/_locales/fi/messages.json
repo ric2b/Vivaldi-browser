@@ -1,0 +1,3337 @@
+{
+  "add_to_dictionary": {
+    "message": "Lis\u00e4\u00e4 sanakirjaan"
+  },
+  "add_to_personal_dictionary": {
+    "message": "Lis\u00e4\u00e4 omaan sanakirjaan"
+  },
+  "add_word_to_dictionary": {
+    "message": "Lis\u00e4\u00e4 $1 sanakirjaan",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "advanced": {
+    "message": "Lis\u00e4asetukset"
+  },
+  "alt": {
+    "message": "alt"
+  },
+  "altgr": {
+    "message": "Alt Graphic"
+  },
+  "always_auto_correct": {
+    "message": "Voimakas"
+  },
+  "am_phonetic_arm_settings_page": {
+    "message": "Armenian foneettisen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "appnamejpkeyboard": {
+    "message": "Googlen japanilainen sy\u00f6tt\u00f6tapa (japanilaiselle n\u00e4pp\u00e4imist\u00f6lle)"
+  },
+  "appnameuskeyboard": {
+    "message": "Googlen japanilainen sy\u00f6tt\u00f6tapa (yhdysvaltalaiselle n\u00e4pp\u00e4imist\u00f6lle)"
+  },
+  "auto_correction_level": {
+    "message": "Automaattinen korjaus"
+  },
+  "backspace": {
+    "message": "askelpalautin"
+  },
+  "basic": {
+    "message": "Perustiedot"
+  },
+  "be_fra_settings_page": {
+    "message": "Belgian ranskankielisen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "be_ger_settings_page": {
+    "message": "Belgian saksankielisen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "be_nld_settings_page": {
+    "message": "Belgian hollanninkielisen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "bg_bul_settings_page": {
+    "message": "Bulgarian n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "bg_phonetic_bul_settings_page": {
+    "message": "Bulgarian foneettisen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "br_por_settings_page": {
+    "message": "Brasilian portugalinkielisen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "by_bel_settings_page": {
+    "message": "Valkoven\u00e4j\u00e4n n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "ca_eng_eng_settings_page": {
+    "message": "Kanadan englanninkielisen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "ca_fra_settings_page": {
+    "message": "Kanadan ranskankielisen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "ca_multix_fra_settings_page": {
+    "message": "Kanadan monikielisen (ranskalaisen) n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "capital": {
+    "message": "iso kirjain"
+  },
+  "capslock": {
+    "message": "capslock"
+  },
+  "ch_fr_fra_settings_page": {
+    "message": "Sveitsin ranskankielisen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "ch_ger_settings_page": {
+    "message": "Sveitsin saksankielisen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "chos_inputtool_description": {
+    "message": "Google Input Tools Chrome-k\u00e4ytt\u00f6j\u00e4rjestelm\u00e4lle -ty\u00f6kalujen avulla voit kirjoittaa haluamallasi kielell\u00e4 Chrome-k\u00e4ytt\u00f6j\u00e4rjestelm\u00e4ss\u00e4."
+  },
+  "chos_inputtool_title": {
+    "message": "Google Input Tools"
+  },
+  "compositionmodedirect": {
+    "message": "Suora sy\u00f6tt\u00f6"
+  },
+  "compositionmodefullascii": {
+    "message": "Wide Latin"
+  },
+  "compositionmodefullkatakana": {
+    "message": "Katakana"
+  },
+  "compositionmodehalfascii": {
+    "message": "Latin"
+  },
+  "compositionmodehalfkatakana": {
+    "message": "Kapea Katakana"
+  },
+  "compositionmodehiragana": {
+    "message": "Hiragana"
+  },
+  "configbasicstitle": {
+    "message": "Perustiedot"
+  },
+  "configclearhistory": {
+    "message": "Tyhjenn\u00e4 muokatut tiedot\u2026"
+  },
+  "configclearhistorycancelbutton": {
+    "message": "Peruuta"
+  },
+  "configclearhistoryconversionhistory": {
+    "message": "Muunnoshistoria"
+  },
+  "configclearhistorymessage": {
+    "message": "Tyhjenn\u00e4 seuraavat kohteet:"
+  },
+  "configclearhistoryokbutton": {
+    "message": "Tyhjenn\u00e4 muokatut tiedot"
+  },
+  "configclearhistorysuggestionhistory": {
+    "message": "Ehdotushistoria"
+  },
+  "configclearhistorytitle": {
+    "message": "Tyhjenn\u00e4 muokatut tiedot"
+  },
+  "configcreditsdescription": {
+    "message": "Copyright \u00a9 2013 Google Inc. Kaikki oikeudet pid\u00e4tet\u00e4\u00e4n."
+  },
+  "configdialogcancel": {
+    "message": "Peruuta"
+  },
+  "configdialogok": {
+    "message": "OK"
+  },
+  "configdictionarytoolbutton": {
+    "message": "Hallinnoi k\u00e4ytt\u00e4j\u00e4n sanakirjaa\u2026"
+  },
+  "configdictionarytooldescription": {
+    "message": "Muokkaa muunnosvaihtoehtoja lis\u00e4\u00e4m\u00e4ll\u00e4 omia sanojasi k\u00e4ytt\u00e4j\u00e4n sanakirjaan."
+  },
+  "configdictionarytooltitle": {
+    "message": "K\u00e4ytt\u00e4j\u00e4n sanakirjat"
+  },
+  "configincognitomode": {
+    "message": "Poista k\u00e4yt\u00f6st\u00e4 muokatut muunnokset ja ehdotukset sek\u00e4 k\u00e4ytt\u00e4j\u00e4n sanakirja"
+  },
+  "configinputassistancetitle": {
+    "message": "Ohjeita merkkien sy\u00f6tt\u00f6\u00f6n"
+  },
+  "configosscreditsdescription": {
+    "message": "T\u00e4m\u00e4 ohjelmisto on <a href=\"./credits_en.html\">avoimen l\u00e4hdekoodin ohjelmisto</a>."
+  },
+  "configpreeditmethod": {
+    "message": "Sy\u00f6tt\u00f6tapa:"
+  },
+  "configpreeditmethodkana": {
+    "message": "Kana"
+  },
+  "configpreeditmethodromaji": {
+    "message": "Romaji"
+  },
+  "configprivacytitle": {
+    "message": "Tietosuoja"
+  },
+  "configpunctuationmethod": {
+    "message": "V\u00e4limerkkityyli:"
+  },
+  "configselectionshortcut": {
+    "message": "Pikavalintan\u00e4pp\u00e4in:"
+  },
+  "configselectionshortcutno": {
+    "message": "Ei pikavalintaa"
+  },
+  "configsessionkeymap": {
+    "message": "N\u00e4pp\u00e4inkartan tyyli:"
+  },
+  "configsessionkeymapatok": {
+    "message": "ATOK"
+  },
+  "configsessionkeymapchromeos": {
+    "message": "Chrome-k\u00e4ytt\u00f6j\u00e4rjestelm\u00e4"
+  },
+  "configsessionkeymapcustom": {
+    "message": "Muokattu n\u00e4pp\u00e4inkartta"
+  },
+  "configsessionkeymapkotoeri": {
+    "message": "Kotoeri"
+  },
+  "configsessionkeymapmsime": {
+    "message": "MS-IME"
+  },
+  "configsettingstitle": {
+    "message": "Japanilaiset sy\u00f6tt\u00f6asetukset"
+  },
+  "configshiftkeymodeswitch": {
+    "message": "Tilanvaihto vaihton\u00e4pp\u00e4imell\u00e4:"
+  },
+  "configshiftkeymodeswitchalphanumeric": {
+    "message": "Aakkosnumeerinen"
+  },
+  "configshiftkeymodeswitchkatakana": {
+    "message": "Katakana"
+  },
+  "configshiftkeymodeswitchoff": {
+    "message": "Ei k\u00e4yt\u00f6ss\u00e4"
+  },
+  "configspacecharacterform": {
+    "message": "V\u00e4lily\u00f6ntisy\u00f6tt\u00f6tapa:"
+  },
+  "configspacecharacterformfollow": {
+    "message": "Seuraa sy\u00f6tt\u00f6tapaa"
+  },
+  "configspacecharacterformfull": {
+    "message": "Leve\u00e4"
+  },
+  "configspacecharacterformhalf": {
+    "message": "Kapea"
+  },
+  "configsuggestionssize": {
+    "message": "Ehdotusten lukum\u00e4\u00e4r\u00e4:"
+  },
+  "configsuggesttitle": {
+    "message": "Ehdota"
+  },
+  "configsymbolmethod": {
+    "message": "Merkkityyli:"
+  },
+  "configuploadusagestats": {
+    "message": "L\u00e4het\u00e4 Googlelle k\u00e4ytt\u00f6tilastoja ja virheraportteja automaattisesti"
+  },
+  "configuseautoimeturnoff": {
+    "message": "Vaihda automaattisesti kapea k\u00e4ytt\u00f6\u00f6n"
+  },
+  "configusedictionarysuggest": {
+    "message": "K\u00e4yt\u00e4 j\u00e4rjestelm\u00e4n sanakirjaa"
+  },
+  "configusehistorysuggest": {
+    "message": "K\u00e4yt\u00e4 sy\u00f6tt\u00f6historiaa"
+  },
+  "ctrl": {
+    "message": "ctrl"
+  },
+  "current_keyboard_prefix": {
+    "message": "nykyinen valittu n\u00e4pp\u00e4imist\u00f6 "
+  },
+  "current_lang": {
+    "message": "Sy\u00f6tt\u00f6kieli on kiina"
+  },
+  "current_punc": {
+    "message": "V\u00e4limerkkileveys on Full"
+  },
+  "current_sbc": {
+    "message": "Merkkileveys on Full"
+  },
+  "cz_cze_settings_page": {
+    "message": "T\u0161ekin n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "cz_qwerty_cze_settings_page": {
+    "message": "T\u0161ekin qwerty-n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "d83c_dc04": {
+    "message": "Mahjong-laatta"
+  },
+  "d83c_dccf": {
+    "message": "jokerikortti"
+  },
+  "d83c_dd70": {
+    "message": "veriryhm\u00e4 A"
+  },
+  "d83c_dd71": {
+    "message": "veriryhm\u00e4 B"
+  },
+  "d83c_dd7e": {
+    "message": "veriryhm\u00e4 O"
+  },
+  "d83c_dd7f": {
+    "message": "pys\u00e4k\u00f6inti"
+  },
+  "d83c_dd8e": {
+    "message": "veriryhm\u00e4 AB"
+  },
+  "d83c_dd91": {
+    "message": "CL-kyltti"
+  },
+  "d83c_dd92": {
+    "message": "cool"
+  },
+  "d83c_dd93": {
+    "message": "FREE-kyltti"
+  },
+  "d83c_dd94": {
+    "message": "ID-kyltti"
+  },
+  "d83c_dd95": {
+    "message": "NEW-kyltti"
+  },
+  "d83c_dd96": {
+    "message": "NG-kyltti"
+  },
+  "d83c_dd97": {
+    "message": "OK"
+  },
+  "d83c_dd98": {
+    "message": "SOS-kyltti"
+  },
+  "d83c_dd99": {
+    "message": "UP!-kyltti"
+  },
+  "d83c_dd9a": {
+    "message": "VS-kyltti"
+  },
+  "d83c_de01": {
+    "message": "japaninkielinen sana \u00e2\u20ac\u02dct\u00e4\u00e4ll\u00e4\u00e2\u20ac\u2122"
+  },
+  "d83c_de02": {
+    "message": "japaninkielinen sana \u00e2\u20ac\u02dcpalvelu\u00e2\u20ac\u2122"
+  },
+  "d83c_de1a": {
+    "message": "japaninkielinen sana \u201dilmainen\u201d"
+  },
+  "d83c_de2f": {
+    "message": "japaninkielinen sana \u201dvarattu\u201d"
+  },
+  "d83c_de32": {
+    "message": "japaninkielinen sana \u00e2\u20ac\u02dckielletty\u00e2\u20ac\u2122"
+  },
+  "d83c_de33": {
+    "message": "kiinankielinen sana \u201dvapaata tilaa\u201d"
+  },
+  "d83c_de34": {
+    "message": "kiinankielinen sana \u201dl\u00e4p\u00e4isty\u201d"
+  },
+  "d83c_de35": {
+    "message": "kiinankielinen sana \u201dt\u00e4ynn\u00e4\u201d"
+  },
+  "d83c_de36": {
+    "message": "japaninkielinen sana \u201dmaksut\u201d"
+  },
+  "d83c_de37": {
+    "message": "japaninkielinen sana \u201dkuukausittainen\u201d"
+  },
+  "d83c_de38": {
+    "message": "kiinankielinen sana \u201dhakemus\u201d"
+  },
+  "d83c_de39": {
+    "message": "japaninkielinen sana \u201dalennus\u201d"
+  },
+  "d83c_de3a": {
+    "message": "kiinankielinen sana \u201dliike auki\u201d"
+  },
+  "d83c_de50": {
+    "message": "japaninkielinen sana \u201detu\u201d"
+  },
+  "d83c_de51": {
+    "message": "kiinankielinen sana \u201dhyv\u00e4ksytty\u201d"
+  },
+  "d83c_df00": {
+    "message": "sykloni"
+  },
+  "d83c_df01": {
+    "message": "sumuinen"
+  },
+  "d83c_df02": {
+    "message": "sateenvarjo"
+  },
+  "d83c_df03": {
+    "message": "t\u00e4hdet y\u00f6ll\u00e4"
+  },
+  "d83c_df04": {
+    "message": "auringonnousu vuorten yll\u00e4"
+  },
+  "d83c_df05": {
+    "message": "auringonnousu"
+  },
+  "d83c_df06": {
+    "message": "kaupunki iltah\u00e4m\u00e4r\u00e4ss\u00e4"
+  },
+  "d83c_df07": {
+    "message": "auringonlasku"
+  },
+  "d83c_df08": {
+    "message": "sateenkaari"
+  },
+  "d83c_df09": {
+    "message": "silta y\u00f6ll\u00e4"
+  },
+  "d83c_df0a": {
+    "message": "aalto"
+  },
+  "d83c_df0b": {
+    "message": "tulivuori"
+  },
+  "d83c_df0c": {
+    "message": "linnunrata"
+  },
+  "d83c_df0d": {
+    "message": "Eurooppa ja Afrikka maapallolla"
+  },
+  "d83c_df0e": {
+    "message": "Amerikka maapallolla"
+  },
+  "d83c_df0f": {
+    "message": "Aasia ja Australia maapallolla"
+  },
+  "d83c_df10": {
+    "message": "Meridiaanit maapallolla"
+  },
+  "d83c_df11": {
+    "message": "uusi kuu"
+  },
+  "d83c_df12": {
+    "message": "kasvava kuunsirppi"
+  },
+  "d83c_df13": {
+    "message": "puolikuu oikealla"
+  },
+  "d83c_df14": {
+    "message": "kasvava kuu"
+  },
+  "d83c_df15": {
+    "message": "t\u00e4ysikuu"
+  },
+  "d83c_df16": {
+    "message": "pienenev\u00e4 kuu"
+  },
+  "d83c_df17": {
+    "message": "puolikuu vasemmalla"
+  },
+  "d83c_df18": {
+    "message": "pienenev\u00e4 kuunsirppi"
+  },
+  "d83c_df19": {
+    "message": "kuunsirppi"
+  },
+  "d83c_df1a": {
+    "message": "uuden kuun kasvot"
+  },
+  "d83c_df1b": {
+    "message": "kuunsirpin kasvot, katse vasemmalle"
+  },
+  "d83c_df1c": {
+    "message": "kuunsirpin kasvot, katse oikealle"
+  },
+  "d83c_df1d": {
+    "message": "t\u00e4ysikuun kasvot"
+  },
+  "d83c_df1e": {
+    "message": "auringon kasvot"
+  },
+  "d83c_df1f": {
+    "message": "hohtava t\u00e4hti"
+  },
+  "d83c_df20": {
+    "message": "t\u00e4hdenlento"
+  },
+  "d83c_df30": {
+    "message": "kastanja"
+  },
+  "d83c_df31": {
+    "message": "taimi"
+  },
+  "d83c_df32": {
+    "message": "ikivihre\u00e4 puu"
+  },
+  "d83c_df33": {
+    "message": "variseva puu"
+  },
+  "d83c_df34": {
+    "message": "palmu"
+  },
+  "d83c_df35": {
+    "message": "kaktus"
+  },
+  "d83c_df37": {
+    "message": "tulppaani"
+  },
+  "d83c_df38": {
+    "message": "kirsikankukka"
+  },
+  "d83c_df39": {
+    "message": "ruusu"
+  },
+  "d83c_df3a": {
+    "message": "hibiskus"
+  },
+  "d83c_df3b": {
+    "message": "auringonkukka"
+  },
+  "d83c_df3c": {
+    "message": "kukinta"
+  },
+  "d83c_df3d": {
+    "message": "maissi"
+  },
+  "d83c_df3e": {
+    "message": "riisikasvi"
+  },
+  "d83c_df3f": {
+    "message": "yrtti"
+  },
+  "d83c_df40": {
+    "message": "neliapila"
+  },
+  "d83c_df41": {
+    "message": "vaahteranlehti"
+  },
+  "d83c_df42": {
+    "message": "putoavat lehdet"
+  },
+  "d83c_df43": {
+    "message": "lehti tuulessa"
+  },
+  "d83c_df44": {
+    "message": "sieni"
+  },
+  "d83c_df45": {
+    "message": "tomaatti"
+  },
+  "d83c_df46": {
+    "message": "munakoiso"
+  },
+  "d83c_df47": {
+    "message": "viiniryp\u00e4leet"
+  },
+  "d83c_df48": {
+    "message": "meloni"
+  },
+  "d83c_df49": {
+    "message": "vesimeloni"
+  },
+  "d83c_df4a": {
+    "message": "mandariini"
+  },
+  "d83c_df4b": {
+    "message": "sitruuna"
+  },
+  "d83c_df4c": {
+    "message": "banaani"
+  },
+  "d83c_df4d": {
+    "message": "ananas"
+  },
+  "d83c_df4e": {
+    "message": "punainen omena"
+  },
+  "d83c_df4f": {
+    "message": "vihre\u00e4 omena"
+  },
+  "d83c_df50": {
+    "message": "p\u00e4\u00e4ryn\u00e4"
+  },
+  "d83c_df51": {
+    "message": "persikka"
+  },
+  "d83c_df52": {
+    "message": "kirsikka"
+  },
+  "d83c_df53": {
+    "message": "mansikka"
+  },
+  "d83c_df54": {
+    "message": "hampurilainen"
+  },
+  "d83c_df55": {
+    "message": "pizzapala"
+  },
+  "d83c_df56": {
+    "message": "liha"
+  },
+  "d83c_df57": {
+    "message": "kanankoipi"
+  },
+  "d83c_df58": {
+    "message": "riisikeksi"
+  },
+  "d83c_df59": {
+    "message": "riisipallo"
+  },
+  "d83c_df5a": {
+    "message": "keitetty riisi"
+  },
+  "d83c_df5b": {
+    "message": "curry ja riisi"
+  },
+  "d83c_df5c": {
+    "message": "ramen"
+  },
+  "d83c_df5d": {
+    "message": "spagetti"
+  },
+  "d83c_df5e": {
+    "message": "leip\u00e4"
+  },
+  "d83c_df5f": {
+    "message": "ranskalaiset"
+  },
+  "d83c_df60": {
+    "message": "paahdettu peruna"
+  },
+  "d83c_df61": {
+    "message": "mochi"
+  },
+  "d83c_df62": {
+    "message": "oden"
+  },
+  "d83c_df63": {
+    "message": "sushi"
+  },
+  "d83c_df64": {
+    "message": "paistettu katkarapu"
+  },
+  "d83c_df65": {
+    "message": "kalakakku"
+  },
+  "d83c_df66": {
+    "message": "pehmis"
+  },
+  "d83c_df67": {
+    "message": "makuj\u00e4\u00e4"
+  },
+  "d83c_df68": {
+    "message": "j\u00e4\u00e4tel\u00f6"
+  },
+  "d83c_df69": {
+    "message": "donitsi"
+  },
+  "d83c_df6a": {
+    "message": "pikkuleip\u00e4"
+  },
+  "d83c_df6b": {
+    "message": "suklaa"
+  },
+  "d83c_df6c": {
+    "message": "karkki"
+  },
+  "d83c_df6d": {
+    "message": "tikkari"
+  },
+  "d83c_df6e": {
+    "message": "vaniljakastike"
+  },
+  "d83c_df6f": {
+    "message": "hunajapurkki"
+  },
+  "d83c_df70": {
+    "message": "murokeksi"
+  },
+  "d83c_df71": {
+    "message": "bento"
+  },
+  "d83c_df72": {
+    "message": "muhennos"
+  },
+  "d83c_df73": {
+    "message": "paistinpannu"
+  },
+  "d83c_df74": {
+    "message": "haarukka ja veitsi"
+  },
+  "d83c_df75": {
+    "message": "teekuppi"
+  },
+  "d83c_df76": {
+    "message": "sake"
+  },
+  "d83c_df77": {
+    "message": "viini"
+  },
+  "d83c_df78": {
+    "message": "cocktail"
+  },
+  "d83c_df79": {
+    "message": "eksoottinen drinkki"
+  },
+  "d83c_df7a": {
+    "message": "olut"
+  },
+  "d83c_df7b": {
+    "message": "oluttuopit"
+  },
+  "d83c_df7c": {
+    "message": "tuttipullo"
+  },
+  "d83c_df80": {
+    "message": "nauha"
+  },
+  "d83c_df81": {
+    "message": "lahja"
+  },
+  "d83c_df82": {
+    "message": "syntym\u00e4p\u00e4iv\u00e4kakku"
+  },
+  "d83c_df83": {
+    "message": "kurpitsalyhty"
+  },
+  "d83c_df84": {
+    "message": "joulukuusi"
+  },
+  "d83c_df85": {
+    "message": "joulupukki"
+  },
+  "d83c_df86": {
+    "message": "ilotulitus"
+  },
+  "d83c_df87": {
+    "message": "t\u00e4htisadetikku"
+  },
+  "d83c_df88": {
+    "message": "ilmapallo"
+  },
+  "d83c_df89": {
+    "message": "konfettipommi"
+  },
+  "d83c_df8a": {
+    "message": "konfettipallo"
+  },
+  "d83c_df8b": {
+    "message": "puu ja paperinauhoja"
+  },
+  "d83c_df8c": {
+    "message": "liput ristiss\u00e4"
+  },
+  "d83c_df8d": {
+    "message": "m\u00e4ntykoriste"
+  },
+  "d83c_df8e": {
+    "message": "nuket"
+  },
+  "d83c_df8f": {
+    "message": "karppiviiri"
+  },
+  "d83c_df90": {
+    "message": "tuulikello"
+  },
+  "d83c_df91": {
+    "message": "kuun katselu"
+  },
+  "d83c_df92": {
+    "message": "koululaukku"
+  },
+  "d83c_df93": {
+    "message": "valmistujaishattu"
+  },
+  "d83c_dfa0": {
+    "message": "karuselli"
+  },
+  "d83c_dfa1": {
+    "message": "maailmanpy\u00f6r\u00e4"
+  },
+  "d83c_dfa2": {
+    "message": "vuoristorata"
+  },
+  "d83c_dfa3": {
+    "message": "kalastus"
+  },
+  "d83c_dfa4": {
+    "message": "mikrofoni"
+  },
+  "d83c_dfa5": {
+    "message": "elokuvakamera"
+  },
+  "d83c_dfa6": {
+    "message": "elokuva"
+  },
+  "d83c_dfa7": {
+    "message": "kuulokkeet"
+  },
+  "d83c_dfa8": {
+    "message": "maalipaletti"
+  },
+  "d83c_dfa9": {
+    "message": "silinteri"
+  },
+  "d83c_dfaa": {
+    "message": "sirkus"
+  },
+  "d83c_dfab": {
+    "message": "lippu"
+  },
+  "d83c_dfac": {
+    "message": "klaffi"
+  },
+  "d83c_dfad": {
+    "message": "naamio"
+  },
+  "d83c_dfae": {
+    "message": "videopeli"
+  },
+  "d83c_dfaf": {
+    "message": "napakymppi"
+  },
+  "d83c_dfb0": {
+    "message": "peliautomaatti"
+  },
+  "d83c_dfb1": {
+    "message": "biljardi"
+  },
+  "d83c_dfb2": {
+    "message": "pelinoppa"
+  },
+  "d83c_dfb3": {
+    "message": "keilaus"
+  },
+  "d83c_dfb4": {
+    "message": "pelikortti"
+  },
+  "d83c_dfb5": {
+    "message": "nuotti"
+  },
+  "d83c_dfb6": {
+    "message": "nuotit"
+  },
+  "d83c_dfb7": {
+    "message": "saksofoni"
+  },
+  "d83c_dfb8": {
+    "message": "kitara"
+  },
+  "d83c_dfb9": {
+    "message": "piano"
+  },
+  "d83c_dfba": {
+    "message": "trumpetti"
+  },
+  "d83c_dfbb": {
+    "message": "viulu"
+  },
+  "d83c_dfbc": {
+    "message": "partituuri"
+  },
+  "d83c_dfbd": {
+    "message": "juoksupaita"
+  },
+  "d83c_dfbe": {
+    "message": "tennis"
+  },
+  "d83c_dfbf": {
+    "message": "sukset"
+  },
+  "d83c_dfc0": {
+    "message": "koripallo"
+  },
+  "d83c_dfc1": {
+    "message": "ruutulippu"
+  },
+  "d83c_dfc2": {
+    "message": "lumilautailija"
+  },
+  "d83c_dfc3": {
+    "message": "juoksija"
+  },
+  "d83c_dfc4": {
+    "message": "surffaus"
+  },
+  "d83c_dfc6": {
+    "message": "palkinto"
+  },
+  "d83c_dfc7": {
+    "message": "kilparatsastus"
+  },
+  "d83c_dfc8": {
+    "message": "amerikkalainen jalkapallo"
+  },
+  "d83c_dfc9": {
+    "message": "jalkapallo"
+  },
+  "d83c_dfca": {
+    "message": "uimari"
+  },
+  "d83c_dfe0": {
+    "message": "talo"
+  },
+  "d83c_dfe1": {
+    "message": "koti"
+  },
+  "d83c_dfe2": {
+    "message": "toimistorakennus"
+  },
+  "d83c_dfe3": {
+    "message": "japanilainen postitoimisto"
+  },
+  "d83c_dfe4": {
+    "message": "eurooppalainen postitoimisto"
+  },
+  "d83c_dfe5": {
+    "message": "sairaala"
+  },
+  "d83c_dfe6": {
+    "message": "pankki"
+  },
+  "d83c_dfe7": {
+    "message": "pankkiautomaatti"
+  },
+  "d83c_dfe8": {
+    "message": "hotelli"
+  },
+  "d83c_dfe9": {
+    "message": "yhden y\u00f6n hotelli"
+  },
+  "d83c_dfea": {
+    "message": "ruokakauppa"
+  },
+  "d83c_dfeb": {
+    "message": "koulu"
+  },
+  "d83c_dfec": {
+    "message": "tavaratalo"
+  },
+  "d83c_dfed": {
+    "message": "tehdas"
+  },
+  "d83c_dfee": {
+    "message": "punainen lyhty"
+  },
+  "d83c_dfef": {
+    "message": "japanilainen linna"
+  },
+  "d83c_dff0": {
+    "message": "eurooppalainen linna"
+  },
+  "d83d_dc00": {
+    "message": "rotta"
+  },
+  "d83d_dc01": {
+    "message": "hiiri"
+  },
+  "d83d_dc02": {
+    "message": "h\u00e4rk\u00e4"
+  },
+  "d83d_dc03": {
+    "message": "vesipuhveli"
+  },
+  "d83d_dc04": {
+    "message": "lehm\u00e4"
+  },
+  "d83d_dc06": {
+    "message": "leopardi"
+  },
+  "d83d_dc07": {
+    "message": "j\u00e4nis"
+  },
+  "d83d_dc08": {
+    "message": "kissa"
+  },
+  "d83d_dc09": {
+    "message": "lohik\u00e4\u00e4rme"
+  },
+  "d83d_dc0a": {
+    "message": "krokotiili"
+  },
+  "d83d_dc0b": {
+    "message": "valas"
+  },
+  "d83d_dc0c": {
+    "message": "etana"
+  },
+  "d83d_dc0d": {
+    "message": "k\u00e4\u00e4rme"
+  },
+  "d83d_dc0e": {
+    "message": "hevonen"
+  },
+  "d83d_dc0f": {
+    "message": "p\u00e4ssi"
+  },
+  "d83d_dc10": {
+    "message": "vuohi"
+  },
+  "d83d_dc11": {
+    "message": "lammas"
+  },
+  "d83d_dc12": {
+    "message": "apina"
+  },
+  "d83d_dc13": {
+    "message": "kukko"
+  },
+  "d83d_dc14": {
+    "message": "kana"
+  },
+  "d83d_dc15": {
+    "message": "koira"
+  },
+  "d83d_dc16": {
+    "message": "sika"
+  },
+  "d83d_dc17": {
+    "message": "villisika"
+  },
+  "d83d_dc18": {
+    "message": "elefantti"
+  },
+  "d83d_dc19": {
+    "message": "mustekala"
+  },
+  "d83d_dc1a": {
+    "message": "simpukka"
+  },
+  "d83d_dc1b": {
+    "message": "hy\u00f6nteinen"
+  },
+  "d83d_dc1c": {
+    "message": "muurahainen"
+  },
+  "d83d_dc1d": {
+    "message": "mehil\u00e4inen"
+  },
+  "d83d_dc1e": {
+    "message": "lepp\u00e4kerttu"
+  },
+  "d83d_dc1f": {
+    "message": "kala"
+  },
+  "d83d_dc20": {
+    "message": "trooppinen kala"
+  },
+  "d83d_dc21": {
+    "message": "pallokala"
+  },
+  "d83d_dc22": {
+    "message": "kilpikonna"
+  },
+  "d83d_dc23": {
+    "message": "kuoriutuva tipu"
+  },
+  "d83d_dc24": {
+    "message": "tipun naama"
+  },
+  "d83d_dc25": {
+    "message": "tipu"
+  },
+  "d83d_dc26": {
+    "message": "lintu"
+  },
+  "d83d_dc27": {
+    "message": "pingviini"
+  },
+  "d83d_dc28": {
+    "message": "koala"
+  },
+  "d83d_dc29": {
+    "message": "villakoira"
+  },
+  "d83d_dc2a": {
+    "message": "yksikyttyr\u00e4inen kameli"
+  },
+  "d83d_dc2b": {
+    "message": "kaksikyttyr\u00e4inen kameli"
+  },
+  "d83d_dc2c": {
+    "message": "delfiini"
+  },
+  "d83d_dc2d": {
+    "message": "hiiren naama"
+  },
+  "d83d_dc2e": {
+    "message": "lehm\u00e4n naama"
+  },
+  "d83d_dc2f": {
+    "message": "tiikerin naama"
+  },
+  "d83d_dc30": {
+    "message": "j\u00e4niksen naama"
+  },
+  "d83d_dc31": {
+    "message": "kissan naama"
+  },
+  "d83d_dc32": {
+    "message": "lohik\u00e4\u00e4rmeen naama"
+  },
+  "d83d_dc33": {
+    "message": "vett\u00e4 suihkuttava valas"
+  },
+  "d83d_dc34": {
+    "message": "hevosen naama"
+  },
+  "d83d_dc35": {
+    "message": "apinan naama"
+  },
+  "d83d_dc36": {
+    "message": "koiran naama"
+  },
+  "d83d_dc37": {
+    "message": "sian naama"
+  },
+  "d83d_dc38": {
+    "message": "sammakon naama"
+  },
+  "d83d_dc39": {
+    "message": "hamsterin naama"
+  },
+  "d83d_dc3a": {
+    "message": "suden naama"
+  },
+  "d83d_dc3b": {
+    "message": "karhun naama"
+  },
+  "d83d_dc3c": {
+    "message": "pandan naama"
+  },
+  "d83d_dc3d": {
+    "message": "sian k\u00e4rs\u00e4"
+  },
+  "d83d_dc3e": {
+    "message": "tassu"
+  },
+  "d83d_dc40": {
+    "message": "silm\u00e4t"
+  },
+  "d83d_dc42": {
+    "message": "korva"
+  },
+  "d83d_dc43": {
+    "message": "nen\u00e4"
+  },
+  "d83d_dc44": {
+    "message": "suu"
+  },
+  "d83d_dc45": {
+    "message": "kieli"
+  },
+  "d83d_dc46": {
+    "message": "sormi yl\u00f6sp\u00e4in"
+  },
+  "d83d_dc47": {
+    "message": "sormi alasp\u00e4in"
+  },
+  "d83d_dc48": {
+    "message": "sormi vasemmalle"
+  },
+  "d83d_dc49": {
+    "message": "sormi oikealle"
+  },
+  "d83d_dc4a": {
+    "message": "nyrkki"
+  },
+  "d83d_dc4b": {
+    "message": "vilkutus"
+  },
+  "d83d_dc4c": {
+    "message": "OK-k\u00e4simerkki"
+  },
+  "d83d_dc4d": {
+    "message": "peukku yl\u00f6s"
+  },
+  "d83d_dc4e": {
+    "message": "peukku alas"
+  },
+  "d83d_dc4f": {
+    "message": "k\u00e4sien taputus"
+  },
+  "d83d_dc50": {
+    "message": "avoimet k\u00e4det"
+  },
+  "d83d_dc51": {
+    "message": "kruunu"
+  },
+  "d83d_dc52": {
+    "message": "naisen hattu"
+  },
+  "d83d_dc53": {
+    "message": "silm\u00e4lasit"
+  },
+  "d83d_dc54": {
+    "message": "kravatti"
+  },
+  "d83d_dc55": {
+    "message": "T-paita"
+  },
+  "d83d_dc56": {
+    "message": "housut"
+  },
+  "d83d_dc57": {
+    "message": "hame"
+  },
+  "d83d_dc58": {
+    "message": "kimono"
+  },
+  "d83d_dc59": {
+    "message": "bikinit"
+  },
+  "d83d_dc5a": {
+    "message": "naisen vaatteet"
+  },
+  "d83d_dc5b": {
+    "message": "kukkaro"
+  },
+  "d83d_dc5c": {
+    "message": "k\u00e4silaukku"
+  },
+  "d83d_dc5d": {
+    "message": "pussi"
+  },
+  "d83d_dc5e": {
+    "message": "miehen kenk\u00e4"
+  },
+  "d83d_dc5f": {
+    "message": "urheilukenk\u00e4"
+  },
+  "d83d_dc60": {
+    "message": "korkeat korot"
+  },
+  "d83d_dc61": {
+    "message": "naisen sandaali"
+  },
+  "d83d_dc62": {
+    "message": "naisen saapas"
+  },
+  "d83d_dc63": {
+    "message": "jalanj\u00e4lki"
+  },
+  "d83d_dc64": {
+    "message": "rintakuvasiluetti"
+  },
+  "d83d_dc65": {
+    "message": "kaksi rintakuvasiluettia"
+  },
+  "d83d_dc66": {
+    "message": "poika"
+  },
+  "d83d_dc67": {
+    "message": "tytt\u00f6"
+  },
+  "d83d_dc68": {
+    "message": "mies"
+  },
+  "d83d_dc69": {
+    "message": "nainen"
+  },
+  "d83d_dc6a": {
+    "message": "perhe"
+  },
+  "d83d_dc6b": {
+    "message": "mies ja nainen"
+  },
+  "d83d_dc6c": {
+    "message": "kaksi miest\u00e4"
+  },
+  "d83d_dc6d": {
+    "message": "kaksi naista"
+  },
+  "d83d_dc6e": {
+    "message": "poliisi"
+  },
+  "d83d_dc6f": {
+    "message": "puputytt\u00f6"
+  },
+  "d83d_dc70": {
+    "message": "morsian"
+  },
+  "d83d_dc71": {
+    "message": "blondi henkil\u00f6"
+  },
+  "d83d_dc72": {
+    "message": "mies, jolla on kiinalainen hattu"
+  },
+  "d83d_dc73": {
+    "message": "mies, jolla on turbaani"
+  },
+  "d83d_dc74": {
+    "message": "vanhempi mies"
+  },
+  "d83d_dc75": {
+    "message": "vanhempi nainen"
+  },
+  "d83d_dc76": {
+    "message": "vauva"
+  },
+  "d83d_dc77": {
+    "message": "rakennusmies"
+  },
+  "d83d_dc78": {
+    "message": "prinsessa"
+  },
+  "d83d_dc79": {
+    "message": "hirvi\u00f6"
+  },
+  "d83d_dc7a": {
+    "message": "mennink\u00e4inen"
+  },
+  "d83d_dc7b": {
+    "message": "kummitus"
+  },
+  "d83d_dc7c": {
+    "message": "vauvaenkeli"
+  },
+  "d83d_dc7d": {
+    "message": "avaruusolio"
+  },
+  "d83d_dc7e": {
+    "message": "avaruushirvi\u00f6"
+  },
+  "d83d_dc7f": {
+    "message": "paholainen"
+  },
+  "d83d_dc80": {
+    "message": "p\u00e4\u00e4kallo"
+  },
+  "d83d_dc81": {
+    "message": "infopisteen henkil\u00f6"
+  },
+  "d83d_dc82": {
+    "message": "kaartilainen"
+  },
+  "d83d_dc83": {
+    "message": "tanssija"
+  },
+  "d83d_dc84": {
+    "message": "huulipuna"
+  },
+  "d83d_dc85": {
+    "message": "kynsihuolto"
+  },
+  "d83d_dc86": {
+    "message": "kasvohieronta"
+  },
+  "d83d_dc87": {
+    "message": "hiustenleikkaus"
+  },
+  "d83d_dc88": {
+    "message": "parturi"
+  },
+  "d83d_dc89": {
+    "message": "piikki"
+  },
+  "d83d_dc8a": {
+    "message": "pilleri"
+  },
+  "d83d_dc8b": {
+    "message": "pusu"
+  },
+  "d83d_dc8c": {
+    "message": "rakkauskirje"
+  },
+  "d83d_dc8d": {
+    "message": "sormus"
+  },
+  "d83d_dc8e": {
+    "message": "jalokivi"
+  },
+  "d83d_dc8f": {
+    "message": "suukko"
+  },
+  "d83d_dc90": {
+    "message": "kukkakimppu"
+  },
+  "d83d_dc91": {
+    "message": "pari"
+  },
+  "d83d_dc92": {
+    "message": "h\u00e4\u00e4kappeli"
+  },
+  "d83d_dc93": {
+    "message": "sykkiv\u00e4 syd\u00e4n"
+  },
+  "d83d_dc94": {
+    "message": "s\u00e4rkynyt syd\u00e4n"
+  },
+  "d83d_dc95": {
+    "message": "kaksi syd\u00e4nt\u00e4"
+  },
+  "d83d_dc96": {
+    "message": "kimalteleva syd\u00e4n"
+  },
+  "d83d_dc97": {
+    "message": "kasvava syd\u00e4n"
+  },
+  "d83d_dc98": {
+    "message": "syd\u00e4n ja nuoli"
+  },
+  "d83d_dc99": {
+    "message": "sininen syd\u00e4n"
+  },
+  "d83d_dc9a": {
+    "message": "vihre\u00e4 syd\u00e4n"
+  },
+  "d83d_dc9b": {
+    "message": "keltainen syd\u00e4n"
+  },
+  "d83d_dc9c": {
+    "message": "violetti syd\u00e4n"
+  },
+  "d83d_dc9d": {
+    "message": "syd\u00e4n, jossa rusetti"
+  },
+  "d83d_dc9e": {
+    "message": "py\u00f6riv\u00e4t syd\u00e4met"
+  },
+  "d83d_dc9f": {
+    "message": "syd\u00e4nkoriste"
+  },
+  "d83d_dca0": {
+    "message": "kukan ter\u00e4lehti"
+  },
+  "d83d_dca1": {
+    "message": "hehkulamppu"
+  },
+  "d83d_dca2": {
+    "message": "viha"
+  },
+  "d83d_dca3": {
+    "message": "pommi"
+  },
+  "d83d_dca4": {
+    "message": "nukkumisen symboli"
+  },
+  "d83d_dca5": {
+    "message": "t\u00f6rm\u00e4ys"
+  },
+  "d83d_dca6": {
+    "message": "hiki roiskuu"
+  },
+  "d83d_dca7": {
+    "message": "kylm\u00e4 hiki"
+  },
+  "d83d_dca8": {
+    "message": "juoksun j\u00e4ljet"
+  },
+  "d83d_dca9": {
+    "message": "kakka"
+  },
+  "d83d_dcaa": {
+    "message": "hauikset"
+  },
+  "d83d_dcab": {
+    "message": "huimaava"
+  },
+  "d83d_dcac": {
+    "message": "puhekupla"
+  },
+  "d83d_dcad": {
+    "message": "ajatuskupla"
+  },
+  "d83d_dcae": {
+    "message": "kukkaleima"
+  },
+  "d83d_dcaf": {
+    "message": "t\u00e4ydet pisteet"
+  },
+  "d83d_dcb0": {
+    "message": "rahas\u00e4kki"
+  },
+  "d83d_dcb1": {
+    "message": "valuutanvaihto"
+  },
+  "d83d_dcb2": {
+    "message": "dollarimerkki"
+  },
+  "d83d_dcb3": {
+    "message": "luottokortti"
+  },
+  "d83d_dcb4": {
+    "message": "jenin seteli"
+  },
+  "d83d_dcb5": {
+    "message": "dollarin seteli"
+  },
+  "d83d_dcb6": {
+    "message": "euron seteli"
+  },
+  "d83d_dcb7": {
+    "message": "punnan seteli"
+  },
+  "d83d_dcb8": {
+    "message": "lent\u00e4v\u00e4 setelinippu"
+  },
+  "d83d_dcb9": {
+    "message": "nousussa markkinoilla"
+  },
+  "d83d_dcba": {
+    "message": "istuin"
+  },
+  "d83d_dcbb": {
+    "message": "PC"
+  },
+  "d83d_dcbc": {
+    "message": "salkku"
+  },
+  "d83d_dcbd": {
+    "message": "minidisc"
+  },
+  "d83d_dcbe": {
+    "message": "levyke"
+  },
+  "d83d_dcbf": {
+    "message": "blu-ray"
+  },
+  "d83d_dcc0": {
+    "message": "DVD"
+  },
+  "d83d_dcc1": {
+    "message": "kansio"
+  },
+  "d83d_dcc2": {
+    "message": "avoin kansio"
+  },
+  "d83d_dcc3": {
+    "message": "dokumentti"
+  },
+  "d83d_dcc4": {
+    "message": "dokumentti"
+  },
+  "d83d_dcc5": {
+    "message": "kalenteri"
+  },
+  "d83d_dcc6": {
+    "message": "sein\u00e4kalenteri"
+  },
+  "d83d_dcc7": {
+    "message": "korttihakemisto"
+  },
+  "d83d_dcc8": {
+    "message": "noususuuntainen trendi"
+  },
+  "d83d_dcc9": {
+    "message": "laskusuuntainen trendi"
+  },
+  "d83d_dcca": {
+    "message": "pylv\u00e4skaavio"
+  },
+  "d83d_dccb": {
+    "message": "kirjoituslevy"
+  },
+  "d83d_dccc": {
+    "message": "nasta"
+  },
+  "d83d_dccd": {
+    "message": "py\u00f6re\u00e4 nasta"
+  },
+  "d83d_dcce": {
+    "message": "paperiliitin"
+  },
+  "d83d_dccf": {
+    "message": "suora viivoitin"
+  },
+  "d83d_dcd0": {
+    "message": "kolmioviivoitin"
+  },
+  "d83d_dcd1": {
+    "message": "kirjanmerkit"
+  },
+  "d83d_dcd2": {
+    "message": "tilikirja"
+  },
+  "d83d_dcd3": {
+    "message": "muistikirja"
+  },
+  "d83d_dcd4": {
+    "message": "koristeltu muistikirja"
+  },
+  "d83d_dcd5": {
+    "message": "suljettu kirja"
+  },
+  "d83d_dcd6": {
+    "message": "avoin kirja"
+  },
+  "d83d_dcd7": {
+    "message": "vihre\u00e4 kirja"
+  },
+  "d83d_dcd8": {
+    "message": "kirja"
+  },
+  "d83d_dcd9": {
+    "message": "oranssi kirja"
+  },
+  "d83d_dcda": {
+    "message": "kirjat"
+  },
+  "d83d_dcdb": {
+    "message": "nimikyltti"
+  },
+  "d83d_dcdc": {
+    "message": "k\u00e4\u00e4r\u00f6"
+  },
+  "d83d_dcdd": {
+    "message": "muistio"
+  },
+  "d83d_dcde": {
+    "message": "puhelin"
+  },
+  "d83d_dcdf": {
+    "message": "hakulaite"
+  },
+  "d83d_dce0": {
+    "message": "faksi"
+  },
+  "d83d_dce1": {
+    "message": "satelliittiantenni"
+  },
+  "d83d_dce2": {
+    "message": "kaiutin"
+  },
+  "d83d_dce3": {
+    "message": "megafoni"
+  },
+  "d83d_dce4": {
+    "message": "l\u00e4hetetty posti"
+  },
+  "d83d_dce5": {
+    "message": "saapunut posti"
+  },
+  "d83d_dce6": {
+    "message": "paketti"
+  },
+  "d83d_dce7": {
+    "message": "s\u00e4hk\u00f6posti"
+  },
+  "d83d_dce8": {
+    "message": "saapuva posti"
+  },
+  "d83d_dce9": {
+    "message": "l\u00e4htev\u00e4 posti"
+  },
+  "d83d_dcea": {
+    "message": "suljettu postilaatikko, jonka lippu on alhaalla"
+  },
+  "d83d_dceb": {
+    "message": "suljettu postilaatikko, jonka lippu on pystyss\u00e4"
+  },
+  "d83d_dcec": {
+    "message": "avoin postilaatikko, jonka lippu on pystyss\u00e4"
+  },
+  "d83d_dced": {
+    "message": "avoin postilaatikko, jonka lippu on alhaalla"
+  },
+  "d83d_dcee": {
+    "message": "postilaatikko"
+  },
+  "d83d_dcef": {
+    "message": "postitorvi"
+  },
+  "d83d_dcf0": {
+    "message": "sanomalehti"
+  },
+  "d83d_dcf1": {
+    "message": "matkapuhelin"
+  },
+  "d83d_dcf2": {
+    "message": "matkapuhelin ja nuoli"
+  },
+  "d83d_dcf3": {
+    "message": "v\u00e4rin\u00e4tila"
+  },
+  "d83d_dcf4": {
+    "message": "puhelin pois p\u00e4\u00e4lt\u00e4"
+  },
+  "d83d_dcf5": {
+    "message": "matkapuhelimet kielletty"
+  },
+  "d83d_dcf6": {
+    "message": "mobiiliverkkosignaali"
+  },
+  "d83d_dcf7": {
+    "message": "kamera"
+  },
+  "d83d_dcf9": {
+    "message": "videokamera"
+  },
+  "d83d_dcfa": {
+    "message": "TV"
+  },
+  "d83d_dcfb": {
+    "message": "radio"
+  },
+  "d83d_dcfc": {
+    "message": "videonauha"
+  },
+  "d83d_dd00": {
+    "message": "ristiss\u00e4 olevat nuolet"
+  },
+  "d83d_dd01": {
+    "message": "nuolet my\u00f6t\u00e4p\u00e4iv\u00e4\u00e4n"
+  },
+  "d83d_dd02": {
+    "message": "nuolet my\u00f6t\u00e4p\u00e4iv\u00e4\u00e4n"
+  },
+  "d83d_dd03": {
+    "message": "lataa uudelleen"
+  },
+  "d83d_dd04": {
+    "message": "nuolet vastap\u00e4iv\u00e4\u00e4n"
+  },
+  "d83d_dd05": {
+    "message": "alhainen kirkkaus"
+  },
+  "d83d_dd06": {
+    "message": "suuri kirkkaus"
+  },
+  "d83d_dd07": {
+    "message": "puhuminen kielletty"
+  },
+  "d83d_dd08": {
+    "message": "kaiutin"
+  },
+  "d83d_dd09": {
+    "message": "kaiutin ja pieni \u00e4\u00e4nenvoimakkuus"
+  },
+  "d83d_dd0a": {
+    "message": "kaiutin ja suuri \u00e4\u00e4nenvoimakkuus"
+  },
+  "d83d_dd0b": {
+    "message": "akku"
+  },
+  "d83d_dd0c": {
+    "message": "pistoke"
+  },
+  "d83d_dd0d": {
+    "message": "vasemmalle kallellaan oleva suurennuslasi"
+  },
+  "d83d_dd0e": {
+    "message": "oikealle kallellaan oleva suurennuslasi"
+  },
+  "d83d_dd0f": {
+    "message": "lukko ja mustekyn\u00e4"
+  },
+  "d83d_dd10": {
+    "message": "suljettu lukko ja avain"
+  },
+  "d83d_dd11": {
+    "message": "avain"
+  },
+  "d83d_dd12": {
+    "message": "suljettu lukko"
+  },
+  "d83d_dd13": {
+    "message": "avoin lukko"
+  },
+  "d83d_dd14": {
+    "message": "soittokello"
+  },
+  "d83d_dd15": {
+    "message": "ei soittokelloa"
+  },
+  "d83d_dd16": {
+    "message": "kirjanmerkki"
+  },
+  "d83d_dd17": {
+    "message": "linkkisymboli"
+  },
+  "d83d_dd18": {
+    "message": "radiopainike"
+  },
+  "d83d_dd19": {
+    "message": "takaisin"
+  },
+  "d83d_dd1a": {
+    "message": "loppu"
+  },
+  "d83d_dd1b": {
+    "message": "ON-nuoli"
+  },
+  "d83d_dd1c": {
+    "message": "Soon-kyltti"
+  },
+  "d83d_dd1d": {
+    "message": "Top-kyltti"
+  },
+  "d83d_dd1e": {
+    "message": "kielletty alle 18-vuotiailta"
+  },
+  "d83d_dd20": {
+    "message": "isot kirjaimet"
+  },
+  "d83d_dd21": {
+    "message": "pienet kirjaimet"
+  },
+  "d83d_dd22": {
+    "message": "numerot"
+  },
+  "d83d_dd23": {
+    "message": "symbolit"
+  },
+  "d83d_dd24": {
+    "message": "latinalaiset aakkoset"
+  },
+  "d83d_dd25": {
+    "message": "tuli"
+  },
+  "d83d_dd26": {
+    "message": "taskulamppu"
+  },
+  "d83d_dd27": {
+    "message": "jakoavain"
+  },
+  "d83d_dd28": {
+    "message": "vasara"
+  },
+  "d83d_dd29": {
+    "message": "mutteri ja pultti"
+  },
+  "d83d_dd2a": {
+    "message": "ruoanlaittoveitsi"
+  },
+  "d83d_dd2b": {
+    "message": "ase"
+  },
+  "d83d_dd2c": {
+    "message": "mikroskooppi"
+  },
+  "d83d_dd2d": {
+    "message": "kaukoputki"
+  },
+  "d83d_dd2e": {
+    "message": "kristallipallo"
+  },
+  "d83d_dd2f": {
+    "message": "kuusisakarainen t\u00e4hti"
+  },
+  "d83d_dd30": {
+    "message": "vihre\u00e4 ja keltainen lehti"
+  },
+  "d83d_dd31": {
+    "message": "trident-ohjuksen merkki"
+  },
+  "d83d_dd32": {
+    "message": "mustareunainen neliskulmainen painike"
+  },
+  "d83d_dd33": {
+    "message": "valkoinen neliskulmainen painike"
+  },
+  "d83d_dd34": {
+    "message": "suuri punainen ympyr\u00e4"
+  },
+  "d83d_dd35": {
+    "message": "suuri sininen ympyr\u00e4"
+  },
+  "d83d_dd36": {
+    "message": "iso oranssi timantti"
+  },
+  "d83d_dd37": {
+    "message": "suuri sininen timantti"
+  },
+  "d83d_dd38": {
+    "message": "pieni oranssi timantti"
+  },
+  "d83d_dd39": {
+    "message": "pieni sininen timantti"
+  },
+  "d83d_dd3a": {
+    "message": "k\u00e4rki yl\u00f6sp\u00e4in -kolmio"
+  },
+  "d83d_dd3b": {
+    "message": "k\u00e4rki alasp\u00e4in -kolmio"
+  },
+  "d83d_dd3c": {
+    "message": "k\u00e4rki yl\u00f6sp\u00e4in -kolmiopainike"
+  },
+  "d83d_dd3d": {
+    "message": "k\u00e4rki alasp\u00e4in -kolmiopainike"
+  },
+  "d83d_dd50": {
+    "message": "kello 1"
+  },
+  "d83d_dd51": {
+    "message": "kello 2"
+  },
+  "d83d_dd52": {
+    "message": "kello 3"
+  },
+  "d83d_dd53": {
+    "message": "kello 4"
+  },
+  "d83d_dd54": {
+    "message": "kello 5"
+  },
+  "d83d_dd55": {
+    "message": "kello 6"
+  },
+  "d83d_dd56": {
+    "message": "kello 7"
+  },
+  "d83d_dd57": {
+    "message": "kello 8"
+  },
+  "d83d_dd58": {
+    "message": "kello 9"
+  },
+  "d83d_dd59": {
+    "message": "kello 10"
+  },
+  "d83d_dd5a": {
+    "message": "kello 11"
+  },
+  "d83d_dd5b": {
+    "message": "kello 12"
+  },
+  "d83d_dd5c": {
+    "message": "puoli kaksi"
+  },
+  "d83d_dd5d": {
+    "message": "puoli kolme"
+  },
+  "d83d_dd5e": {
+    "message": "puoli nelj\u00e4"
+  },
+  "d83d_dd5f": {
+    "message": "puoli viisi"
+  },
+  "d83d_dd60": {
+    "message": "puoli kuusi"
+  },
+  "d83d_dd61": {
+    "message": "puoli seitsem\u00e4n"
+  },
+  "d83d_dd62": {
+    "message": "puoli kahdeksan"
+  },
+  "d83d_dd63": {
+    "message": "puoli yhdeks\u00e4n"
+  },
+  "d83d_dd64": {
+    "message": "puoli kymmenen"
+  },
+  "d83d_dd65": {
+    "message": "puoli yksitoista"
+  },
+  "d83d_dd66": {
+    "message": "puoli kaksitoista"
+  },
+  "d83d_dd67": {
+    "message": "puoli yksi"
+  },
+  "d83d_ddfb": {
+    "message": "Fuji-vuori"
+  },
+  "d83d_ddfc": {
+    "message": "Tokyo Tower"
+  },
+  "d83d_ddfd": {
+    "message": "Vapaudenpatsas"
+  },
+  "d83d_ddfe": {
+    "message": "Japanin kartta"
+  },
+  "d83d_ddff": {
+    "message": "Moyai-patsas"
+  },
+  "d83d_de00": {
+    "message": "virne"
+  },
+  "d83d_de01": {
+    "message": " virnistys ja hymyilev\u00e4t silm\u00e4t"
+  },
+  "d83d_de02": {
+    "message": "ilon kyyneleet"
+  },
+  "d83d_de03": {
+    "message": "hymy suu auki"
+  },
+  "d83d_de04": {
+    "message": "avoin suu ja hymyilev\u00e4t silm\u00e4t"
+  },
+  "d83d_de05": {
+    "message": "hymy suu auki ja hikipisara"
+  },
+  "d83d_de06": {
+    "message": " suu auki ja silm\u00e4t kiinni"
+  },
+  "d83d_de07": {
+    "message": "hymy ja s\u00e4dekeh\u00e4"
+  },
+  "d83d_de08": {
+    "message": "hymy ja pirunsarvet"
+  },
+  "d83d_de09": {
+    "message": "silm\u00e4nisku"
+  },
+  "d83d_de0a": {
+    "message": "hymy"
+  },
+  "d83d_de0b": {
+    "message": "nami nami"
+  },
+  "d83d_de0c": {
+    "message": "helpottunut"
+  },
+  "d83d_de0d": {
+    "message": "hymynaama"
+  },
+  "d83d_de0e": {
+    "message": "cool"
+  },
+  "d83d_de0f": {
+    "message": "virnistys"
+  },
+  "d83d_de10": {
+    "message": "neutraali ilme"
+  },
+  "d83d_de11": {
+    "message": "ilmeet\u00f6n"
+  },
+  "d83d_de12": {
+    "message": "tymp\u00e4\u00e4ntynyt"
+  },
+  "d83d_de13": {
+    "message": "kylm\u00e4 hiki"
+  },
+  "d83d_de14": {
+    "message": "alakuloinen"
+  },
+  "d83d_de15": {
+    "message": "h\u00e4mmentynyt"
+  },
+  "d83d_de16": {
+    "message": "ymm\u00e4ll\u00e4\u00e4n"
+  },
+  "d83d_de17": {
+    "message": "pusunaama"
+  },
+  "d83d_de18": {
+    "message": "lentosuukkoja"
+  },
+  "d83d_de19": {
+    "message": "pusunaama ja hymyilev\u00e4t silm\u00e4t"
+  },
+  "d83d_de1a": {
+    "message": "suutelu"
+  },
+  "d83d_de1b": {
+    "message": "n\u00e4ytt\u00e4\u00e4 kielt\u00e4"
+  },
+  "d83d_de1c": {
+    "message": "kielen n\u00e4ytt\u00e4minen ja silm\u00e4nisku"
+  },
+  "d83d_de1d": {
+    "message": "y\u00e4k"
+  },
+  "d83d_de1e": {
+    "message": "pettynyt"
+  },
+  "d83d_de1f": {
+    "message": "huolestunut"
+  },
+  "d83d_de20": {
+    "message": "vihainen"
+  },
+  "d83d_de21": {
+    "message": "murjottava"
+  },
+  "d83d_de22": {
+    "message": "itkev\u00e4"
+  },
+  "d83d_de23": {
+    "message": "pieleen meni"
+  },
+  "d83d_de24": {
+    "message": "voitontahtoinen"
+  },
+  "d83d_de25": {
+    "message": "huh!"
+  },
+  "d83d_de26": {
+    "message": "otsa rypyss\u00e4"
+  },
+  "d83d_de27": {
+    "message": "k\u00e4rsiv\u00e4"
+  },
+  "d83d_de28": {
+    "message": "pelokas"
+  },
+  "d83d_de29": {
+    "message": "k\u00e4rsiv\u00e4"
+  },
+  "d83d_de2a": {
+    "message": "uninen"
+  },
+  "d83d_de2b": {
+    "message": "v\u00e4synyt"
+  },
+  "d83d_de2c": {
+    "message": "irvistys"
+  },
+  "d83d_de2d": {
+    "message": "\u00e4\u00e4nek\u00e4s itku"
+  },
+  "d83d_de2e": {
+    "message": "suu auki"
+  },
+  "d83d_de2f": {
+    "message": "yll\u00e4ttynyt"
+  },
+  "d83d_de30": {
+    "message": "kiireinen"
+  },
+  "d83d_de31": {
+    "message": "pelokas"
+  },
+  "d83d_de32": {
+    "message": "\u00e4llistynyt"
+  },
+  "d83d_de33": {
+    "message": "h\u00e4mm\u00e4stynyt"
+  },
+  "d83d_de34": {
+    "message": "nukkuva"
+  },
+  "d83d_de35": {
+    "message": "huimaava"
+  },
+  "d83d_de36": {
+    "message": "kasvot ilman suuta"
+  },
+  "d83d_de37": {
+    "message": "naamioitu"
+  },
+  "d83d_de38": {
+    "message": "virnist\u00e4v\u00e4 kissa"
+  },
+  "d83d_de39": {
+    "message": "ilosta itkev\u00e4 kissa"
+  },
+  "d83d_de3a": {
+    "message": "hymyilev\u00e4 kissa"
+  },
+  "d83d_de3b": {
+    "message": "hymyilev\u00e4 kissa"
+  },
+  "d83d_de3c": {
+    "message": "vinosti hymyilev\u00e4 kissa"
+  },
+  "d83d_de3d": {
+    "message": "pussaava kissa"
+  },
+  "d83d_de3e": {
+    "message": "murjottava kissa"
+  },
+  "d83d_de3f": {
+    "message": "itkev\u00e4 kissa"
+  },
+  "d83d_de40": {
+    "message": "h\u00e4mm\u00e4stynyt kissa"
+  },
+  "d83d_de45": {
+    "message": "kielletty-ele"
+  },
+  "d83d_de46": {
+    "message": "OK-ele"
+  },
+  "d83d_de47": {
+    "message": "olen pahoillani"
+  },
+  "d83d_de48": {
+    "message": "ei n\u00e4e pahaa"
+  },
+  "d83d_de49": {
+    "message": "ei kuule pahaa"
+  },
+  "d83d_de4a": {
+    "message": "ei puhu pahaa"
+  },
+  "d83d_de4b": {
+    "message": "iloinen k\u00e4dennosto"
+  },
+  "d83d_de4c": {
+    "message": "hurraa"
+  },
+  "d83d_de4d": {
+    "message": "murjottava henkil\u00f6"
+  },
+  "d83d_de4e": {
+    "message": "murjottava"
+  },
+  "d83d_de4f": {
+    "message": "k\u00e4det yhdess\u00e4 taivasta kohti"
+  },
+  "d83d_de80": {
+    "message": "raketti"
+  },
+  "d83d_de81": {
+    "message": "helikopteri"
+  },
+  "d83d_de82": {
+    "message": "h\u00f6yryveturi"
+  },
+  "d83d_de83": {
+    "message": "juna"
+  },
+  "d83d_de84": {
+    "message": "suurnopeusjuna"
+  },
+  "d83d_de85": {
+    "message": "suurnopeusjuna, jossa on luodinmuotoinen k\u00e4rki"
+  },
+  "d83d_de86": {
+    "message": "juna"
+  },
+  "d83d_de87": {
+    "message": "metro"
+  },
+  "d83d_de88": {
+    "message": "kevytraitiovaunu"
+  },
+  "d83d_de89": {
+    "message": "rautatieasema"
+  },
+  "d83d_de8a": {
+    "message": "raitiovaunu"
+  },
+  "d83d_de8b": {
+    "message": "raitiovaunun vaunu"
+  },
+  "d83d_de8c": {
+    "message": "bussi"
+  },
+  "d83d_de8d": {
+    "message": "l\u00e4hestyv\u00e4 bussi"
+  },
+  "d83d_de8e": {
+    "message": "johdinauto"
+  },
+  "d83d_de8f": {
+    "message": "bussipys\u00e4kki"
+  },
+  "d83d_de90": {
+    "message": "minibussi"
+  },
+  "d83d_de91": {
+    "message": "ambulanssi"
+  },
+  "d83d_de92": {
+    "message": "paloauto"
+  },
+  "d83d_de93": {
+    "message": "poliisiauto"
+  },
+  "d83d_de94": {
+    "message": "l\u00e4hestyv\u00e4 poliisiauto"
+  },
+  "d83d_de95": {
+    "message": "taksi"
+  },
+  "d83d_de96": {
+    "message": "l\u00e4hestyv\u00e4 taksi"
+  },
+  "d83d_de97": {
+    "message": "auto"
+  },
+  "d83d_de98": {
+    "message": "l\u00e4hestyv\u00e4 auto"
+  },
+  "d83d_de99": {
+    "message": "maasturi"
+  },
+  "d83d_de9a": {
+    "message": "jakeluauto"
+  },
+  "d83d_de9b": {
+    "message": "kuorma-auto"
+  },
+  "d83d_de9c": {
+    "message": "traktori"
+  },
+  "d83d_de9d": {
+    "message": "yksiraiteinen rautatie"
+  },
+  "d83d_de9e": {
+    "message": "vuoristojuna"
+  },
+  "d83d_de9f": {
+    "message": "riippuva rautatie"
+  },
+  "d83d_dea0": {
+    "message": "vuorik\u00f6ysirata"
+  },
+  "d83d_dea1": {
+    "message": "k\u00f6ysiradan vaunu"
+  },
+  "d83d_dea2": {
+    "message": "laiva"
+  },
+  "d83d_dea3": {
+    "message": "soutuvene"
+  },
+  "d83d_dea4": {
+    "message": "pikavene"
+  },
+  "d83d_dea5": {
+    "message": "vaakasuorat liikennevalot"
+  },
+  "d83d_dea6": {
+    "message": "pystysuorat liikennevalot"
+  },
+  "d83d_dea7": {
+    "message": "rakenteilla"
+  },
+  "d83d_dea8": {
+    "message": "h\u00e4lytysajoneuvon valo"
+  },
+  "d83d_dea9": {
+    "message": "sijaintilippu"
+  },
+  "d83d_deaa": {
+    "message": "ovi"
+  },
+  "d83d_deab": {
+    "message": "P\u00e4\u00e4sy kielletty -kyltti"
+  },
+  "d83d_deac": {
+    "message": "tupakointikyltti"
+  },
+  "d83d_dead": {
+    "message": "tupakointi kielletty -kyltti"
+  },
+  "d83d_deae": {
+    "message": "roskakorikyltti"
+  },
+  "d83d_deaf": {
+    "message": "\u00e4l\u00e4 roskaa -kyltti"
+  },
+  "d83d_deb0": {
+    "message": "juomavesi"
+  },
+  "d83d_deb1": {
+    "message": "juomakelvoton vesi"
+  },
+  "d83d_deb2": {
+    "message": "py\u00f6r\u00e4"
+  },
+  "d83d_deb3": {
+    "message": "py\u00f6r\u00e4t kielletty"
+  },
+  "d83d_deb4": {
+    "message": "py\u00f6r\u00e4ilij\u00e4"
+  },
+  "d83d_deb5": {
+    "message": "vuoristopy\u00f6r\u00e4ilij\u00e4"
+  },
+  "d83d_deb6": {
+    "message": "jalankulkija"
+  },
+  "d83d_deb7": {
+    "message": "jalankulku kielletty"
+  },
+  "d83d_deb8": {
+    "message": "lapsia ylitt\u00e4m\u00e4ss\u00e4 tiet\u00e4"
+  },
+  "d83d_deb9": {
+    "message": "miehet-kyltti"
+  },
+  "d83d_deba": {
+    "message": "naiset-kyltti"
+  },
+  "d83d_debb": {
+    "message": "vessakyltti"
+  },
+  "d83d_debc": {
+    "message": "vauva-kyltti"
+  },
+  "d83d_debd": {
+    "message": "vessa"
+  },
+  "d83d_debe": {
+    "message": "WC"
+  },
+  "d83d_debf": {
+    "message": "suihku"
+  },
+  "d83d_dec0": {
+    "message": "kylpy"
+  },
+  "d83d_dec1": {
+    "message": "kylpyamme"
+  },
+  "d83d_dec2": {
+    "message": "passintarkastus"
+  },
+  "d83d_dec3": {
+    "message": "tulli"
+  },
+  "d83d_dec4": {
+    "message": "matkatavaroiden nouto"
+  },
+  "d83d_dec5": {
+    "message": "matkatavaras\u00e4ilytys"
+  },
+  "de_ger_settings_page": {
+    "message": "Saksan n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "de_neo_ger_settings_page": {
+    "message": "Saksan Neo 2 -n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "dictionarytoolcategorytitle": {
+    "message": "Luokka"
+  },
+  "dictionarytoolcommentnewinput": {
+    "message": "Kommentoi"
+  },
+  "dictionarytoolcommenttitle": {
+    "message": "Kommentoi"
+  },
+  "dictionarytooldeletedictionaryconfirm": {
+    "message": "Poistetaanko sanakirja [object Object]?"
+  },
+  "dictionarytooldeletedictionarytitle": {
+    "message": "Poista sanakirja"
+  },
+  "dictionarytooldictionarylisttitle": {
+    "message": "Sanakirjat"
+  },
+  "dictionarytooldictionaryname": {
+    "message": "Sanakirjan nimi"
+  },
+  "dictionarytooldonebutton": {
+    "message": "Valmis"
+  },
+  "dictionarytoolexportbutton": {
+    "message": "Vie"
+  },
+  "dictionarytoolimportbutton": {
+    "message": "Tuo\u2026"
+  },
+  "dictionarytoolmenutitle": {
+    "message": "Sanakirjan hallinta"
+  },
+  "dictionarytoolnewdictionarynameplaceholder": {
+    "message": "Uusi sanakirja"
+  },
+  "dictionarytoolpagetitle": {
+    "message": "K\u00e4ytt\u00e4j\u00e4n sanakirjat"
+  },
+  "dictionarytoolreadingnewinput": {
+    "message": "Uusi merkitys"
+  },
+  "dictionarytoolreadingtitle": {
+    "message": "Merkitys"
+  },
+  "dictionarytoolstatuserrordictionarynamecontainsinvalidcharacter": {
+    "message": "Nimi sis\u00e4lt\u00e4\u00e4 virheellisi\u00e4 merkkej\u00e4."
+  },
+  "dictionarytoolstatuserrordictionarynameduplicated": {
+    "message": "Nimi on jo olemassa."
+  },
+  "dictionarytoolstatuserrordictionarynameempty": {
+    "message": "Kirjoita sanakirjan nimi."
+  },
+  "dictionarytoolstatuserrordictionarynametoolong": {
+    "message": "Nimi on liian pitk\u00e4."
+  },
+  "dictionarytoolstatuserrordictionarysizelimitexceeded": {
+    "message": "Et voi luoda enemp\u00e4\u00e4 sanakirjoja."
+  },
+  "dictionarytoolstatuserroremptyfile": {
+    "message": "Tiedosto on tyhj\u00e4."
+  },
+  "dictionarytoolstatuserrorentrysizelimitexceeded": {
+    "message": "T\u00e4h\u00e4n sanakirjaan ei voi luoda enemp\u00e4\u00e4 kohteita."
+  },
+  "dictionarytoolstatuserrorfilenotfound": {
+    "message": "Tiedoston avaaminen ep\u00e4onnistui."
+  },
+  "dictionarytoolstatuserrorfilesizelimitexceeded": {
+    "message": "Tietojen koko ylitt\u00e4\u00e4 tiedoston enimm\u00e4iskoon."
+  },
+  "dictionarytoolstatuserrorgeneral": {
+    "message": "Toiminto ep\u00e4onnistui."
+  },
+  "dictionarytoolstatuserrorimportinvalidentries": {
+    "message": "Joidenkin sanojen tuonti ep\u00e4onnistui."
+  },
+  "dictionarytoolstatuserrorimporttoomanywords": {
+    "message": "Tuonnin l\u00e4hde sis\u00e4lt\u00e4\u00e4 liikaa sanoja."
+  },
+  "dictionarytoolstatuserrorinvalidfileformat": {
+    "message": "Tiedoston lukeminen ep\u00e4onnistui."
+  },
+  "dictionarytoolstatuserrornoundohistory": {
+    "message": "Ei muita kumottavia toimintoja."
+  },
+  "dictionarytoolstatuserrorreadingcontainsinvalidcharacter": {
+    "message": "Merkitys sis\u00e4lt\u00e4\u00e4 virheellisi\u00e4 merkkej\u00e4. Voit k\u00e4ytt\u00e4\u00e4 merkityksess\u00e4 ASCII-merkkej\u00e4, hiraganaa, soinnillisen \u00e4\u00e4nteen merkki\u00e4 (\u309b), puolisoinnillisen \u00e4\u00e4nteen merkki\u00e4 (\u309c), keskipistett\u00e4 (\u30fb), pidennetyn \u00e4\u00e4nteen merkki\u00e4 (\u30fc), japanin pilkkua (\u3001), japanin pistett\u00e4 (\u3002), japanin sulkeita (\u300c\u300d\u300e\u300f) ja japanin aaltoviivaa (\u301c)."
+  },
+  "dictionarytoolstatuserrorreadingempty": {
+    "message": "Kirjoita merkitys."
+  },
+  "dictionarytoolstatuserrorreadingtoolong": {
+    "message": "Merkitys on liian pitk\u00e4."
+  },
+  "dictionarytoolstatuserrortitleaddentry": {
+    "message": "Virhe lis\u00e4tt\u00e4ess\u00e4 kohdetta"
+  },
+  "dictionarytoolstatuserrortitlecreatedictionary": {
+    "message": "Virhe luotaessa sanakirjaa"
+  },
+  "dictionarytoolstatuserrortitledeletedictionary": {
+    "message": "Virhe poistettaessa sanakirjaa"
+  },
+  "dictionarytoolstatuserrortitledeleteentry": {
+    "message": "Virhe poistettaessa kohdetta"
+  },
+  "dictionarytoolstatuserrortitleeditentry": {
+    "message": "Virhe muokattaessa kohdetta"
+  },
+  "dictionarytoolstatuserrortitleimportdata": {
+    "message": "Tuontivirhe"
+  },
+  "dictionarytoolstatuserrortitlerenamedictionary": {
+    "message": "Virhe nimett\u00e4ess\u00e4 sanakirjaa uudelleen"
+  },
+  "dictionarytoolstatuserrorwordcontainsinvalidcharacter": {
+    "message": "Sana sis\u00e4lt\u00e4\u00e4 virheellisi\u00e4 merkkej\u00e4."
+  },
+  "dictionarytoolstatuserrorwordempty": {
+    "message": "Kirjoita sana."
+  },
+  "dictionarytoolstatuserrorwordtoolong": {
+    "message": "Sana on liian pitk\u00e4."
+  },
+  "dictionarytoolwordnewinput": {
+    "message": "Uusi sana"
+  },
+  "dictionarytoolwordtitle": {
+    "message": "Sana"
+  },
+  "dismiss_menu": {
+    "message": "hylk\u00e4\u00e4 n\u00e4pp\u00e4imist\u00f6valikko"
+  },
+  "dk_dan_settings_page": {
+    "message": "Tanskan n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "double_space_period": {
+    "message": "Piste tuplav\u00e4lily\u00f6nnill\u00e4"
+  },
+  "down_arrow": {
+    "message": "alanuoli"
+  },
+  "ee_est_settings_page": {
+    "message": "Viron n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "emoji_tab_emoticon": {
+    "message": "Hymi\u00f6luokka hymi\u00f6t"
+  },
+  "emoji_tab_face": {
+    "message": "Hymi\u00f6luokka kasvot"
+  },
+  "emoji_tab_hot": {
+    "message": "Hymi\u00f6luokka suositut"
+  },
+  "emoji_tab_nature": {
+    "message": "Hymi\u00f6luokka luonto"
+  },
+  "emoji_tab_object": {
+    "message": "Hymi\u00f6luokka esineet"
+  },
+  "emoji_tab_place": {
+    "message": "Hymi\u00f6luokka paikat"
+  },
+  "emoji_tab_recent": {
+    "message": "Hymi\u00f6luokka uusimmat"
+  },
+  "emoji_tab_symbol": {
+    "message": "Hymi\u00f6luokka symbolit"
+  },
+  "enable_capitalization": {
+    "message": "Automaattiset isot kirjaimet"
+  },
+  "enable_completion": {
+    "message": "Ota t\u00e4ydent\u00e4minen k\u00e4ytt\u00f6\u00f6n"
+  },
+  "enable_prediction": {
+    "message": "Ota seuraavan sanan ennakointi k\u00e4ytt\u00f6\u00f6n"
+  },
+  "enter": {
+    "message": "enter"
+  },
+  "es_cat_cat_settings_page": {
+    "message": "Katalaanin n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "es_spa_settings_page": {
+    "message": "Espanjan n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "expand": {
+    "message": "Laajenna"
+  },
+  "expand_candidates": {
+    "message": "laajenna vaihtoehtoluettelo"
+  },
+  "fi_fin_settings_page": {
+    "message": "Suomen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "footer_emoji_button": {
+    "message": "siirry emoji-n\u00e4pp\u00e4imiin"
+  },
+  "footer_handwriting_button": {
+    "message": "siirry k\u00e4sinkirjoitukseen"
+  },
+  "footer_settings_button": {
+    "message": "avaa sy\u00f6tt\u00f6tapa-asetukset"
+  },
+  "fr_fra_settings_page": {
+    "message": "Ranskan n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "fuzzy_pinyin": {
+    "message": "Ota Fuzzy-Pinyin-tila k\u00e4ytt\u00f6\u00f6n"
+  },
+  "gb_dvorak_eng_settings_page": {
+    "message": "Ison-Britannian englanninkielisen Dvorak-n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "gb_extd_eng_settings_page": {
+    "message": "Ison-Britannian englanninkielisen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "ge_geo_settings_page": {
+    "message": "Georgian n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "globe": {
+    "message": "vaihda edelliseen n\u00e4pp\u00e4imist\u00f6\u00f6n"
+  },
+  "got_it": {
+    "message": "Selv\u00e4"
+  },
+  "gr_gre_settings_page": {
+    "message": "Kreikan n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "handwriting_back": {
+    "message": "Takaisin"
+  },
+  "handwriting_netowrk_error": {
+    "message": "Et voi k\u00e4ytt\u00e4\u00e4 k\u00e4sinkirjoitusta, koska verkko ei ole k\u00e4ytett\u00e4viss\u00e4."
+  },
+  "handwriting_privacy_info": {
+    "message": "Sy\u00f6tteesi l\u00e4hetet\u00e4\u00e4n Googlen palvelimille, jotta teksti voidaan tunnistaa."
+  },
+  "hide_keyboard": {
+    "message": "piilota n\u00e4pp\u00e4imist\u00f6"
+  },
+  "hr_scr_settings_page": {
+    "message": "Kroatian n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "hu_hun_settings_page": {
+    "message": "Unkarin n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "ie_ga_settings_page": {
+    "message": "Irlannin iirinkielisen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "ignore_correction": {
+    "message": "\u00c4l\u00e4 korjaa:"
+  },
+  "ignore_correction_short": {
+    "message": "Ohita korjaus"
+  },
+  "il_heb_settings_page": {
+    "message": "Hepreankielisen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "init_lang": {
+    "message": "Alkuper\u00e4inen sy\u00f6tt\u00f6kieli on kiina"
+  },
+  "init_punc": {
+    "message": "Alkuper\u00e4inen v\u00e4limerkkileveys on Full"
+  },
+  "init_sbc": {
+    "message": "Alkuper\u00e4inen merkkileveys on Full"
+  },
+  "input_hangul": {
+    "message": "Hangul-tila"
+  },
+  "input_hanja": {
+    "message": "Hanja-tila"
+  },
+  "inputmethod_array": {
+    "message": "Array-sy\u00f6tt\u00f6tapa"
+  },
+  "inputmethod_cangjie": {
+    "message": "Cangjie-sy\u00f6tt\u00f6tapa"
+  },
+  "inputmethod_dayi": {
+    "message": "Dayi-sy\u00f6tt\u00f6tapa"
+  },
+  "inputmethod_hangul": {
+    "message": "Korealainen sy\u00f6tt\u00f6tapa"
+  },
+  "inputmethod_pinyin": {
+    "message": "Pinyin-sy\u00f6tt\u00f6tapa"
+  },
+  "inputmethod_quick": {
+    "message": "Nopea sy\u00f6tt\u00f6tapa"
+  },
+  "inputmethod_traditional_pinyin": {
+    "message": "Perinteisen kiinan pinyin-sy\u00f6tt\u00f6tapa"
+  },
+  "inputmethod_wubi": {
+    "message": "Wubi-sy\u00f6tt\u00f6tapa"
+  },
+  "inputmethod_zhuyin": {
+    "message": "Zhuyin-sy\u00f6tt\u00f6tapa"
+  },
+  "is_ice_settings_page": {
+    "message": "Islannin n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "it_ita_settings_page": {
+    "message": "Italian n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "jp_jpn_settings_page": {
+    "message": "Japanin n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "keyboard_arabic": {
+    "message": "arabialainen n\u00e4pp\u00e4imist\u00f6"
+  },
+  "keyboard_armenian_phonetic": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: armenia, foneettinen"
+  },
+  "keyboard_belarusian": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: valkoven\u00e4j\u00e4"
+  },
+  "keyboard_belgian": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: Belgia"
+  },
+  "keyboard_bengali_phonetic": {
+    "message": "Bengalilainen n\u00e4pp\u00e4imist\u00f6 (foneettinen)"
+  },
+  "keyboard_brazilian": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: Brasilia"
+  },
+  "keyboard_bulgarian": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: bulgaria"
+  },
+  "keyboard_bulgarian_phonetic": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: bulgaria, foneettinen"
+  },
+  "keyboard_canadian_english": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: englanti (Kanada)"
+  },
+  "keyboard_canadian_french": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: ranska (Kanada)"
+  },
+  "keyboard_canadian_multilingual": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: Kanada, monikielinen"
+  },
+  "keyboard_catalan": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: katalaani"
+  },
+  "keyboard_croatian": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: kroatia"
+  },
+  "keyboard_czech": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: t\u0161ekki"
+  },
+  "keyboard_czech_qwerty": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: t\u0161ekki (QWERTY)"
+  },
+  "keyboard_danish": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: tanska"
+  },
+  "keyboard_devanagari_phonetic": {
+    "message": "Devanagari-n\u00e4pp\u00e4imist\u00f6 (foneettinen)"
+  },
+  "keyboard_estonian": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: viro"
+  },
+  "keyboard_ethiopic": {
+    "message": "Etiopialainen n\u00e4pp\u00e4imist\u00f6"
+  },
+  "keyboard_finnish": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: suomi"
+  },
+  "keyboard_french": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: ranska"
+  },
+  "keyboard_georgian": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: georgia"
+  },
+  "keyboard_german": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: saksa"
+  },
+  "keyboard_german_neo_2": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: saksa, Neo 2"
+  },
+  "keyboard_greek": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: kreikka"
+  },
+  "keyboard_gujarati_phonetic": {
+    "message": "Gud\u017earatinkielinen n\u00e4pp\u00e4imist\u00f6 (foneettinen)"
+  },
+  "keyboard_hebrew": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: heprea"
+  },
+  "keyboard_hungarian": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: unkari"
+  },
+  "keyboard_icelandic": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: islanti"
+  },
+  "keyboard_inscript": {
+    "message": "N\u00e4pp\u00e4imist\u00f6 (inscript)"
+  },
+  "keyboard_irish": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: iiri"
+  },
+  "keyboard_italian": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: italia"
+  },
+  "keyboard_itrans": {
+    "message": "N\u00e4pp\u00e4imist\u00f6 (itrans)"
+  },
+  "keyboard_japanese": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: japani"
+  },
+  "keyboard_kannada_phonetic": {
+    "message": "Kannadankielinen n\u00e4pp\u00e4imist\u00f6 (foneettinen)"
+  },
+  "keyboard_kedmanee": {
+    "message": "N\u00e4pp\u00e4imist\u00f6 (kedmanee)"
+  },
+  "keyboard_khmer": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: khmer"
+  },
+  "keyboard_lao": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: lao"
+  },
+  "keyboard_latin_american": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: Latinalainen Amerikka"
+  },
+  "keyboard_latvian": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: latvia"
+  },
+  "keyboard_lithuanian": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: liettua"
+  },
+  "keyboard_malayalam_phonetic": {
+    "message": "Malajalaminkielinen n\u00e4pp\u00e4imist\u00f6 (foneettinen)"
+  },
+  "keyboard_maltese": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: malta"
+  },
+  "keyboard_mongolian": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: mongoli"
+  },
+  "keyboard_myanmar": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: Myanmar MM3"
+  },
+  "keyboard_myanmar_myansan": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: Myanmar Myansan"
+  },
+  "keyboard_nepali_inscript": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: nepal (InScript)"
+  },
+  "keyboard_nepali_phonetic": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: nepal (foneettinen)"
+  },
+  "keyboard_netherlands": {
+    "message": "Hollantilainen n\u00e4pp\u00e4imist\u00f6"
+  },
+  "keyboard_none": {
+    "message": "N\u00e4pp\u00e4imist\u00f6"
+  },
+  "keyboard_norwegian": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: norja"
+  },
+  "keyboard_pattachote": {
+    "message": "N\u00e4pp\u00e4imist\u00f6 (pattachote)"
+  },
+  "keyboard_persian": {
+    "message": "Persialainen n\u00e4pp\u00e4imist\u00f6"
+  },
+  "keyboard_phonetic": {
+    "message": "N\u00e4pp\u00e4imist\u00f6 (foneettinen)"
+  },
+  "keyboard_polish": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: puola"
+  },
+  "keyboard_portuguese": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: portugali"
+  },
+  "keyboard_romanian": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: romania"
+  },
+  "keyboard_romanian_standard": {
+    "message": "Romanialainen vakion\u00e4pp\u00e4imist\u00f6"
+  },
+  "keyboard_russian": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: ven\u00e4j\u00e4"
+  },
+  "keyboard_russian_phonetic": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: ven\u00e4j\u00e4, foneettinen"
+  },
+  "keyboard_russian_phonetic_aatseel": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: ven\u00e4j\u00e4 (foneettinen AATSEEL)"
+  },
+  "keyboard_russian_phonetic_yazhert": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: ven\u00e4j\u00e4 (foneettinen YaZHert)"
+  },
+  "keyboard_serbian": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: serbia"
+  },
+  "keyboard_sinhala": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: sinhali"
+  },
+  "keyboard_slovakian": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: Slovakia"
+  },
+  "keyboard_slovenian": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: sloveeni"
+  },
+  "keyboard_soranikurdish_ar": {
+    "message": "Soran\u00een arabiaan perustuva n\u00e4pp\u00e4imist\u00f6"
+  },
+  "keyboard_soranikurdish_en": {
+    "message": "Soran\u00een englantiin perustuva n\u00e4pp\u00e4imist\u00f6"
+  },
+  "keyboard_spanish": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: espanja"
+  },
+  "keyboard_swedish": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: ruotsi"
+  },
+  "keyboard_swiss": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: Sveitsi"
+  },
+  "keyboard_swiss_french": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: ranska (Sveitsi)"
+  },
+  "keyboard_tamil99": {
+    "message": "N\u00e4pp\u00e4imist\u00f6 (tamil99)"
+  },
+  "keyboard_tamil_inscript": {
+    "message": "Tamilinkielinen n\u00e4pp\u00e4imist\u00f6 (inscript)"
+  },
+  "keyboard_tamil_itrans": {
+    "message": "Tamilinkielinen n\u00e4pp\u00e4imist\u00f6 (itrans)"
+  },
+  "keyboard_tamil_phonetic": {
+    "message": "Tamilinkielinen n\u00e4pp\u00e4imist\u00f6 (foneettinen)"
+  },
+  "keyboard_tamil_tamil99": {
+    "message": "Tamilinkielinen n\u00e4pp\u00e4imist\u00f6 (tamil99)"
+  },
+  "keyboard_tamil_typewriter": {
+    "message": "Tamilinkielinen n\u00e4pp\u00e4imist\u00f6 (kirjoituskone)"
+  },
+  "keyboard_tcvn": {
+    "message": "N\u00e4pp\u00e4imist\u00f6 (TCVN)"
+  },
+  "keyboard_telex": {
+    "message": "N\u00e4pp\u00e4imist\u00f6 (telex)"
+  },
+  "keyboard_telugu_phonetic": {
+    "message": "Telugunkielinen n\u00e4pp\u00e4imist\u00f6 (foneettinen)"
+  },
+  "keyboard_thai_kedmanee": {
+    "message": "Thainkielinen n\u00e4pp\u00e4imist\u00f6 (kedmanee)"
+  },
+  "keyboard_thai_pattachote": {
+    "message": "Thainkielinen n\u00e4pp\u00e4imist\u00f6 (pattachote)"
+  },
+  "keyboard_thai_tis": {
+    "message": "Thainkielinen n\u00e4pp\u00e4imist\u00f6 (TIS 820-2531)"
+  },
+  "keyboard_tis": {
+    "message": "N\u00e4pp\u00e4imist\u00f6 (TIS 820-2531)"
+  },
+  "keyboard_turkish": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: turkki"
+  },
+  "keyboard_typewriter": {
+    "message": "N\u00e4pp\u00e4imist\u00f6 (kirjoituskone)"
+  },
+  "keyboard_uk": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: UK"
+  },
+  "keyboard_uk_dvorak": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: UK, Dvorak"
+  },
+  "keyboard_ukrainian": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: ukraina"
+  },
+  "keyboard_us": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: US"
+  },
+  "keyboard_us_colemak": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: US, Colemak"
+  },
+  "keyboard_us_dvorak": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: US, Dvorak"
+  },
+  "keyboard_us_extended": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: US, laajennettu"
+  },
+  "keyboard_us_international": {
+    "message": "N\u00e4pp\u00e4imist\u00f6: US, kansainv\u00e4linen"
+  },
+  "keyboard_vietnamese_tcvn": {
+    "message": "Vietnamilainen n\u00e4pp\u00e4imist\u00f6 (TCVN)"
+  },
+  "keyboard_vietnamese_telex": {
+    "message": "Vietnamilainen n\u00e4pp\u00e4imist\u00f6 (telex)"
+  },
+  "keyboard_vietnamese_viqr": {
+    "message": "Vietnamilainen n\u00e4pp\u00e4imist\u00f6 (VIQR)"
+  },
+  "keyboard_vietnamese_vni": {
+    "message": "Vietnamilainen n\u00e4pp\u00e4imist\u00f6 (VNI)"
+  },
+  "keyboard_viqr": {
+    "message": "N\u00e4pp\u00e4imist\u00f6 (VIQR)"
+  },
+  "keyboard_vni": {
+    "message": "N\u00e4pp\u00e4imist\u00f6 (VNI)"
+  },
+  "korean_hanja_display": {
+    "message": "Hanja-ehdokastila"
+  },
+  "korean_keyboard_layout": {
+    "message": "Ulkoasu: korealainen n\u00e4pp\u00e4imist\u00f6"
+  },
+  "korean_settings_page": {
+    "message": "Koreankielisen sy\u00f6tt\u00f6tavan asetussivu"
+  },
+  "korean_syllable_input": {
+    "message": "Kirjoita tavu kerrallaan."
+  },
+  "latam_spa_settings_page": {
+    "message": "Latinalaisen Amerikan espanjankielisen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "latin_settings_page": {
+    "message": "Asetukset"
+  },
+  "left_arrow": {
+    "message": "vasen nuoli"
+  },
+  "lt_lit_settings_page": {
+    "message": "Liettuan n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "lv_apostrophe_lav_settings_page": {
+    "message": "Latvian latviankielisen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "menu_key": {
+    "message": "avaa n\u00e4pp\u00e4imist\u00f6valikko"
+  },
+  "mn_mon_settings_page": {
+    "message": "Mongolian n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "move_page_key_above": {
+    "message": "Selaa vaihtoehtoluetteloa n\u00e4pp\u00e4imill\u00e4 - ja ="
+  },
+  "move_page_key_below": {
+    "message": "Selaa vaihtoehtoluetteloa n\u00e4pp\u00e4imill\u00e4 , ja ."
+  },
+  "never_auto_correct": {
+    "message": "Ei k\u00e4yt\u00f6ss\u00e4"
+  },
+  "no_nob_settings_page": {
+    "message": "Norjan n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "pause": {
+    "message": "Tauko"
+  },
+  "physical_auto_correction_level": {
+    "message": "Automaattinen korjaus"
+  },
+  "physical_enable_capitalization": {
+    "message": "Automaattiset isot kirjaimet"
+  },
+  "physical_keyboard": {
+    "message": "Fyysinen n\u00e4pp\u00e4imist\u00f6"
+  },
+  "pinyin_settings_page": {
+    "message": "Pinyin-asetusten sivu"
+  },
+  "pl_pol_settings_page": {
+    "message": "Puolan n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "pt_por_settings_page": {
+    "message": "Portugalin n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "right_arrow": {
+    "message": "oikea nuoli"
+  },
+  "ro_rum_settings_page": {
+    "message": "Romanian n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "rs_srp_settings_page": {
+    "message": "Serbian n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "ru_phonetic_rus_settings_page": {
+    "message": "Ven\u00e4j\u00e4n foneettisen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "ru_rus_settings_page": {
+    "message": "Ven\u00e4j\u00e4n n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "se_swe_settings_page": {
+    "message": "Ruotsin n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "settings": {
+    "message": "Asetukset"
+  },
+  "shift": {
+    "message": "shift"
+  },
+  "shift_lock": {
+    "message": "Shift lukittu"
+  },
+  "show_candidate_mode": {
+    "message": "Ehdotusvalikon viive"
+  },
+  "show_candidates_1000": {
+    "message": "N\u00e4yt\u00e4 ehdotusvalikko 1 sekunnin viiveell\u00e4"
+  },
+  "show_candidates_2000": {
+    "message": "N\u00e4yt\u00e4 ehdotusvalikko 2 sekunnin viiveell\u00e4"
+  },
+  "show_candidates_500": {
+    "message": "N\u00e4yt\u00e4 ehdotusvalikko 500 ms:n viiveell\u00e4"
+  },
+  "show_candidates_5000": {
+    "message": "N\u00e4yt\u00e4 ehdotusvalikko 5 sekunnin viiveell\u00e4"
+  },
+  "show_candidates_backspace": {
+    "message": "N\u00e4yt\u00e4 ehdotusvalikko askelpalauttimella"
+  },
+  "show_hangul_candidate": {
+    "message": "N\u00e4yt\u00e4 ehdokkaat Hangul-tilassa"
+  },
+  "shrink_candidates": {
+    "message": "pienenn\u00e4 vaihtoehtoluettelo"
+  },
+  "si_slv_settings_page": {
+    "message": "Slovenian n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "sk_slo_settings_page": {
+    "message": "Slovakian n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "smiley": {
+    "message": "hymi\u00f6"
+  },
+  "sometimes_auto_correct": {
+    "message": "Maltillinen"
+  },
+  "sound_on_keypress": {
+    "message": "N\u00e4pp\u00e4in\u00e4\u00e4net"
+  },
+  "space": {
+    "message": "v\u00e4lily\u00f6nti"
+  },
+  "switch_to": {
+    "message": "vaihda kohteeseen "
+  },
+  "switch_to_compact_layout": {
+    "message": "Siirry tiiviiseen asetteluun"
+  },
+  "switch_to_full_layout": {
+    "message": "Siirry laajaan asetteluun"
+  },
+  "switch_to_keyboard_prefix": {
+    "message": "siirry n\u00e4pp\u00e4imist\u00f6\u00f6n "
+  },
+  "switched_to": {
+    "message": "vaihdettu kohteeseen "
+  },
+  "tab": {
+    "message": "sarkain"
+  },
+  "touch_keyboard": {
+    "message": "N\u00e4ytt\u00f6n\u00e4pp\u00e4imist\u00f6"
+  },
+  "tr_tur_settings_page": {
+    "message": "Turkin n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "transliteration_am": {
+    "message": "Translitteraatio (salam \u2192 \u1230\u120b\u121d)"
+  },
+  "transliteration_ar": {
+    "message": "Translitteraatio (marhaban \u2190 \u0645\u0631\u062d\u0628\u0627)"
+  },
+  "transliteration_be": {
+    "message": "Translitteraatio (pryvitannie \u2192 \u043f\u0440\u044b\u0432\u0456\u0442\u0430\u043d\u043d\u0435)"
+  },
+  "transliteration_bg": {
+    "message": "Translitteraatio (zdrasti \u2192 \u0437\u0434\u0440\u0430\u0441\u0442\u0438)"
+  },
+  "transliteration_bn": {
+    "message": "Translitteraatio (namaskar \u2192 \u09a8\u09ae\u09b8\u09cd\u0995\u09be\u09b0)"
+  },
+  "transliteration_el": {
+    "message": "Translitteraatio (geia \u2192 \u03b3\u03b5\u03b9\u03b1)"
+  },
+  "transliteration_fa": {
+    "message": "Translitteraatio (salam \u2190 \u0633\u0644\u0627\u0645)"
+  },
+  "transliteration_gu": {
+    "message": "Translitteraatio (namaste \u2192 \u0aa8\u0aae\u0ab8\u0acd\u0aa4\u0ac7)"
+  },
+  "transliteration_he": {
+    "message": "Translitteraatio (shalom \u2190 \u05e9\u05dc\u05d5\u05dd)"
+  },
+  "transliteration_hi": {
+    "message": "Translitteraatio (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_kn": {
+    "message": "Translitteraatio (namaskaram \u2192 \u0ca8\u0cae\u0cb8\u0ccd\u0c95\u0cbe\u0cb0)"
+  },
+  "transliteration_ml": {
+    "message": "Translitteraatio (namaskar \u2192 \u0d28\u0d2e\u0d38\u0d4d\u0d15\u0d3e\u0d30\u0d02)"
+  },
+  "transliteration_mr": {
+    "message": "Translitteraatio (namaste \u2192 \u0928\u092e\u0938\u094d\u0915\u093e\u0930)"
+  },
+  "transliteration_ne": {
+    "message": "Translitteraatio (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_or": {
+    "message": "Translitteraatio (mausam \u2192 \u0b28\u0b2e\u0b38\u0b4d\u0b24\u0b47)"
+  },
+  "transliteration_pa": {
+    "message": "Translitteraatio (mausam \u2192 \u0a2e\u0a4c\u0a38\u0a2e)"
+  },
+  "transliteration_ru": {
+    "message": "Translitteraatio (privet \u2192 \u043f\u0440\u0438\u0432\u0435\u0442)"
+  },
+  "transliteration_sa": {
+    "message": "Translitteraatio (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_si": {
+    "message": "Translitteraatio (halo \u2192 \u0dc4\u0dbd\u0ddd)"
+  },
+  "transliteration_sr": {
+    "message": "Translitteraatio (zdravo \u2192 \u0437\u0434\u0440\u0430\u0432\u043e)"
+  },
+  "transliteration_ta": {
+    "message": "Translitteraatio (vanakkam \u2192 \u0bb5\u0ba3\u0b95\u0bcd\u0b95\u0bae\u0bcd)"
+  },
+  "transliteration_te": {
+    "message": "Translitteraatio (emandi \u2192 \u0c0f\u0c2e\u0c02\u0c21\u0c40)"
+  },
+  "transliteration_ti": {
+    "message": "Translitteraatio (selam \u2192 \u1230\u120b\u121d)"
+  },
+  "transliteration_uk": {
+    "message": "Translitteraatio (pryvit \u2192 \u043f\u0440\u0438\u0432\u0456\u0442)"
+  },
+  "transliteration_ur": {
+    "message": "Translitteraatio (salam \u2190 \u0633\u0644\u0627\u0645)"
+  },
+  "transliteration_vi": {
+    "message": "Translitteraatio (chao \u2192 ch\u00e0o)"
+  },
+  "ua_ukr_settings_page": {
+    "message": "Ukrainan n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "up_arrow": {
+    "message": "yl\u00e4nuoli"
+  },
+  "us_altgr_intl_eng_settings_page": {
+    "message": "Yhdysvaltain englanninkielisen laajennetun n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "us_colemak_eng_settings_page": {
+    "message": "Yhdysvaltain englanninkielisen Colemak-n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "us_dvorak_eng_settings_page": {
+    "message": "Yhdysvaltain englanninkielisen Dvorak-n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "us_eng_settings_page": {
+    "message": "Yhdysvaltain englanninkielisen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "us_fil_settings_page": {
+    "message": "Yhdysvaltain filipinonkielisen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "us_ind_settings_page": {
+    "message": "Yhdysvaltain indonesiankielisen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "us_intl_eng_settings_page": {
+    "message": "Yhdysvaltain englanninkielisen kansainv\u00e4lisen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "us_intl_nld_settings_page": {
+    "message": "Yhdysvaltain kansainv\u00e4lisen hollanninkielisen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "us_intl_por_settings_page": {
+    "message": "Yhdysvaltain kansainv\u00e4lisen brasilianportugalin n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "us_msa_settings_page": {
+    "message": "Yhdysvaltain malaijinkielisen n\u00e4pp\u00e4imist\u00f6n asetukset"
+  },
+  "user_dict": {
+    "message": "Ota henkil\u00f6kohtainen sanakirja k\u00e4ytt\u00f6\u00f6n"
+  },
+  "user_dict_add": {
+    "message": "Lis\u00e4\u00e4"
+  },
+  "user_dict_clear": {
+    "message": "Tyhjenn\u00e4 kaikki"
+  },
+  "user_dict_manage": {
+    "message": "Hallinnoi omaa sanakirjaa\u2026"
+  },
+  "user_dict_new_word": {
+    "message": "Uusi sana"
+  },
+  "user_dict_remove": {
+    "message": "Poista valitut"
+  },
+  "user_dict_reset": {
+    "message": "Nollaa koko sanakirjan sis\u00e4lt\u00f6"
+  },
+  "user_dict_save": {
+    "message": "Tallenna"
+  },
+  "user_dict_sync": {
+    "message": "Synkronoi oma sanakirja"
+  },
+  "user_dict_title": {
+    "message": "Oma sanakirja"
+  },
+  "voice": {
+    "message": "Puhe"
+  },
+  "voice_privacy_info": {
+    "message": "\u00c4\u00e4nisy\u00f6tteesi l\u00e4hetet\u00e4\u00e4n Googlen palvelimille, jotta teksti voidaan tunnistaa."
+  },
+  "voice_turn_off": {
+    "message": "poista \u00e4\u00e4nisy\u00f6tety\u00f6kalu k\u00e4yt\u00f6st\u00e4"
+  },
+  "voice_turn_on": {
+    "message": "ota \u00e4\u00e4nisy\u00f6tety\u00f6kalu k\u00e4ytt\u00f6\u00f6n"
+  },
+  "wait": {
+    "message": "Odota"
+  },
+  "zhuyin_keyboard_layout": {
+    "message": "N\u00e4pp\u00e4imist\u00f6n tyyppi"
+  },
+  "zhuyin_page_size": {
+    "message": "Sivulla n\u00e4ytett\u00e4vien ehdotusten lukum\u00e4\u00e4r\u00e4"
+  },
+  "zhuyin_select_keys": {
+    "message": "Valintan\u00e4pp\u00e4imet"
+  },
+  "zhuyin_settings_page": {
+    "message": "Zhuyin-asetusten sivu"
+  }
+}

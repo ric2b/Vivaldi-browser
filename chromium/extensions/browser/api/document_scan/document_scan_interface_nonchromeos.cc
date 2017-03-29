@@ -1,0 +1,43 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "extensions/browser/api/document_scan/document_scan_interface.h"
+
+namespace {
+
+const char kScanFunctionNotImplementedError[] = "Scan function not implemented";
+
+}  // namespace
+
+namespace extensions {
+
+namespace core_api {
+
+class DocumentScanInterfaceImpl : public DocumentScanInterface {
+ public:
+  DocumentScanInterfaceImpl() {}
+  ~DocumentScanInterfaceImpl() override {}
+
+  void ListScanners(const ListScannersResultsCallback& callback) override {
+    callback.Run(std::vector<ScannerDescription>(), "");
+  }
+  void Scan(const std::string& scanner_name,
+            ScanMode mode,
+            int resolution_dpi,
+            const ScanResultsCallback& callback) override {
+    callback.Run("", "", kScanFunctionNotImplementedError);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(DocumentScanInterfaceImpl);
+};
+
+// static
+DocumentScanInterface* DocumentScanInterface::CreateInstance() {
+  return new DocumentScanInterfaceImpl();
+}
+
+}  // namespace core_api
+
+}  // namespace extensions

@@ -1,0 +1,16 @@
+include_rules = [
+  # chromecast/browser/ is the top-level main directory for the Chromecast
+  # embedder and can include from all other chromecast/ directories.
+  "+cc/base/switches.h",
+  "+chromecast",
+  "+components/cdm/browser",
+  "+components/crash",
+  "+components/devtools_discovery",
+  "+components/devtools_http_handler",
+  "+components/external_video_surface",
+  "+components/network_hints/browser",
+  "+content/public/browser",
+  "+gin/v8_initializer.h",
+  "+media/audio",
+  "+media/base",
+]

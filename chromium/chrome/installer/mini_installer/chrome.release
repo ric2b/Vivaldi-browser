@@ -1,0 +1,140 @@
+# Copyright (c) 2012 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+[GENERAL]
+#
+# Vivaldi Application dir entries, sorted alphabetically.
+#
+vivaldi.exe: %(ChromeDir)s\
+wow_helper.exe: %(ChromeDir)s\
+#
+# Chrome version dir assembly manifest.
+# The name of this file must match the name of the version dir, so we cannot
+# hard-code it.
+# // TODO(caitkp): Find a way to do this without wildcards.
+#
+*.*.*.*.manifest: %(VersionDir)s\
+#
+# Chrome version dir entries, sorted alphabetically.
+#
+vivaldi.dll: %(VersionDir)s\
+vivaldi_100_percent.pak: %(VersionDir)s\
+vivaldi_child.dll: %(VersionDir)s\
+vivaldi_elf.dll: %(VersionDir)s\
+d3dcompiler_46.dll: %(VersionDir)s\
+chrome_watcher.dll: %(VersionDir)s\
+d3dcompiler_47.dll: %(VersionDir)s\
+ffmpeg.dll: %(VersionDir)s\
+kasko.dll: %(VersionDir)s\
+icudt.dll: %(VersionDir)s\
+icudtl.dat: %(VersionDir)s\
+libEGL.dll: %(VersionDir)s\
+libexif.dll: %(VersionDir)s\
+libGLESv2.dll: %(VersionDir)s\
+nacl64.exe: %(VersionDir)s\
+nacl_irt_x86_32.nexe: %(VersionDir)s\
+nacl_irt_x86_64.nexe: %(VersionDir)s\
+natives_blob.bin: %(VersionDir)s\
+resources.pak: %(VersionDir)s\
+snapshot_blob.bin: %(VersionDir)s\
+syzyasan_rtl.dll: %(VersionDir)s\
+xinput1_3.dll: %(VersionDir)s\
+WinSparkle.dll: %(VersionDir)s\
+#
+# Sub directories living in the version dir
+#
+default_apps\*.crx: %(VersionDir)s\default_apps\
+default_apps\external_extensions.json: %(VersionDir)s\default_apps\
+resources\vivaldi\style\common.css: %(VersionDir)s\resources\vivaldi\style\
+resources\vivaldi\browser.html: %(VersionDir)s\resources\vivaldi\
+resources\vivaldi\components\startpage\startpage.html: %(VersionDir)s\resources\vivaldi\components\startpage\
+resources\vivaldi\components\settings\settings.html: %(VersionDir)s\resources\vivaldi\components\settings\
+resources\vivaldi\components\mail\mail.html: %(VersionDir)s\resources\vivaldi\components\mail\
+resources\vivaldi\components\contacts\contact.html: %(VersionDir)s\resources\vivaldi\components\contacts\
+resources\vivaldi\components\thumbnail\capture.html: %(VersionDir)s\resources\vivaldi\components\thumbnail\
+resources\vivaldi\*.js: %(VersionDir)s\resources\vivaldi\
+resources\vivaldi\resources\*: %(VersionDir)s\resources\vivaldi\resources\
+resources\vivaldi\default-bookmarks\*: %(VersionDir)s\resources\vivaldi\default-bookmarks\
+Extensions\*.*: %(VersionDir)s\Extensions\
+locales\*.dll: %(VersionDir)s\Locales
+locales\*.pak: %(VersionDir)s\Locales
+
+# locales
+resources\vivaldi\_locales\ar\messages.json: %(VersionDir)s\resources\vivaldi\_locales\ar
+resources\vivaldi\_locales\be\messages.json: %(VersionDir)s\resources\vivaldi\_locales\be
+resources\vivaldi\_locales\bg\messages.json: %(VersionDir)s\resources\vivaldi\_locales\bg
+resources\vivaldi\_locales\cs\messages.json: %(VersionDir)s\resources\vivaldi\_locales\cs
+resources\vivaldi\_locales\da\messages.json: %(VersionDir)s\resources\vivaldi\_locales\da
+resources\vivaldi\_locales\de\messages.json: %(VersionDir)s\resources\vivaldi\_locales\de
+resources\vivaldi\_locales\el\messages.json: %(VersionDir)s\resources\vivaldi\_locales\el
+resources\vivaldi\_locales\en\messages.json: %(VersionDir)s\resources\vivaldi\_locales\en
+resources\vivaldi\_locales\eo\messages.json: %(VersionDir)s\resources\vivaldi\_locales\eo
+resources\vivaldi\_locales\es\messages.json: %(VersionDir)s\resources\vivaldi\_locales\es
+resources\vivaldi\_locales\et\messages.json: %(VersionDir)s\resources\vivaldi\_locales\et
+resources\vivaldi\_locales\fa\messages.json: %(VersionDir)s\resources\vivaldi\_locales\fa
+resources\vivaldi\_locales\fi\messages.json: %(VersionDir)s\resources\vivaldi\_locales\fi
+resources\vivaldi\_locales\fr\messages.json: %(VersionDir)s\resources\vivaldi\_locales\fr
+resources\vivaldi\_locales\fy\messages.json: %(VersionDir)s\resources\vivaldi\_locales\fy
+resources\vivaldi\_locales\gl\messages.json: %(VersionDir)s\resources\vivaldi\_locales\gl
+resources\vivaldi\_locales\hu\messages.json: %(VersionDir)s\resources\vivaldi\_locales\hu
+resources\vivaldi\_locales\hr\messages.json: %(VersionDir)s\resources\vivaldi\_locales\hr
+resources\vivaldi\_locales\hy\messages.json: %(VersionDir)s\resources\vivaldi\_locales\hy
+resources\vivaldi\_locales\id\messages.json: %(VersionDir)s\resources\vivaldi\_locales\id
+resources\vivaldi\_locales\io\messages.json: %(VersionDir)s\resources\vivaldi\_locales\io
+resources\vivaldi\_locales\is\messages.json: %(VersionDir)s\resources\vivaldi\_locales\is
+resources\vivaldi\_locales\it\messages.json: %(VersionDir)s\resources\vivaldi\_locales\it
+resources\vivaldi\_locales\ja\messages.json: %(VersionDir)s\resources\vivaldi\_locales\ja
+resources\vivaldi\_locales\jbo\messages.json: %(VersionDir)s\resources\vivaldi\_locales\jbo
+resources\vivaldi\_locales\ko\messages.json: %(VersionDir)s\resources\vivaldi\_locales\ko
+resources\vivaldi\_locales\ku\messages.json: %(VersionDir)s\resources\vivaldi\_locales\ku
+resources\vivaldi\_locales\lt\messages.json: %(VersionDir)s\resources\vivaldi\_locales\lt
+resources\vivaldi\_locales\lv\messages.json: %(VersionDir)s\resources\vivaldi\_locales\lv
+resources\vivaldi\_locales\mk\messages.json: %(VersionDir)s\resources\vivaldi\_locales\mk
+resources\vivaldi\_locales\nb\messages.json: %(VersionDir)s\resources\vivaldi\_locales\nb
+resources\vivaldi\_locales\nl\messages.json: %(VersionDir)s\resources\vivaldi\_locales\nl
+resources\vivaldi\_locales\nn\messages.json: %(VersionDir)s\resources\vivaldi\_locales\nn
+resources\vivaldi\_locales\pl\messages.json: %(VersionDir)s\resources\vivaldi\_locales\pl
+resources\vivaldi\_locales\pt_BR\messages.json: %(VersionDir)s\resources\vivaldi\_locales\pt_BR
+resources\vivaldi\_locales\pt_PT\messages.json: %(VersionDir)s\resources\vivaldi\_locales\pt_PT
+resources\vivaldi\_locales\ro\messages.json: %(VersionDir)s\resources\vivaldi\_locales\ro
+resources\vivaldi\_locales\ru\messages.json: %(VersionDir)s\resources\vivaldi\_locales\ru
+resources\vivaldi\_locales\sk\messages.json: %(VersionDir)s\resources\vivaldi\_locales\sk
+resources\vivaldi\_locales\sl\messages.json: %(VersionDir)s\resources\vivaldi\_locales\sl
+resources\vivaldi\_locales\sq\messages.json: %(VersionDir)s\resources\vivaldi\_locales\sq
+resources\vivaldi\_locales\sr\messages.json: %(VersionDir)s\resources\vivaldi\_locales\sr
+resources\vivaldi\_locales\sv\messages.json: %(VersionDir)s\resources\vivaldi\_locales\sv
+resources\vivaldi\_locales\tr\messages.json: %(VersionDir)s\resources\vivaldi\_locales\tr
+resources\vivaldi\_locales\uk\messages.json: %(VersionDir)s\resources\vivaldi\_locales\uk
+resources\vivaldi\_locales\vi\messages.json: %(VersionDir)s\resources\vivaldi\_locales\vi
+resources\vivaldi\_locales\zh_CN\messages.json: %(VersionDir)s\resources\vivaldi\_locales\zh_CN
+resources\vivaldi\_locales\zh_TW\messages.json: %(VersionDir)s\resources\vivaldi\_locales\zh_TW
+
+# user css and scripts
+resources\vivaldi\user_files\*: %(VersionDir)s\resources\vivaldi\user_files
+
+[HIDPI]
+vivaldi_200_percent.pak: %(VersionDir)s\
+
+[TOUCH]
+
+[VIVALDI]
+delegate_execute.exe: %(VersionDir)s\
+metro_driver.dll: %(VersionDir)s\
+SecondaryTile.png: %(VersionDir)s\
+widevinecdmadapter.dll: %(VersionDir)s\
+#
+# Pepper Flash sub-dir.
+#
+PepperFlash\manifest.json: %(VersionDir)s\PepperFlash\
+PepperFlash\pepflashplayer.dll: %(VersionDir)s\PepperFlash\
+#
+# Win8 sub-dir.
+#
+# All or none of the following 3 files need to be present as the creation of
+# VisualElementsManifest.xml is based on the existence of
+# %(VersionDir)\VisualElements. On a similar note, no other files should be
+# packaged in this directory.
+Logo.png: %(VersionDir)s\VisualElements\
+SmallLogo.png: %(VersionDir)s\VisualElements\
+splash-620x300.png: %(VersionDir)s\VisualElements\

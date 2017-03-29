@@ -1,0 +1,16 @@
+<!--
+@WIN-DENY:*
+@WIN-ALLOW:EVENT_OBJECT_VALUECHANGE*
+@MAC-DENY:AXLayoutComplete*
+-->
+<!DOCTYPE html>
+<html>
+<body>
+<input id="c" type="text" value="Before">
+<script>
+  function go() {
+    document.getElementById('c').value = "After";
+  }
+</script>
+</body>
+</html>

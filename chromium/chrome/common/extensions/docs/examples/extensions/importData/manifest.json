@@ -1,0 +1,14 @@
+{
+  "manifest_version": 2,
+  "name": "chrome.importData test",
+  "version": "0.1",
+  "description": "Testing importData",
+  "app": {
+    "background": {
+      "scripts": ["main.js"]
+    }
+  },
+  "permissions": [
+     "importData","bookmarks"
+  ]
+}

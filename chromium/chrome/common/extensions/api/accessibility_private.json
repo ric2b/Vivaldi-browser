@@ -1,0 +1,71 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+[
+  {
+    "namespace": "accessibilityPrivate",
+    "compiler_options": {
+      "implemented_in": "chrome/browser/accessibility/accessibility_extension_api.h"
+    },
+    "description": "none",
+    "types": [
+      {
+        "id": "AlertInfo",
+        "type": "object",
+        "description": "Information about an alert",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "The message the alert is showing."
+          }
+        }
+      },
+      {
+        "id": "ScreenRect",
+        "type": "object",
+        "description": "Bounding rectangle in global screen coordinates.",
+        "properties": {
+          "left": {"type": "integer", "description": "Left coordinate in global screen coordinates."},
+          "top": {"type": "integer", "description": "Top coordinate in global screen coordinates."},
+          "width": {"type": "integer", "description": "Width in pixels."},
+          "height": {"type": "integer", "description": "Height in pixels."}
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "setNativeAccessibilityEnabled",
+        "type": "function",
+        "description": "Enables or disables native accessibility support. Once disabled, it is up to the calling extension to provide accessibility for web contents.",
+        "parameters": [
+          {
+            "type": "boolean",
+            "name": "enabled",
+            "description": "True if native accessibility support should be enabled."
+          }
+        ]
+      },
+      {
+        "name": "setFocusRing",
+        "type": "function",
+        "description": "Set the bounds of the accessibility focus ring.",
+        "parameters": [
+          {
+            "name": "rects",
+            "type": "array",
+            "items": { "$ref": "ScreenRect" },
+            "description": "Array of rectangles to draw the accessibility focus ring around."
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onIntroduceChromeVox",
+        "type": "function",
+        "description": "Fired whenever ChromeVox should output introduction."
+      }
+    ]
+  }
+]

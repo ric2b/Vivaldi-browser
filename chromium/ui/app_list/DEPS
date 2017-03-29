@@ -1,0 +1,17 @@
+include_rules = [
+  "+components/keyed_service/core",
+  "+skia",
+  "+sync",
+  "+third_party/google_toolbox_for_mac/src",
+  "+third_party/skia",
+  "+ui/accessibility",
+  "+ui/aura",
+  "+ui/base",
+  "+ui/compositor",
+  "+ui/events",
+  "+ui/gfx",
+  "+ui/resources/grit/ui_resources.h",
+  "+ui/strings/grit/ui_strings.h",
+  "+ui/views",
+  "+ui/wm/core",
+]

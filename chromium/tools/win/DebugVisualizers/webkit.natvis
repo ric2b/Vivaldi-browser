@@ -1,0 +1,137 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<AutoVisualizer
+    xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+  <Type Name="WTF::String">
+    <DisplayString Condition="m_impl.m_ptr == 0">(null)</DisplayString>
+    <DisplayString IncludeView="bare">{*m_impl.m_ptr,view(bare)}</DisplayString>
+    <DisplayString>{*m_impl.m_ptr}</DisplayString>
+    <Expand>
+      <Item Name="Impl">m_impl.m_ptr</Item>
+    </Expand>
+  </Type>
+  <Type Name="WTF::StringImpl">
+    <DisplayString IncludeView="bare"
+        Condition="m_is8Bit">{(this+1),[m_length]sb}</DisplayString>
+    <DisplayString
+        Condition="m_is8Bit">[{m_length}] {(this+1),[m_length]s}</DisplayString>
+    <DisplayString IncludeView="bare">{(this+1),[m_length]sub}</DisplayString>
+    <DisplayString>[{m_length}] {(this+1),[m_length]su}</DisplayString>
+    <Expand>
+      <Item Name="Length">m_length</Item>
+      <Item Name="Hash">m_hash</Item>
+      <Item Name="AsciiText" Condition="m_is8Bit">(this+1),[m_length]s</Item>
+      <Item Name="UnicodeText" Condition="!m_is8Bit">(this+1),[m_length]su</Item>
+    </Expand>
+  </Type>
+  <Type Name="WTF::AtomicString">
+    <DisplayString IncludeView="bare">{m_string,view(bare)}</DisplayString>
+    <DisplayString>{m_string}</DisplayString>
+  </Type>
+  <Type Name="WTF::Vector&lt;*&gt;">
+    <DisplayString Condition="m_size==0">(empty)</DisplayString>
+    <DisplayString Condition="m_size==1">[{m_size}] {m_buffer,1}</DisplayString>
+    <DisplayString Condition="m_size==2">[{m_size}] {m_buffer,2}</DisplayString>
+    <DisplayString Condition="m_size==3">[{m_size}] {m_buffer,3}</DisplayString>
+    <DisplayString Condition="m_size==4">[{m_size}] {m_buffer,4}</DisplayString>
+    <DisplayString
+        Condition="m_size>=5">[{m_size}] {m_buffer,4}...</DisplayString>
+    <Expand>
+      <Item Name="Buffer">m_buffer</Item>
+      <Item Name="Size">m_size</Item>
+      <Item Name="Capacity">m_capacity</Item>
+      <ArrayItems Condition="m_size>0">
+        <Size>m_size</Size>
+        <ValuePointer>m_buffer</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+  <Type Name="WTF::RefPtr&lt;*&gt;">
+    <AlternativeType Name="WTF::PassRefPtr&lt;*&gt;"/>
+    <DisplayString Condition="m_ptr == 0">null</DisplayString>
+    <DisplayString>{*m_ptr}</DisplayString>
+    <Expand>
+      <Item Name="Ptr">m_ptr</Item>
+    </Expand>
+  </Type>
+  <Type Name="blink::LayoutUnit">
+    <DisplayString>{(float)m_value / kFixedPointDenominator}</DisplayString>
+    <Expand>
+      <Item Name="FloatVal">(float)m_value / kFixedPointDenominator</Item>
+      <Item Name="RawVal">m_value</Item>
+    </Expand>
+  </Type>
+  <Type Name="blink::LayoutSize">
+    <AlternativeType Name="blink::IntSize"/>
+    <AlternativeType Name="blink::FloatSize"/>
+    <DisplayString>({m_width}, {m_height})</DisplayString>
+    <Expand>
+      <Item Name="Width">m_width</Item>
+      <Item Name="Height">m_height</Item>
+    </Expand>
+  </Type>
+  <Type Name="blink::LayoutPoint">
+    <AlternativeType Name="blink::IntPoint"/>
+    <AlternativeType Name="blink::FloatPoint"/>
+    <DisplayString>({m_x}, {m_y})</DisplayString>
+    <Expand>
+      <Item Name="X">m_x</Item>
+      <Item Name="Y">m_y</Item>
+    </Expand>
+  </Type>
+  <Type Name="blink::LayoutRect">
+    <AlternativeType Name="blink::IntRect"/>
+    <AlternativeType Name="blink::FloatRect"/>
+    <DisplayString>({m_location.m_x}, {m_location.m_y}) x ({m_size.m_width}, {m_size.m_height})</DisplayString>
+    <Expand>
+      <Item Name="Location">m_location</Item>
+      <Item Name="Size">m_size</Item>
+    </Expand>
+  </Type>
+  <Type Name="blink::WebRect">
+    <AlternativeType Name="blink::WebFloatRect"/>
+    <DisplayString>({x}, {y}) x ({width}, {height})</DisplayString>
+    <Expand>
+      <Item Name="x">x</Item>
+      <Item Name="y">x</Item>
+      <Item Name="width">x</Item>
+      <Item Name="height">x</Item>
+      <Synthetic Name="right">
+        <DisplayString>{x + width}</DisplayString>
+      </Synthetic>
+      <Synthetic Name="bottom">
+        <DisplayString>{y + height}</DisplayString>
+      </Synthetic>
+    </Expand>
+  </Type>
+  <Type Name="blink::WebPoint">
+    <AlternativeType Name="blink::WebFloatPoint"/>
+    <DisplayString>({x}, {y})</DisplayString>
+    <Expand>
+      <Item Name="x">x</Item>
+      <Item Name="y">y</Item>
+    </Expand>
+  </Type>
+  <Type Name="blink::QualifiedName">
+    <DisplayString Condition="m_impl.m_ptr == 0">(null)</DisplayString>
+    <DisplayString>{*m_impl.m_ptr}</DisplayString>
+  </Type>
+  <Type Name="blink::QualifiedName::QualifiedNameImpl">
+    <DisplayString>{m_localName,view(bare)}</DisplayString>
+  </Type>
+  <Type Name="blink::CharacterData">
+    <DisplayString>{m_data,view(bare)}</DisplayString>
+  </Type>
+  <Type Name="blink::ContainerNode">
+    <Expand>
+      <LinkedListItems>
+        <HeadPointer>m_firstChild.m_ptr</HeadPointer>
+        <NextPointer>m_next.m_ptr</NextPointer>
+        <ValueNode>this</ValueNode>
+      </LinkedListItems>
+    </Expand>
+  </Type>
+  <Type Name="blink::Element">
+    <DisplayString Condition="m_firstChild.m_ptr != 0">&lt;{m_tagName}>{*m_firstChild.m_ptr}</DisplayString>
+    <DisplayString>&lt;{m_tagName}></DisplayString>
+  </Type>
+</AutoVisualizer>

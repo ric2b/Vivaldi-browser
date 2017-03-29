@@ -1,0 +1,13 @@
+{
+  "name": "Packaged App Test: <webview> contextMenus API",
+  "description": "Verifies basic functionality of <webview> contextMenus API.",
+  "version": "1",
+  "permissions": [
+    "webview"
+  ],
+  "app": {
+    "background": {
+      "scripts": ["test.js"]
+    }
+  }
+}

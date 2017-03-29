@@ -1,0 +1,401 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//build/config/ui.gni")
+import("//testing/test.gni")
+
+gypi_values = exec_script("//build/gypi_to_gn.py",
+                          [ rebase_path("ash.gyp") ],
+                          "scope",
+                          [ "ash.gyp" ])
+
+component("ash") {
+  sources = gypi_values.ash_sources
+
+  defines = [ "ASH_IMPLEMENTATION" ]
+
+  public_deps = [
+    "//ash/resources",
+    "//ash/strings",
+  ]
+  deps = [
+    "//base",
+    "//base:i18n",
+    "//base/third_party/dynamic_annotations",
+    "//cc",
+    "//components/device_event_log",
+    "//components/user_manager",
+    "//components/wallpaper",
+    "//content/public/browser",
+    "//media",
+    "//net",
+    "//skia",
+    "//third_party/icu",
+    "//ui/accessibility",
+    "//ui/app_list",
+    "//ui/aura",
+    "//ui/base",
+    "//ui/base/ime",
+    "//ui/compositor",
+    "//ui/events",
+    "//ui/events:events_base",
+    "//ui/events:gesture_detection",
+    "//ui/events/devices",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/keyboard",
+    "//ui/message_center",
+    "//ui/resources",
+    "//ui/strings",
+    "//ui/views",
+    "//ui/views/controls/webview",
+    "//ui/web_dialogs",
+    "//ui/wm",
+    "//url",
+  ]
+
+  if (is_win) {
+    sources -= [
+      "sticky_keys/sticky_keys_controller.cc",
+      "sticky_keys/sticky_keys_controller.h",
+    ]
+
+    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+    configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+  }
+
+  if (use_x11) {
+    configs += [
+      "//build/config/linux:x11",
+      "//build/config/linux:xfixes",
+    ]
+    deps += [
+      "//ui/events/platform",
+      "//ui/gfx/x",
+    ]
+  } else {
+    sources -= [
+      "host/ash_window_tree_host_x11.cc",
+      "host/ash_window_tree_host_x11.h",
+      "wm/maximize_mode/scoped_disable_internal_mouse_and_keyboard_x11.cc",
+      "wm/maximize_mode/scoped_disable_internal_mouse_and_keyboard_x11.h",
+    ]
+  }
+
+  if (use_ozone) {
+    deps += [
+      "//ui/events/ozone:events_ozone",
+      "//ui/ozone",
+    ]
+  }
+
+  if (is_chromeos) {
+    deps += [
+      "//device/bluetooth",
+      "//ui/display",
+      "//ui/display/util",
+      "//chromeos",
+      "//chromeos:power_manager_proto",
+      "//third_party/qcms",
+      "//ui/chromeos/resources",
+      "//ui/chromeos/strings",
+      "//ui/chromeos:ui_chromeos",
+    ]
+  } else {
+    sources -= [
+      "accelerators/key_hold_detector.cc",
+      "accelerators/key_hold_detector.h",
+      "accelerators/magnifier_key_scroller.cc",
+      "accelerators/magnifier_key_scroller.h",
+      "accelerators/spoken_feedback_toggler.cc",
+      "accelerators/spoken_feedback_toggler.h",
+      "display/display_configurator_animation.cc",
+      "display/display_configurator_animation.h",
+      "display/resolution_notification_controller.cc",
+      "display/resolution_notification_controller.h",
+      "system/tray/media_security/media_capture_observer.h",
+      "system/tray/media_security/multi_profile_media_tray_item.cc",
+      "system/tray/media_security/multi_profile_media_tray_item.h",
+      "touch/touch_transformer_controller.cc",
+      "touch/touch_transformer_controller.h",
+      "touch/touchscreen_util.cc",
+      "touch/touchscreen_util.h",
+      "virtual_keyboard_controller.cc",
+      "virtual_keyboard_controller.h",
+    ]
+  }
+
+  if (!use_ozone) {
+    sources -= [
+      "host/ash_window_tree_host_ozone.cc",
+      "wm/maximize_mode/scoped_disable_internal_mouse_and_keyboard_ozone.cc",
+      "wm/maximize_mode/scoped_disable_internal_mouse_and_keyboard_ozone.h",
+    ]
+  }
+}
+
+component("ash_with_content") {
+  sources = [
+    "content_support/ash_with_content_export.h",
+    "content_support/gpu_support_impl.cc",
+    "content_support/gpu_support_impl.h",
+    "keyboard_overlay/keyboard_overlay_delegate.cc",
+    "keyboard_overlay/keyboard_overlay_delegate.h",
+    "keyboard_overlay/keyboard_overlay_view.cc",
+    "keyboard_overlay/keyboard_overlay_view.h",
+  ]
+
+  defines = [ "ASH_WITH_CONTENT_IMPLEMENTATION" ]
+
+  public_deps = [
+    ":ash",
+  ]
+  deps = [
+    "//base",
+    "//base/third_party/dynamic_annotations",
+    "//content/public/browser",
+    "//ipc",
+    "//skia",
+    "//ui/aura",
+    "//ui/base",
+    "//ui/compositor",
+    "//ui/events",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/resources",
+    "//ui/strings",
+    "//ui/views",
+    "//ui/views/controls/webview",
+    "//ui/web_dialogs",
+    "//url",
+  ]
+}
+
+static_library("test_support") {
+  testonly = true
+  sources = gypi_values.ash_test_support_sources
+
+  public_deps = [
+    ":ash",
+  ]
+  deps = [
+    "//ash/resources",
+    "//content/test:test_support",
+    "//skia",
+    "//testing/gtest",
+    "//ui/accessibility",
+    "//ui/app_list",
+    "//ui/app_list:test_support",
+    "//ui/events:events_base",
+    "//ui/events/devices",
+    "//ui/gl",
+    "//ui/views",
+    "//ui/views:test_support",
+  ]
+
+  if (is_win) {
+    sources += [
+      "test/test_metro_viewer_process_host.cc",
+      "test/test_metro_viewer_process_host.h",
+    ]
+    deps += [
+      "//ipc",
+      "//ui/metro_viewer",
+      "//ui/platform_window/win",
+      "//win8:metro_viewer",
+      "//win8:test_support_win8",
+      "//win8:test_registrar",
+    ]
+  }
+}
+
+static_library("ash_shell_lib") {
+  testonly = true
+  sources = gypi_values.ash_shell_lib_sources
+
+  deps = [
+    ":ash",
+    ":ash_with_content",
+    ":test_support",
+    "//ash/resources",
+    "//ash/strings",
+    "//base",
+    "//base:i18n",
+
+    #"//chrome:packed_resources",  TODO(GYP)
+    "//content",
+    "//content/shell:content_shell_lib",
+    "//net",
+    "//skia",
+    "//third_party/icu",
+    "//ui/app_list",
+    "//ui/aura",
+    "//ui/base",
+    "//ui/base/ime",
+    "//ui/compositor",
+    "//ui/events",
+    "//ui/events:events_base",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/keyboard",
+    "//ui/message_center",
+    "//ui/resources",
+    "//ui/views",
+    "//ui/views:test_support",
+    "//ui/views/examples:views_examples_lib",
+    "//ui/views/examples:views_examples_with_content_lib",
+  ]
+}
+
+test("ash_unittests") {
+  sources = gypi_values.ash_unittests_sources
+
+  deps = [
+    ":ash",
+    ":ash_with_content",
+    ":test_support",
+    "//ash/resources",
+    "//ash/strings",
+    "//base",
+    "//base/allocator",
+    "//base/test:test_support",
+    "//components/user_manager",
+    "//content/public/browser",
+    "//content/test:test_support",
+    "//skia",
+    "//testing/gtest",
+    "//third_party/icu",
+    "//ui/accessibility",
+    "//ui/aura",
+    "//ui/aura:test_support",
+    "//ui/base",
+    "//ui/base/ime",
+    "//ui/base:test_support",
+    "//ui/compositor",
+    "//ui/compositor:test_support",
+    "//ui/events",
+    "//ui/events/devices",
+    "//ui/events:test_support",
+    "//ui/events:gesture_detection",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/keyboard",
+    "//ui/message_center",
+    "//ui/message_center:test_support",
+    "//ui/resources",
+    "//ui/views",
+    "//ui/views:test_support",
+    "//ui/views/controls/webview:test_support",
+    "//ui/web_dialogs:test_support",
+    "//ui/wm",
+    "//url",
+  ]
+
+  if (!is_chromeos) {
+    sources -= [
+      # TODO(zork): fix this test to build on Windows. See: crosbug.com/26906
+      "focus_cycler_unittest.cc",
+
+      # All tests for multiple displays: not supported on Windows Ash.
+      "wm/drag_window_resizer_unittest.cc",
+
+      # Accelerometer is only available on Chrome OS.
+      "wm/maximize_mode/maximize_mode_controller_unittest.cc",
+
+      # Can't resize on Windows Ash. http://crbug.com/165962
+      "autoclick/autoclick_unittest.cc",
+      "magnifier/magnification_controller_unittest.cc",
+      "sticky_keys/sticky_keys_overlay_unittest.cc",
+      "system/tray/media_security/multi_profile_media_tray_item_unittest.cc",
+      "virtual_keyboard_controller_unittest.cc",
+      "wm/workspace/workspace_window_resizer_unittest.cc",
+    ]
+    sources += [
+      #'<(SHARED_INTERMEDIATE_DIR)/ui/resources/ui_unscaled_resources.rc',  TODO(GYP)
+    ]
+  }
+
+  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+
+  if (!use_x11) {
+    sources -= [ "host/ash_window_tree_host_x11_unittest.cc" ]
+  }
+  if (is_chromeos) {
+    sources += [ "first_run/first_run_helper_unittest.cc" ]
+    deps += [
+      "//device/bluetooth",
+      "//ui/display",
+      "//ui/display:test_util",
+      "//ui/display/types",
+      "//chromeos:power_manager_proto",
+      "//chromeos:test_support_without_gmock",
+    ]
+  } else {
+    sources -= [
+      "accelerators/magnifier_key_scroller_unittest.cc",
+      "accelerators/spoken_feedback_toggler_unittest.cc",
+      "display/resolution_notification_controller_unittest.cc",
+      "touch/touchscreen_util_unittest.cc",
+    ]
+  }
+
+  if (!use_x11 || !is_chromeos) {
+    sources -= [ "touch/touch_transformer_controller_unittest.cc" ]
+  }
+
+  # TODO(GYP) is this necessary?
+  #['OS=="linux" and component=="shared_library" and use_allocator!="none"', {
+  # ldflags = "-rdynamic"
+
+  if (!is_chromeos || use_ozone) {
+    sources -= [ "sticky_keys/sticky_keys_unittest.cc" ]  # crbug.com/354035
+  }
+}
+
+executable("ash_shell") {
+  testonly = true
+  sources = [
+    "shell/shell_main.cc",
+  ]
+
+  deps = [
+    ":ash_shell_lib",
+    "//components/user_manager",
+  ]
+
+  if (is_win) {
+    configs -= [ "//build/config/win:console" ]
+    configs += [ "//build/config/win:windowed" ]
+    deps += [ "//sandbox" ]
+  }
+
+  if (is_chromeos) {
+    deps += [ "//device/bluetooth" ]
+  }
+}
+
+test("ash_shell_unittests") {
+  sources = [
+    "shell/window_watcher_unittest.cc",
+    "test/ash_unittests.cc",
+  ]
+
+  deps = [
+    ":ash_shell_lib",
+    ":test_support",
+    "//base/test:test_support",
+    "//components/user_manager",
+    "//content/test:test_support",
+    "//skia",
+    "//testing/gtest",
+    "//ui/accessibility",
+  ]
+
+  if (is_chromeos) {
+    deps += [ "//ui/display" ]
+  }
+}
+# When adding support for isolates, please have a look at run-time dependencies
+# in the ash_unittests_run target in ash.gyp.

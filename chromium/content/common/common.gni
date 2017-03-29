@@ -1,0 +1,22 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# This file defines the content common gypi values. This file is read once and
+# cached, which is a performance optimization that allows us to share the
+# results of parsing the .gypi file between the public and private BUILD.gn
+# files. It also saves us from duplicating this exec_script call.
+content_common_gypi_values =
+    exec_script("//build/gypi_to_gn.py",
+                [ rebase_path("../content_common.gypi") ],
+                "scope",
+                [ "../content_common.gypi" ])
+
+declare_args() {
+  # Indicates if V4L plugin is used.
+  use_v4lplugin = false
+
+  # Indicates if Video4Linux2 codec is used. This is used for all CrOS
+  # platforms which have v4l2 hardware encoder / decoder.
+  use_v4l2_codec = false
+}

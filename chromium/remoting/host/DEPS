@@ -1,0 +1,17 @@
+include_rules = [
+  "+ash",
+  "+cc/output",
+  "+components/policy/core/common",
+  "+extensions/browser/api/messaging",
+  "+jingle/glue",
+  "+net",
+  "+remoting/codec",
+  "+remoting/protocol",
+  "+remoting/signaling",
+  "+remoting/tools",
+  "+third_party/jsoncpp",
+  "+third_party/modp_b64",
+  "+third_party/skia",
+  "+third_party/webrtc",
+  "+ui",
+]

@@ -1,0 +1,40 @@
+<link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
+<dom-module name="issue-banner">
+  <link rel="import" type="css" href="../../media_router_common.css">
+  <link rel="import" type="css" href="issue_banner.css">
+  <template>  
+    <div id="blocking-issue"
+        hidden$="[[computeIsBlockingIssueHidden_(issue)]]">
+      <div id="blocking-issue-header">
+        <div id="sad-face"></div>
+        <div>
+          <div id="blocking-issue-title">[[issue.title]]</div>
+          <div id="blocking-issue-message">[[issue.message]]</div>
+        </div>
+      </div>
+      <div id="blocking-issue-buttons">
+        <paper-button raised id="blocking-opt" class="button"
+            on-click="onClickOptAction_"
+            hidden$="[[computeOptionalActionHidden_(issue)]]">
+          <span>[[secondaryActionButtonText_]]</span>
+        </paper-button>
+        <paper-button raised id="blocking-default"
+            class="button action"
+            on-click="onClickDefaultAction_">
+          <span>[[defaultActionButtonText_]]</span>
+        </paper-button>
+      </div>
+    </div>
+    <div id="non-blocking-issue"
+        hidden$="[[computeIsNonBlockingIssueHidden_(issue)]]">
+      <div id="non-blocking-message">[[issue.message]]</div>
+      <span id="non-blocking-opt" on-click="onClickOptAction_"
+          hidden$="[[computeOptionalActionHidden_(issue)]]"
+          class="issue-action">[[secondaryActionButtonText_]]</span>
+      <span id="non-blocking-default" on-click="onClickDefaultAction_"
+          class="issue-action">[[defaultActionButtonText_]]</span>
+    </div>
+  </template>
+<script src="issue_banner.js"></script>
+</dom-module>

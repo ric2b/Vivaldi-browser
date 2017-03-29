@@ -1,0 +1,236 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/config.gni")
+import("//build/config/android/rules.gni")
+import("//build/module_args/v8.gni")
+import("//third_party/icu/config.gni")
+
+generate_jni("content_shell_jni_headers") {
+  jni_package = "content/shell"
+  sources = [
+    "java/src/org/chromium/content_shell/Shell.java",
+    "java/src/org/chromium/content_shell/ShellLayoutTestUtils.java",
+    "java/src/org/chromium/content_shell/ShellManager.java",
+    "java/src/org/chromium/content_shell/ShellMojoTestUtils.java",
+  ]
+}
+
+shared_library("libcontent_shell_content_view") {
+  testonly = true
+  deps = [
+    ":content_shell_jni_headers",
+    "//content/shell:content_shell_lib",
+    "//content/shell:pak",
+    "//components/crash/browser",
+    "//skia",
+    "//media/base/android",
+  ]
+  sources = [
+    "shell_library_loader.cc",
+  ]
+}
+
+android_resources("content_shell_java_resources") {
+  testonly = true
+  resource_dirs = [ "java/res" ]
+  custom_package = "org.chromium.content_shell"
+}
+
+android_library("content_shell_java") {
+  testonly = true
+  deps = [
+    "//base:base_java",
+    "//content/public/android:content_java",
+    "//media/base/android:media_java",
+    "//net/android:net_java",
+    "//third_party/mojo/src/mojo/public/java:system",
+    "//ui/android:ui_java",
+    ":content_shell_java_resources",
+  ]
+  DEPRECATED_java_in_dir = "java/src"
+}
+
+content_shell_manifest =
+    "$target_gen_dir/content_shell_manifest/AndroidManifest.xml"
+
+jinja_template("content_shell_manifest") {
+  testonly = true
+  input = "shell_apk/AndroidManifest.xml.jinja2"
+  output = content_shell_manifest
+}
+
+android_resources("content_shell_apk_resources") {
+  testonly = true
+  resource_dirs = [ "shell_apk/res" ]
+  deps = [
+    ":content_shell_java_resources",
+    ":content_shell_manifest",
+  ]
+  android_manifest = content_shell_manifest
+}
+
+android_library("content_shell_apk_java") {
+  testonly = true
+  deps = [
+    ":content_shell_apk_resources",
+    ":content_shell_java",
+    "//base:base_java",
+    "//content/public/android:content_java",
+    "//media/base/android:media_java",
+    "//net/android:net_java",
+    "//ui/android:ui_java",
+  ]
+  DEPRECATED_java_in_dir = "shell_apk/src"
+}
+
+content_shell_assets_dir = "$root_build_dir/content_shell/assets"
+copy_ex("copy_content_shell_assets") {
+  clear_dir = true
+  dest = content_shell_assets_dir
+  sources = [
+    "$root_out_dir/content_shell.pak",
+  ]
+  deps = [
+    "//content/shell:pak",
+  ]
+
+  if (icu_use_data_file) {
+    sources += [ "$root_build_dir/icudtl.dat" ]
+    deps += [ "//third_party/icu:icudata" ]
+  }
+  if (v8_use_external_startup_data) {
+    sources += [
+      "$root_build_dir/natives_blob.bin",
+      "$root_build_dir/snapshot_blob.bin",
+    ]
+    deps += [ "//v8" ]
+  }
+}
+
+android_apk("content_shell_apk") {
+  use_chromium_linker = true
+  testonly = true
+  data_deps = [
+    # "//tools/android/forwarder",
+  ]
+  deps = [
+    ":content_shell_apk_java",
+    ":content_shell_apk_resources",
+    ":content_shell_java",
+    ":content_shell_manifest",
+    ":copy_content_shell_assets",
+    ":libcontent_shell_content_view",
+    "//base:base_java",
+    "//content/public/android:content_java",
+    "//media/base/android:media_java",
+    "//net/android:net_java",
+
+    #"//third_party/mesa:osmesa_in_lib_dir",
+    "//ui/android:ui_java",
+  ]
+  apk_name = "ContentShell"
+  android_manifest = content_shell_manifest
+  native_libs = [ "libcontent_shell_content_view.so" ]
+  asset_location = content_shell_assets_dir
+
+  # TODO(GYP)
+  #'extra_native_libs': ['<(SHARED_LIB_DIR)/libosmesa.so'],
+}
+
+android_library("content_shell_test_java") {
+  testonly = true
+  deps = [
+    ":content_shell_java",
+    ":content_shell_apk_java",
+    "//base:base_java",
+    "//base:base_java_test_support",
+    "//content/public/test/android:content_java_test_support",
+    "//content/shell/android:content_shell_java",
+    "//content/public/android:content_java",
+  ]
+  DEPRECATED_java_in_dir = "javatests/src"
+}
+
+instrumentation_test_apk("content_shell_test_apk") {
+  deps = [
+    "//content/public/android:content_javatests",
+    "//base:base_javatests",
+    "//net/android:net_javatests",
+  ]
+  data_deps = [ ":content_shell_apk" ]
+  apk_under_test = ":content_shell_apk"
+  apk_name = "ContentShellTest"
+  android_manifest = "javatests/AndroidManifest.xml"
+  isolate_file = "../../content_shell_test_apk.isolate"
+}
+
+if (current_cpu != "x64" && current_cpu != "arm64") {
+  chromium_linker_test_manifest =
+      "$target_gen_dir/linker_test_apk/AndroidManifest.xml"
+
+  jinja_template("chromium_linker_test_manifest") {
+    testonly = true
+    input = "linker_test_apk/AndroidManifest.xml.jinja2"
+    output = chromium_linker_test_manifest
+  }
+
+  android_resources("linker_resources") {
+    testonly = true
+    resource_dirs = [ "linker_test_apk/res" ]
+    android_manifest = chromium_linker_test_manifest
+    deps = [
+      ":chromium_linker_test_manifest",
+    ]
+  }
+
+  # GYP: //content/content_tests.gypi:chromium_linker_test_apk
+  android_apk("chromium_linker_test_apk") {
+    testonly = true
+    deps = [
+      ":chromium_linker_test_manifest",
+      ":content_shell_java",
+      ":copy_content_shell_assets",
+      ":linker_resources",
+      ":linker_test",
+      "//base:base_java",
+      "//content/public/android:content_java",
+      "//ui/android:ui_java",
+    ]
+    android_manifest = chromium_linker_test_manifest
+    asset_location = content_shell_assets_dir
+    apk_name = "ChromiumLinkerTest"
+    DEPRECATED_java_in_dir = "linker_test_apk/src"
+    native_libs = [ "liblinker_test.so" ]
+    use_chromium_linker = true
+    enable_chromium_linker_tests = true
+  }
+
+  # GYP: //content/content_tests.gypi:chromium_android_linker_test
+  shared_library("linker_test") {
+    testonly = true
+    sources = [
+      "linker_test_apk/chromium_linker_test_android.cc",
+      "linker_test_apk/chromium_linker_test_linker_tests.cc",
+    ]
+
+    deps = [
+      ":linker_test_jni_headers",
+      "//content/shell:content_shell_lib",
+
+      # Required to include "content/public/browser/android/compositor.h"
+      # in chromium_linker_test_android.cc :-(
+      "//skia",
+    ]
+  }
+
+  # GYP: //content/content_tests.gypi:chromium_android_linker_test_jni_headers
+  generate_jni("linker_test_jni_headers") {
+    testonly = true
+    jni_package = "content/shell"
+    sources = [
+      "linker_test_apk/src/org/chromium/chromium_linker_test_apk/LinkerTests.java",
+    ]
+  }
+}

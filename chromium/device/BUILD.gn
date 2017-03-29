@@ -1,0 +1,169 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//testing/test.gni")
+
+if (is_android) {
+  import("//build/config/android/rules.gni")  # For generate_jni().
+}
+
+if (is_mac) {
+  import("//build/config/mac/mac_sdk.gni")
+}
+
+is_linux_without_udev = is_linux && !use_udev
+is_linux_without_dbus = is_linux && !use_dbus
+
+test("device_unittests") {
+  sources = [
+    "battery/battery_status_manager_win_unittest.cc",
+    "battery/battery_status_service_unittest.cc",
+    "bluetooth/bluetooth_adapter_mac_unittest.mm",
+    "bluetooth/bluetooth_adapter_profile_chromeos_unittest.cc",
+    "bluetooth/bluetooth_adapter_unittest.cc",
+    "bluetooth/bluetooth_adapter_win_unittest.cc",
+    "bluetooth/bluetooth_advertisement_chromeos_unittest.cc",
+    "bluetooth/bluetooth_audio_sink_chromeos_unittest.cc",
+    "bluetooth/bluetooth_chromeos_unittest.cc",
+    "bluetooth/bluetooth_device_unittest.cc",
+    "bluetooth/bluetooth_device_win_unittest.cc",
+    "bluetooth/bluetooth_discovery_filter_unittest.cc",
+    "bluetooth/bluetooth_gatt_chromeos_unittest.cc",
+    "bluetooth/bluetooth_low_energy_win_unittest.cc",
+    "bluetooth/bluetooth_service_record_win_unittest.cc",
+    "bluetooth/bluetooth_socket_chromeos_unittest.cc",
+    "bluetooth/bluetooth_task_manager_win_unittest.cc",
+    "bluetooth/bluetooth_uuid_unittest.cc",
+    "bluetooth/test/bluetooth_test.cc",
+    "bluetooth/test/bluetooth_test.h",
+    "bluetooth/test/bluetooth_test_android.cc",
+    "bluetooth/test/bluetooth_test_android.h",
+    "bluetooth/test/test_bluetooth_adapter_observer.cc",
+    "bluetooth/test/test_bluetooth_adapter_observer.h",
+    "nfc/nfc_chromeos_unittest.cc",
+    "nfc/nfc_ndef_record_unittest.cc",
+    "test/run_all_unittests.cc",
+  ]
+
+  deps = [
+    "//base/test:test_support",
+    "//device/battery",
+    "//device/battery:mojo_bindings",
+    "//device/bluetooth",
+    "//device/nfc",
+    "//mojo/environment:chromium",
+    "//net",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/mojo/src/mojo/edk/system",
+    "//third_party/mojo/src/mojo/public/cpp/bindings",
+    "//url",
+  ]
+
+  if (!is_linux_without_dbus && !is_chromeos) {
+    sources += [ "battery/battery_status_manager_linux_unittest.cc" ]
+  }
+
+  # HID and Serial:
+  # Android doesn't compile.
+  # Linux, requires udev.
+  if (!is_linux_without_udev && !is_android) {
+    sources += [
+      "hid/hid_connection_unittest.cc",
+      "hid/hid_device_filter_unittest.cc",
+      "hid/hid_report_descriptor_unittest.cc",
+      "hid/input_service_linux_unittest.cc",
+      "hid/test_report_descriptors.cc",
+      "hid/test_report_descriptors.h",
+      "serial/data_sink_unittest.cc",
+      "serial/data_source_unittest.cc",
+      "serial/serial_connection_unittest.cc",
+      "serial/serial_service_unittest.cc",
+    ]
+    deps += [
+      "//device/hid",
+      "//device/serial",
+      "//device/serial:test_support",
+    ]
+  }
+
+  if (use_udev) {
+    sources += [ "udev_linux/udev_unittest.cc" ]
+    deps += [ "//device/udev_linux" ]
+  }
+
+  # USB does not compile on mobile platforms.
+  if (!is_android && !is_ios) {
+    sources += [
+      "devices_app/usb/device_impl_unittest.cc",
+      "devices_app/usb/device_manager_impl_unittest.cc",
+      "test/usb_test_gadget_impl.cc",
+      "usb/usb_context_unittest.cc",
+      "usb/usb_descriptors_unittest.cc",
+      "usb/usb_device_filter_unittest.cc",
+      "usb/usb_device_handle_unittest.cc",
+      "usb/usb_ids_unittest.cc",
+      "usb/usb_service_unittest.cc",
+    ]
+    deps += [
+      "//device/core",
+      "//device/devices_app:lib",
+      "//device/devices_app/usb/public/cpp",
+      "//device/devices_app/usb/public/interfaces",
+      "//device/usb",
+      "//device/usb:mocks",
+      "//third_party/libusb",
+    ]
+  }
+
+  if (is_android) {
+    deps += [ ":bluetooth_test_jni_headers" ]
+    apk_deps = [ ":bluetooth_test_java" ]
+  }
+
+  if (is_chromeos) {
+    configs += [ "//build/config/linux:dbus" ]
+
+    deps += [
+      "//chromeos",
+      "//chromeos:test_support",
+      "//chromeos:test_support_without_gmock",
+      "//dbus",
+    ]
+  }
+
+  if (is_posix && !is_android && !is_mac) {
+    libs = [ "rt" ]
+  }
+
+  if (is_mac) {
+    libs = [ "IOBluetooth.framework" ]
+
+    # In the OSX 10.10 SDK, CoreBluetooth became a top level framework.
+    # Previously, it was nested in IOBluetooth. In order for Chrome to run on
+    # OSes older than OSX 10.10, the top level CoreBluetooth framework must be
+    # weakly linked.
+    if (mac_sdk_version == "10.10") {
+      ldflags = [ "-weak_framework CoreBluetooth" ]
+    }
+  }
+}
+
+if (is_android) {
+  bluetooth_java_sources_needing_jni = [ "bluetooth/test/android/java/src/org/chromium/device/bluetooth/Fakes.java" ]
+
+  generate_jni("bluetooth_test_jni_headers") {
+    sources = bluetooth_java_sources_needing_jni
+    jni_package = "bluetooth"
+  }
+
+  android_library("bluetooth_test_java") {
+    java_files = bluetooth_java_sources_needing_jni
+    deps = [
+      "//base:base_java",
+      "//device/bluetooth:java",
+    ]
+  }
+}

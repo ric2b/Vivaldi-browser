@@ -1,0 +1,137 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// This is the implementation layer of the chrome.automation API, and is
+// essentially a translation of the internal accessibility tree update system
+// into an extension API.
+namespace automationInternal {
+  dictionary Rect {
+    long left;
+    long top;
+    long width;
+    long height;
+  };
+
+  // A compact representation of the accessibility information for a
+  // single web object, in a form that can be serialized and sent from
+  // one process to another.
+  // See ui/accessibility/ax_node_data.h
+  dictionary AXNodeData {
+    long id;
+    DOMString role;
+    object state;
+    Rect location;
+
+    object? boolAttributes;
+    object? floatAttributes;
+    object? htmlAttributes;
+    object? intAttributes;
+    object? intlistAttributes;
+    object? stringAttributes;
+    long[] childIds;
+  };
+
+  dictionary AXTreeUpdate {
+    // ID of the node, if any, which should be invalidated before the new data
+    // is applied.
+    long nodeIdToClear;
+
+    // A vector of nodes to update according to the rules described in
+    // ui/accessibility/ax_tree_update.h.
+    AXNodeData[] nodes;
+  };
+
+  // Data for an accessibility event and/or an atomic change to an accessibility
+  // tree. See ui/accessibility/ax_tree_update.h for an extended explanation of
+  // the tree update format.
+  dictionary AXEventParams {
+    // The tree id of the web contents that this update is for.
+    long treeID;
+
+    // ID of the node that the event applies to.
+    long targetID;
+
+    // The type of event that this update represents.
+    DOMString eventType;
+
+    // Serialized changes to the tree structure and node data that should be
+    // applied before processing the event.
+    AXTreeUpdate update;
+  };
+
+  // All possible actions that can be performed on automation nodes.
+  enum ActionType {
+    focus,
+    doDefault,
+    makeVisible,
+    setSelection,
+    showContextMenu
+  };
+
+  // Arguments required for all actions supplied to performAction.
+  dictionary PerformActionRequiredParams {
+    long treeID;
+    long automationNodeID;
+    ActionType actionType;
+  };
+
+  // Arguments for the set_selection action supplied to performAction.
+  dictionary SetSelectionParams {
+    long startIndex;
+    long endIndex;
+  };
+
+  // Arguments for the querySelector function.
+  dictionary QuerySelectorRequiredParams {
+    long treeID;
+    long automationNodeID;
+    DOMString selector;
+  };
+
+  // Arguments for the enableTab function.
+  dictionary EnableTabParams {
+    long routingID;
+    long? tabID;
+  };
+
+  // Returns the accessibility tree id of the web contents who's accessibility
+  // was enabled using enableTab().
+  callback EnableTabCallback = void(long tree_id);
+
+  // Callback called when enableDesktop() returns.
+  callback EnableDesktopCallback = void();
+
+  // Callback called when querySelector() returns.
+  callback QuerySelectorCallback = void(long resultAutomationNodeID);
+
+  interface Functions {
+    // Enable automation of the tab with the given id, or the active tab if no
+    // tab id is given, and retrieves accessibility tree id for use in
+    // future updates.
+    static void enableTab(EnableTabParams args,
+                          EnableTabCallback callback);
+
+    // Enable automation of the frame with the given tree id.
+    static void enableFrame(long tree_id);
+
+    // Enables desktop automation.
+    static void enableDesktop(long routingID,
+                              EnableDesktopCallback callback);
+
+    // Performs an action on an automation node.
+    static void performAction(PerformActionRequiredParams args,
+                              object opt_args);
+
+    // Performs a query selector query.
+    static void querySelector(QuerySelectorRequiredParams args,
+                              QuerySelectorCallback callback);
+  };
+
+  interface Events {
+    // Fired when an accessibility event occurs
+    static void onAccessibilityEvent(AXEventParams update);
+
+    static void onAccessibilityTreeDestroyed(long treeID);
+  };
+};

@@ -1,0 +1,32 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//testing/test.gni")
+
+# GYP version: mojo/mojo_converters.gypi:mojo_surfaces_lib_unittests
+test("mojo_surfaces_lib_unittests") {
+  deps = [
+    "//base",
+    "//base/test:test_support",
+    "//cc",
+    "//cc/surfaces",
+    "//components/view_manager/public/interfaces",
+    "//gpu",
+    "//mojo/converters/geometry",
+    "//mojo/converters/surfaces",
+    "//mojo/converters/transform",
+    "//mojo/environment:chromium",
+    "//skia",
+    "//testing/gtest",
+    "//third_party/mojo/src/mojo/edk/test:run_all_unittests",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/gfx:test_support",
+    "//ui/mojo/geometry:interfaces",
+  ]
+
+  sources = [
+    "surface_unittest.cc",
+  ]
+}

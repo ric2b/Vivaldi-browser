@@ -1,0 +1,3337 @@
+{
+  "add_to_dictionary": {
+    "message": "S\u00f6zl\u00fc\u011fe ekle"
+  },
+  "add_to_personal_dictionary": {
+    "message": "Ki\u015fisel s\u00f6zl\u00fc\u011fe ekle"
+  },
+  "add_word_to_dictionary": {
+    "message": "\"$1\" kelimesini s\u00f6zl\u00fc\u011fe ekle",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "advanced": {
+    "message": "Geli\u015fmi\u015f"
+  },
+  "alt": {
+    "message": "alt"
+  },
+  "altgr": {
+    "message": "Alt Grafik"
+  },
+  "always_auto_correct": {
+    "message": "Agresif"
+  },
+  "am_phonetic_arm_settings_page": {
+    "message": "Ermeni Fonetik Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "appnamejpkeyboard": {
+    "message": "Google Japonca Giri\u015fi (Japonca klavye i\u00e7in)"
+  },
+  "appnameuskeyboard": {
+    "message": "Google Japonca Giri\u015fi (ABD klavye i\u00e7in)"
+  },
+  "auto_correction_level": {
+    "message": "Otomatik d\u00fczeltme"
+  },
+  "backspace": {
+    "message": "geri tu\u015fu"
+  },
+  "basic": {
+    "message": "Temel Bilgiler"
+  },
+  "be_fra_settings_page": {
+    "message": "Bel\u00e7ika Klavye (Frans\u0131zca) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "be_ger_settings_page": {
+    "message": "Bel\u00e7ika Klavye (Almanca) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "be_nld_settings_page": {
+    "message": "Bel\u00e7ika Klavye (Felemenk\u00e7e) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "bg_bul_settings_page": {
+    "message": "Bulgarca Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "bg_phonetic_bul_settings_page": {
+    "message": "Bulgarca Fonetik Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "br_por_settings_page": {
+    "message": "Brezilya Klavye (Brezilya Portekizcesi) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "by_bel_settings_page": {
+    "message": "Beyaz Rusya Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "ca_eng_eng_settings_page": {
+    "message": "Kanada \u0130ngilizce Klavye (\u0130ngilizce) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "ca_fra_settings_page": {
+    "message": "Kanada Frans\u0131zca Klavye (Frans\u0131z) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "ca_multix_fra_settings_page": {
+    "message": "Kanada \u00c7ok Dilli Klavye (Frans\u0131zca) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "capital": {
+    "message": "b\u00fcy\u00fck harf"
+  },
+  "capslock": {
+    "message": "capslock"
+  },
+  "ch_fr_fra_settings_page": {
+    "message": "\u0130svi\u00e7re Frans\u0131zca Klavye (Frans\u0131zca) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "ch_ger_settings_page": {
+    "message": "\u0130svi\u00e7re Klavye (Almanca) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "chos_inputtool_description": {
+    "message": "Chrome OS i\u00e7in Google Harf \u00c7evirme Arac\u0131, Chrome OS'de istedi\u011finiz dilde yazman\u0131za olanak sa\u011flar."
+  },
+  "chos_inputtool_title": {
+    "message": "Google Harf \u00c7evirme Arac\u0131"
+  },
+  "compositionmodedirect": {
+    "message": "Do\u011frudan giri\u015f"
+  },
+  "compositionmodefullascii": {
+    "message": "Geni\u015f Latince"
+  },
+  "compositionmodefullkatakana": {
+    "message": "Katakana"
+  },
+  "compositionmodehalfascii": {
+    "message": "Latince"
+  },
+  "compositionmodehalfkatakana": {
+    "message": "Yar\u0131 geni\u015flik katakana"
+  },
+  "compositionmodehiragana": {
+    "message": "Hiragana"
+  },
+  "configbasicstitle": {
+    "message": "Temel Bilgiler"
+  },
+  "configclearhistory": {
+    "message": "Ki\u015fiselle\u015ftirme verilerini temizle..."
+  },
+  "configclearhistorycancelbutton": {
+    "message": "\u0130ptal"
+  },
+  "configclearhistoryconversionhistory": {
+    "message": "D\u00f6n\u00fc\u015f\u00fcm ge\u00e7mi\u015fi"
+  },
+  "configclearhistorymessage": {
+    "message": "A\u015fa\u011f\u0131daki \u00f6\u011feleri temizle:"
+  },
+  "configclearhistoryokbutton": {
+    "message": "Ki\u015fiselle\u015ftirme verilerini temizle"
+  },
+  "configclearhistorysuggestionhistory": {
+    "message": "\u00d6neri ge\u00e7mi\u015fi"
+  },
+  "configclearhistorytitle": {
+    "message": "Ki\u015fiselle\u015ftirme verilerini temizle"
+  },
+  "configcreditsdescription": {
+    "message": "Telif Hakk\u0131 \u00a9 2013 Google Inc. T\u00fcm Haklar\u0131 Sakl\u0131d\u0131r."
+  },
+  "configdialogcancel": {
+    "message": "\u0130ptal"
+  },
+  "configdialogok": {
+    "message": "Tamam"
+  },
+  "configdictionarytoolbutton": {
+    "message": "Kullan\u0131c\u0131 s\u00f6zl\u00fc\u011f\u00fcn\u00fc y\u00f6net..."
+  },
+  "configdictionarytooldescription": {
+    "message": "D\u00f6n\u00fc\u015f\u00fcm adaylar\u0131n\u0131 \u00f6zelle\u015ftirmek i\u00e7in kullan\u0131c\u0131 s\u00f6zl\u00fc\u011f\u00fcne kendi kelimelerinizi ekleyin."
+  },
+  "configdictionarytooltitle": {
+    "message": "Kullan\u0131c\u0131 s\u00f6zl\u00fckleri"
+  },
+  "configincognitomode": {
+    "message": "Ki\u015fiselle\u015ftirilmi\u015f d\u00f6n\u00fc\u015f\u00fcmleri, \u00f6nerileri ve kullan\u0131c\u0131 s\u00f6zl\u00fc\u011f\u00fcn\u00fc devre d\u0131\u015f\u0131 b\u0131rak"
+  },
+  "configinputassistancetitle": {
+    "message": "Giri\u015f yard\u0131m\u0131"
+  },
+  "configosscreditsdescription": {
+    "message": "This software is made possible by <a href=\"./credits_en.html\">open source software</a>."
+  },
+  "configpreeditmethod": {
+    "message": "Giri\u015f modu:"
+  },
+  "configpreeditmethodkana": {
+    "message": "Kana"
+  },
+  "configpreeditmethodromaji": {
+    "message": "Romaji"
+  },
+  "configprivacytitle": {
+    "message": "Gizlilik"
+  },
+  "configpunctuationmethod": {
+    "message": "Noktalama stili:"
+  },
+  "configselectionshortcut": {
+    "message": "Se\u00e7im k\u0131sayolu:"
+  },
+  "configselectionshortcutno": {
+    "message": "K\u0131sayol yok"
+  },
+  "configsessionkeymap": {
+    "message": "Tu\u015f e\u015fleme stili:"
+  },
+  "configsessionkeymapatok": {
+    "message": "ATOK"
+  },
+  "configsessionkeymapchromeos": {
+    "message": "Chrome OS"
+  },
+  "configsessionkeymapcustom": {
+    "message": "\u00d6zel tu\u015f e\u015fleme"
+  },
+  "configsessionkeymapkotoeri": {
+    "message": "Kotoeri"
+  },
+  "configsessionkeymapmsime": {
+    "message": "MS-IME"
+  },
+  "configsettingstitle": {
+    "message": "Japonca giri\u015f ayarlar\u0131"
+  },
+  "configshiftkeymodeswitch": {
+    "message": "\u00dcstKrktr tu\u015fu mod ge\u00e7i\u015fi:"
+  },
+  "configshiftkeymodeswitchalphanumeric": {
+    "message": "Alfa-say\u0131sal"
+  },
+  "configshiftkeymodeswitchkatakana": {
+    "message": "Katakana"
+  },
+  "configshiftkeymodeswitchoff": {
+    "message": "Kapal\u0131"
+  },
+  "configspacecharacterform": {
+    "message": "Bo\u015fluk giri\u015f stili:"
+  },
+  "configspacecharacterformfollow": {
+    "message": "\u0130zleme giri\u015f modu"
+  },
+  "configspacecharacterformfull": {
+    "message": "Tam geni\u015flik"
+  },
+  "configspacecharacterformhalf": {
+    "message": "Yar\u0131m geni\u015flik"
+  },
+  "configsuggestionssize": {
+    "message": "\u00d6neri say\u0131s\u0131:"
+  },
+  "configsuggesttitle": {
+    "message": "\u00d6ner"
+  },
+  "configsymbolmethod": {
+    "message": "Sembol stili:"
+  },
+  "configuploadusagestats": {
+    "message": "Kullan\u0131m istatistiklerini ve kilitlenme raporlar\u0131n\u0131 Google'a otomatik olarak g\u00f6nder"
+  },
+  "configuseautoimeturnoff": {
+    "message": "Yar\u0131m geni\u015fli\u011fe otomatik olarak ge\u00e7"
+  },
+  "configusedictionarysuggest": {
+    "message": "Sistem s\u00f6zl\u00fc\u011f\u00fcn\u00fc kullan"
+  },
+  "configusehistorysuggest": {
+    "message": "Giri\u015f ge\u00e7mi\u015fini kullan"
+  },
+  "ctrl": {
+    "message": "ctrl"
+  },
+  "current_keyboard_prefix": {
+    "message": "ge\u00e7erli olarak se\u00e7ili klavye "
+  },
+  "current_lang": {
+    "message": "Giri\u015f dili \u00c7ince"
+  },
+  "current_punc": {
+    "message": "Noktalama geni\u015fli\u011fi Tam"
+  },
+  "current_sbc": {
+    "message": "Karakter geni\u015fli\u011fi Tam"
+  },
+  "cz_cze_settings_page": {
+    "message": "\u00c7ek\u00e7e Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "cz_qwerty_cze_settings_page": {
+    "message": "\u00c7ek\u00e7e Qwerty Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "d83c_dc04": {
+    "message": "Mahjong ta\u015f\u0131"
+  },
+  "d83c_dccf": {
+    "message": "Joker kart\u0131"
+  },
+  "d83c_dd70": {
+    "message": "A grubu kan"
+  },
+  "d83c_dd71": {
+    "message": "B grubu kan"
+  },
+  "d83c_dd7e": {
+    "message": "O grubu kan"
+  },
+  "d83c_dd7f": {
+    "message": "park yeri"
+  },
+  "d83c_dd8e": {
+    "message": "AB grubu kan"
+  },
+  "d83c_dd91": {
+    "message": "Temiz"
+  },
+  "d83c_dd92": {
+    "message": "haval\u0131"
+  },
+  "d83c_dd93": {
+    "message": "\u00fccretsiz"
+  },
+  "d83c_dd94": {
+    "message": "Kimlik"
+  },
+  "d83c_dd95": {
+    "message": "Yeni"
+  },
+  "d83c_dd96": {
+    "message": "Uzak dur"
+  },
+  "d83c_dd97": {
+    "message": "Tamam"
+  },
+  "d83c_dd98": {
+    "message": "Yard\u0131m"
+  },
+  "d83c_dd99": {
+    "message": "YUKARI!"
+  },
+  "d83c_dd9a": {
+    "message": "kar\u015f\u0131"
+  },
+  "d83c_de01": {
+    "message": "Japonca \u00e2\u20ac\u02dcburada\u00e2\u20ac\u2122 kelimesi"
+  },
+  "d83c_de02": {
+    "message": "Japonca \u00e2\u20ac\u02dcservis\u00e2\u20ac\u2122 kelimesi"
+  },
+  "d83c_de1a": {
+    "message": "Japonca \"\u00fccretsiz\" kelimesi"
+  },
+  "d83c_de2f": {
+    "message": "Japonca \"ay\u0131rt\u0131ld\u0131\" kelimesi"
+  },
+  "d83c_de32": {
+    "message": "Japonca \u00e2\u20ac\u02dcyasak\u00e2\u20ac\u2122 kelimesi"
+  },
+  "d83c_de33": {
+    "message": "\u00c7ince \"yer var\" ifadesi"
+  },
+  "d83c_de34": {
+    "message": "\u00c7ince \"ge\u00e7\" kelimesi"
+  },
+  "d83c_de35": {
+    "message": "\u00c7ince \"dolu\" kelimesi"
+  },
+  "d83c_de36": {
+    "message": "Japonca \"\u00fccretler\" kelimesi"
+  },
+  "d83c_de37": {
+    "message": "Japonca \"ayl\u0131k\" kelimesi"
+  },
+  "d83c_de38": {
+    "message": "\u00c7ince \"ba\u015fvuru\" kelimesi"
+  },
+  "d83c_de39": {
+    "message": "Japonca \"indirim\" kelimesi"
+  },
+  "d83c_de3a": {
+    "message": "\u00c7ince \"faaliyette\" kelimesi"
+  },
+  "d83c_de50": {
+    "message": "Japonca \"avantaj\" kelimesi"
+  },
+  "d83c_de51": {
+    "message": "\u00c7ince \"onayland\u0131\" kelimesi"
+  },
+  "d83c_df00": {
+    "message": "kas\u0131rga"
+  },
+  "d83c_df01": {
+    "message": "sisli"
+  },
+  "d83c_df02": {
+    "message": "\u015femsiye"
+  },
+  "d83c_df03": {
+    "message": "gece y\u0131ld\u0131zlar"
+  },
+  "d83c_df04": {
+    "message": "da\u011flar\u0131n aras\u0131ndan g\u00fcn do\u011fu\u015fu"
+  },
+  "d83c_df05": {
+    "message": "g\u00fcn do\u011fu\u015fu"
+  },
+  "d83c_df06": {
+    "message": "ak\u015fam karanl\u0131\u011f\u0131 \u00e7\u00f6kerken \u015fehir"
+  },
+  "d83c_df07": {
+    "message": "g\u00fcn bat\u0131m\u0131"
+  },
+  "d83c_df08": {
+    "message": "g\u00f6kku\u015fa\u011f\u0131"
+  },
+  "d83c_df09": {
+    "message": "gece k\u00f6pr\u00fc"
+  },
+  "d83c_df0a": {
+    "message": "dalga"
+  },
+  "d83c_df0b": {
+    "message": "yanarda\u011f"
+  },
+  "d83c_df0c": {
+    "message": "Samanyolu"
+  },
+  "d83c_df0d": {
+    "message": "Avrupa-Afrika k\u0131tas\u0131 g\u00f6r\u00fcnen d\u00fcnya"
+  },
+  "d83c_df0e": {
+    "message": "Amerika k\u0131tas\u0131 g\u00f6r\u00fcnen d\u00fcnya"
+  },
+  "d83c_df0f": {
+    "message": "Asya-Avustralya k\u0131tas\u0131 g\u00f6r\u00fcnen d\u00fcnya"
+  },
+  "d83c_df10": {
+    "message": "meridyenli d\u00fcnya"
+  },
+  "d83c_df11": {
+    "message": "yeni ay"
+  },
+  "d83c_df12": {
+    "message": "b\u00fcy\u00fcyen hilal ay"
+  },
+  "d83c_df13": {
+    "message": "ay\u0131n ilk d\u00f6rd\u00fcn\u00fc"
+  },
+  "d83c_df14": {
+    "message": "b\u00fcy\u00fcyen ay"
+  },
+  "d83c_df15": {
+    "message": "dolunay"
+  },
+  "d83c_df16": {
+    "message": "k\u00fc\u00e7\u00fclen ay"
+  },
+  "d83c_df17": {
+    "message": "ay\u0131n son d\u00f6rd\u00fcn\u00fc"
+  },
+  "d83c_df18": {
+    "message": "k\u00fc\u00e7\u00fclen hilal ay"
+  },
+  "d83c_df19": {
+    "message": "hilal"
+  },
+  "d83c_df1a": {
+    "message": "yeni ay y\u00fcz"
+  },
+  "d83c_df1b": {
+    "message": "ay\u0131n ilk d\u00f6rd\u00fcn\u00fc y\u00fcz"
+  },
+  "d83c_df1c": {
+    "message": "ay\u0131n son d\u00f6rd\u00fcn\u00fc y\u00fcz"
+  },
+  "d83c_df1d": {
+    "message": "dolunay y\u00fcz"
+  },
+  "d83c_df1e": {
+    "message": "g\u00fcne\u015f y\u00fcz"
+  },
+  "d83c_df1f": {
+    "message": "parlayan y\u0131ld\u0131z"
+  },
+  "d83c_df20": {
+    "message": "kayan y\u0131ld\u0131z"
+  },
+  "d83c_df30": {
+    "message": "kestane"
+  },
+  "d83c_df31": {
+    "message": "fidan"
+  },
+  "d83c_df32": {
+    "message": "yaprak d\u00f6kmeyen a\u011fa\u00e7"
+  },
+  "d83c_df33": {
+    "message": "yaprak d\u00f6ken a\u011fa\u00e7"
+  },
+  "d83c_df34": {
+    "message": "palmiye a\u011fac\u0131"
+  },
+  "d83c_df35": {
+    "message": "kakt\u00fcs"
+  },
+  "d83c_df37": {
+    "message": "lale"
+  },
+  "d83c_df38": {
+    "message": "kiraz \u00e7i\u00e7e\u011fi"
+  },
+  "d83c_df39": {
+    "message": "g\u00fcl"
+  },
+  "d83c_df3a": {
+    "message": "hatmi"
+  },
+  "d83c_df3b": {
+    "message": "ay \u00e7i\u00e7e\u011fi"
+  },
+  "d83c_df3c": {
+    "message": "\u00e7i\u00e7ek"
+  },
+  "d83c_df3d": {
+    "message": "m\u0131s\u0131r"
+  },
+  "d83c_df3e": {
+    "message": "\u00e7eltik"
+  },
+  "d83c_df3f": {
+    "message": "ot"
+  },
+  "d83c_df40": {
+    "message": "d\u00f6rt yaprakl\u0131 yonca"
+  },
+  "d83c_df41": {
+    "message": "ak\u00e7aa\u011fa\u00e7 yapra\u011f\u0131"
+  },
+  "d83c_df42": {
+    "message": "d\u00fc\u015fen yapraklar"
+  },
+  "d83c_df43": {
+    "message": "r\u00fczgarda u\u00e7an yaprak"
+  },
+  "d83c_df44": {
+    "message": "mantar"
+  },
+  "d83c_df45": {
+    "message": "domates"
+  },
+  "d83c_df46": {
+    "message": "patl\u0131can"
+  },
+  "d83c_df47": {
+    "message": "\u00fcz\u00fcm"
+  },
+  "d83c_df48": {
+    "message": "kavun"
+  },
+  "d83c_df49": {
+    "message": "karpuz"
+  },
+  "d83c_df4a": {
+    "message": "mandalina"
+  },
+  "d83c_df4b": {
+    "message": "limon"
+  },
+  "d83c_df4c": {
+    "message": "muz"
+  },
+  "d83c_df4d": {
+    "message": "ananas"
+  },
+  "d83c_df4e": {
+    "message": "k\u0131rm\u0131z\u0131 elma"
+  },
+  "d83c_df4f": {
+    "message": "ye\u015fil elma"
+  },
+  "d83c_df50": {
+    "message": "armut"
+  },
+  "d83c_df51": {
+    "message": "\u015feftali"
+  },
+  "d83c_df52": {
+    "message": "kiraz"
+  },
+  "d83c_df53": {
+    "message": "\u00e7ilek"
+  },
+  "d83c_df54": {
+    "message": "hamburger"
+  },
+  "d83c_df55": {
+    "message": "pizza dilimi"
+  },
+  "d83c_df56": {
+    "message": "et"
+  },
+  "d83c_df57": {
+    "message": "tavuk budu"
+  },
+  "d83c_df58": {
+    "message": "pirin\u00e7 krakeri"
+  },
+  "d83c_df59": {
+    "message": "pirin\u00e7 k\u00f6ftesi"
+  },
+  "d83c_df5a": {
+    "message": "pilav"
+  },
+  "d83c_df5b": {
+    "message": "k\u00f6ri ve pilav"
+  },
+  "d83c_df5c": {
+    "message": "Japon eri\u015ftesi"
+  },
+  "d83c_df5d": {
+    "message": "\u00e7ubuk makarna"
+  },
+  "d83c_df5e": {
+    "message": "ekmek"
+  },
+  "d83c_df5f": {
+    "message": "patates k\u0131zartmas\u0131"
+  },
+  "d83c_df60": {
+    "message": "f\u0131r\u0131nda patates"
+  },
+  "d83c_df61": {
+    "message": "pirin\u00e7 pastas\u0131"
+  },
+  "d83c_df62": {
+    "message": "oden"
+  },
+  "d83c_df63": {
+    "message": "su\u015fi"
+  },
+  "d83c_df64": {
+    "message": "k\u0131zarm\u0131\u015f karides"
+  },
+  "d83c_df65": {
+    "message": "bal\u0131k k\u00f6ftesi"
+  },
+  "d83c_df66": {
+    "message": "yumu\u015fak dondurma"
+  },
+  "d83c_df67": {
+    "message": "buz dondurma"
+  },
+  "d83c_df68": {
+    "message": "dondurma"
+  },
+  "d83c_df69": {
+    "message": "donut"
+  },
+  "d83c_df6a": {
+    "message": "kurabiye"
+  },
+  "d83c_df6b": {
+    "message": "\u00e7ikolata"
+  },
+  "d83c_df6c": {
+    "message": "\u015feker"
+  },
+  "d83c_df6d": {
+    "message": "lolipop"
+  },
+  "d83c_df6e": {
+    "message": "muhallebi"
+  },
+  "d83c_df6f": {
+    "message": "bal kavanozu"
+  },
+  "d83c_df70": {
+    "message": "meyveli pasta"
+  },
+  "d83c_df71": {
+    "message": "Japon yeme\u011fi"
+  },
+  "d83c_df72": {
+    "message": "yahni"
+  },
+  "d83c_df73": {
+    "message": "tava"
+  },
+  "d83c_df74": {
+    "message": "\u00e7atal ve b\u0131\u00e7ak"
+  },
+  "d83c_df75": {
+    "message": "\u00e7ay fincan\u0131"
+  },
+  "d83c_df76": {
+    "message": "sake"
+  },
+  "d83c_df77": {
+    "message": "\u015farap"
+  },
+  "d83c_df78": {
+    "message": "kokteyl"
+  },
+  "d83c_df79": {
+    "message": "tropikal i\u00e7ecek"
+  },
+  "d83c_df7a": {
+    "message": "bira"
+  },
+  "d83c_df7b": {
+    "message": "bira bardaklar\u0131"
+  },
+  "d83c_df7c": {
+    "message": "biberon"
+  },
+  "d83c_df80": {
+    "message": "kurdele"
+  },
+  "d83c_df81": {
+    "message": "hediye"
+  },
+  "d83c_df82": {
+    "message": "do\u011fum g\u00fcn\u00fc pastas\u0131"
+  },
+  "d83c_df83": {
+    "message": "kabak fener"
+  },
+  "d83c_df84": {
+    "message": "y\u0131lba\u015f\u0131 a\u011fac\u0131"
+  },
+  "d83c_df85": {
+    "message": "aziz"
+  },
+  "d83c_df86": {
+    "message": "havai fi\u015fek"
+  },
+  "d83c_df87": {
+    "message": "maytap"
+  },
+  "d83c_df88": {
+    "message": "balon"
+  },
+  "d83c_df89": {
+    "message": "konfeti paketi"
+  },
+  "d83c_df8a": {
+    "message": "konfeti"
+  },
+  "d83c_df8b": {
+    "message": "a\u011fa\u00e7 ve ka\u011f\u0131t \u015feritler"
+  },
+  "d83c_df8c": {
+    "message": "\u00e7apraz bayraklar"
+  },
+  "d83c_df8d": {
+    "message": "\u00e7am s\u00fcsleri"
+  },
+  "d83c_df8e": {
+    "message": "bebekler"
+  },
+  "d83c_df8f": {
+    "message": "sazan flamas\u0131"
+  },
+  "d83c_df90": {
+    "message": "r\u00fczgar \u00e7anlar\u0131"
+  },
+  "d83c_df91": {
+    "message": "ay manzaras\u0131"
+  },
+  "d83c_df92": {
+    "message": "okul \u00e7antas\u0131"
+  },
+  "d83c_df93": {
+    "message": "mezuniyet kepi"
+  },
+  "d83c_dfa0": {
+    "message": "atl\u0131kar\u0131nca"
+  },
+  "d83c_dfa1": {
+    "message": "d\u00f6nme dolap"
+  },
+  "d83c_dfa2": {
+    "message": "lunapark h\u0131z treni"
+  },
+  "d83c_dfa3": {
+    "message": "bal\u0131k av\u0131"
+  },
+  "d83c_dfa4": {
+    "message": "mikrofon"
+  },
+  "d83c_dfa5": {
+    "message": "film kameras\u0131"
+  },
+  "d83c_dfa6": {
+    "message": "film"
+  },
+  "d83c_dfa7": {
+    "message": "kulakl\u0131k"
+  },
+  "d83c_dfa8": {
+    "message": "ressam paleti"
+  },
+  "d83c_dfa9": {
+    "message": "silindir \u015fapka"
+  },
+  "d83c_dfaa": {
+    "message": "sirk"
+  },
+  "d83c_dfab": {
+    "message": "bilet"
+  },
+  "d83c_dfac": {
+    "message": "film \u00e7ekim tahtas\u0131"
+  },
+  "d83c_dfad": {
+    "message": "y\u00fcz maskesi"
+  },
+  "d83c_dfae": {
+    "message": "video oyunu"
+  },
+  "d83c_dfaf": {
+    "message": "tam isabet"
+  },
+  "d83c_dfb0": {
+    "message": "kumar makinesi"
+  },
+  "d83c_dfb1": {
+    "message": "bilardo"
+  },
+  "d83c_dfb2": {
+    "message": "oyun zar\u0131"
+  },
+  "d83c_dfb3": {
+    "message": "bowling"
+  },
+  "d83c_dfb4": {
+    "message": "iskambil ka\u011f\u0131d\u0131"
+  },
+  "d83c_dfb5": {
+    "message": "m\u00fczik notas\u0131"
+  },
+  "d83c_dfb6": {
+    "message": "m\u00fczik notalar\u0131"
+  },
+  "d83c_dfb7": {
+    "message": "saksafon"
+  },
+  "d83c_dfb8": {
+    "message": "gitar"
+  },
+  "d83c_dfb9": {
+    "message": "piyano"
+  },
+  "d83c_dfba": {
+    "message": "trompet"
+  },
+  "d83c_dfbb": {
+    "message": "keman"
+  },
+  "d83c_dfbc": {
+    "message": "porte"
+  },
+  "d83c_dfbd": {
+    "message": "ko\u015fu atleti"
+  },
+  "d83c_dfbe": {
+    "message": "tenis"
+  },
+  "d83c_dfbf": {
+    "message": "kayak"
+  },
+  "d83c_dfc0": {
+    "message": "basketbol"
+  },
+  "d83c_dfc1": {
+    "message": "damal\u0131 bayrak"
+  },
+  "d83c_dfc2": {
+    "message": "snowboard yapan"
+  },
+  "d83c_dfc3": {
+    "message": "ko\u015fucu"
+  },
+  "d83c_dfc4": {
+    "message": "s\u00f6rf"
+  },
+  "d83c_dfc6": {
+    "message": "kupa"
+  },
+  "d83c_dfc7": {
+    "message": "at yar\u0131\u015f\u0131"
+  },
+  "d83c_dfc8": {
+    "message": "Amerikan futbolu"
+  },
+  "d83c_dfc9": {
+    "message": "futbol"
+  },
+  "d83c_dfca": {
+    "message": "y\u00fcz\u00fcc\u00fc"
+  },
+  "d83c_dfe0": {
+    "message": "bina"
+  },
+  "d83c_dfe1": {
+    "message": "ev"
+  },
+  "d83c_dfe2": {
+    "message": "ofis binas\u0131"
+  },
+  "d83c_dfe3": {
+    "message": "Japon postanesi"
+  },
+  "d83c_dfe4": {
+    "message": "Avrupa postanesi"
+  },
+  "d83c_dfe5": {
+    "message": "hastane"
+  },
+  "d83c_dfe6": {
+    "message": "banka"
+  },
+  "d83c_dfe7": {
+    "message": "ATM"
+  },
+  "d83c_dfe8": {
+    "message": "otel"
+  },
+  "d83c_dfe9": {
+    "message": "a\u015fk oteli"
+  },
+  "d83c_dfea": {
+    "message": "bakkal"
+  },
+  "d83c_dfeb": {
+    "message": "okul"
+  },
+  "d83c_dfec": {
+    "message": "ma\u011faza"
+  },
+  "d83c_dfed": {
+    "message": "fabrika"
+  },
+  "d83c_dfee": {
+    "message": "k\u0131rm\u0131z\u0131 fener"
+  },
+  "d83c_dfef": {
+    "message": "Japon \u015fatosu"
+  },
+  "d83c_dff0": {
+    "message": "Avrupa \u015fatosu"
+  },
+  "d83d_dc00": {
+    "message": "S\u0131\u00e7an"
+  },
+  "d83d_dc01": {
+    "message": "Fare"
+  },
+  "d83d_dc02": {
+    "message": "\u00d6k\u00fcz"
+  },
+  "d83d_dc03": {
+    "message": "manda"
+  },
+  "d83d_dc04": {
+    "message": "inek"
+  },
+  "d83d_dc06": {
+    "message": "leopar"
+  },
+  "d83d_dc07": {
+    "message": "tav\u015fan"
+  },
+  "d83d_dc08": {
+    "message": "kedi"
+  },
+  "d83d_dc09": {
+    "message": "ejderha"
+  },
+  "d83d_dc0a": {
+    "message": "timsah"
+  },
+  "d83d_dc0b": {
+    "message": "balina"
+  },
+  "d83d_dc0c": {
+    "message": "salyangoz"
+  },
+  "d83d_dc0d": {
+    "message": "y\u0131lan"
+  },
+  "d83d_dc0e": {
+    "message": "at"
+  },
+  "d83d_dc0f": {
+    "message": "ko\u00e7"
+  },
+  "d83d_dc10": {
+    "message": "ke\u00e7i"
+  },
+  "d83d_dc11": {
+    "message": "koyun"
+  },
+  "d83d_dc12": {
+    "message": "maymun"
+  },
+  "d83d_dc13": {
+    "message": "horoz"
+  },
+  "d83d_dc14": {
+    "message": "tavuk"
+  },
+  "d83d_dc15": {
+    "message": "k\u00f6pek"
+  },
+  "d83d_dc16": {
+    "message": "domuz"
+  },
+  "d83d_dc17": {
+    "message": "yaban domuzu"
+  },
+  "d83d_dc18": {
+    "message": "fil"
+  },
+  "d83d_dc19": {
+    "message": "ahtapot"
+  },
+  "d83d_dc1a": {
+    "message": "kabuk"
+  },
+  "d83d_dc1b": {
+    "message": "b\u00f6cek"
+  },
+  "d83d_dc1c": {
+    "message": "kar\u0131nca"
+  },
+  "d83d_dc1d": {
+    "message": "bal ar\u0131s\u0131"
+  },
+  "d83d_dc1e": {
+    "message": "u\u011furb\u00f6ce\u011fi"
+  },
+  "d83d_dc1f": {
+    "message": "bal\u0131k"
+  },
+  "d83d_dc20": {
+    "message": "tropikal bal\u0131k"
+  },
+  "d83d_dc21": {
+    "message": "balon bal\u0131\u011f\u0131"
+  },
+  "d83d_dc22": {
+    "message": "kaplumba\u011fa"
+  },
+  "d83d_dc23": {
+    "message": "yumurtadan \u00e7\u0131kan civciv"
+  },
+  "d83d_dc24": {
+    "message": "civciv y\u00fcz\u00fc"
+  },
+  "d83d_dc25": {
+    "message": "civciv"
+  },
+  "d83d_dc26": {
+    "message": "ku\u015f"
+  },
+  "d83d_dc27": {
+    "message": "penguen"
+  },
+  "d83d_dc28": {
+    "message": "koala"
+  },
+  "d83d_dc29": {
+    "message": "fino"
+  },
+  "d83d_dc2a": {
+    "message": "tek h\u00f6rg\u00fc\u00e7l\u00fc deve"
+  },
+  "d83d_dc2b": {
+    "message": "iki h\u00f6rg\u00fc\u00e7l\u00fc deve"
+  },
+  "d83d_dc2c": {
+    "message": "yunus"
+  },
+  "d83d_dc2d": {
+    "message": "fare y\u00fcz\u00fc"
+  },
+  "d83d_dc2e": {
+    "message": "inek y\u00fcz\u00fc"
+  },
+  "d83d_dc2f": {
+    "message": "kaplan y\u00fcz\u00fc"
+  },
+  "d83d_dc30": {
+    "message": "tav\u015fan y\u00fcz\u00fc"
+  },
+  "d83d_dc31": {
+    "message": "kedi y\u00fcz\u00fc"
+  },
+  "d83d_dc32": {
+    "message": "ejderha y\u00fcz\u00fc"
+  },
+  "d83d_dc33": {
+    "message": "su p\u00fcsk\u00fcrten balina"
+  },
+  "d83d_dc34": {
+    "message": "at y\u00fcz\u00fc"
+  },
+  "d83d_dc35": {
+    "message": "maymun y\u00fcz\u00fc"
+  },
+  "d83d_dc36": {
+    "message": "k\u00f6pek y\u00fcz\u00fc"
+  },
+  "d83d_dc37": {
+    "message": "domuz y\u00fcz\u00fc"
+  },
+  "d83d_dc38": {
+    "message": "kurba\u011fa y\u00fcz\u00fc"
+  },
+  "d83d_dc39": {
+    "message": "hamster y\u00fcz\u00fc"
+  },
+  "d83d_dc3a": {
+    "message": "kurt y\u00fcz\u00fc"
+  },
+  "d83d_dc3b": {
+    "message": "ay\u0131 y\u00fcz\u00fc"
+  },
+  "d83d_dc3c": {
+    "message": "panda y\u00fcz\u00fc"
+  },
+  "d83d_dc3d": {
+    "message": "domuz burnu"
+  },
+  "d83d_dc3e": {
+    "message": "pati"
+  },
+  "d83d_dc40": {
+    "message": "g\u00f6zler"
+  },
+  "d83d_dc42": {
+    "message": "kulak"
+  },
+  "d83d_dc43": {
+    "message": "burun"
+  },
+  "d83d_dc44": {
+    "message": "a\u011f\u0131z"
+  },
+  "d83d_dc45": {
+    "message": "dil"
+  },
+  "d83d_dc46": {
+    "message": "yukar\u0131 i\u015faret eden parmak"
+  },
+  "d83d_dc47": {
+    "message": "a\u015fa\u011f\u0131 i\u015faret eden parmak"
+  },
+  "d83d_dc48": {
+    "message": "sola i\u015faret eden parmak"
+  },
+  "d83d_dc49": {
+    "message": "sa\u011fa i\u015faret eden parmak"
+  },
+  "d83d_dc4a": {
+    "message": "s\u0131k\u0131lm\u0131\u015f yumruk"
+  },
+  "d83d_dc4b": {
+    "message": "el sallama"
+  },
+  "d83d_dc4c": {
+    "message": "Elle tamam i\u015fareti"
+  },
+  "d83d_dc4d": {
+    "message": "be\u011fenme"
+  },
+  "d83d_dc4e": {
+    "message": "be\u011fenmeme"
+  },
+  "d83d_dc4f": {
+    "message": "el \u00e7\u0131rpma"
+  },
+  "d83d_dc50": {
+    "message": "a\u00e7\u0131k eller"
+  },
+  "d83d_dc51": {
+    "message": "ta\u00e7"
+  },
+  "d83d_dc52": {
+    "message": "kad\u0131n \u015fapkas\u0131"
+  },
+  "d83d_dc53": {
+    "message": "g\u00f6zl\u00fck"
+  },
+  "d83d_dc54": {
+    "message": "kravat"
+  },
+  "d83d_dc55": {
+    "message": "Ti\u015f\u00f6rt"
+  },
+  "d83d_dc56": {
+    "message": "pantolon"
+  },
+  "d83d_dc57": {
+    "message": "elbise"
+  },
+  "d83d_dc58": {
+    "message": "kimono"
+  },
+  "d83d_dc59": {
+    "message": "bikini"
+  },
+  "d83d_dc5a": {
+    "message": "kad\u0131n elbisesi"
+  },
+  "d83d_dc5b": {
+    "message": "c\u00fczdan"
+  },
+  "d83d_dc5c": {
+    "message": "el \u00e7antas\u0131"
+  },
+  "d83d_dc5d": {
+    "message": "\u00e7anta"
+  },
+  "d83d_dc5e": {
+    "message": "erkek ayakkab\u0131s\u0131"
+  },
+  "d83d_dc5f": {
+    "message": "spor ayakkab\u0131s\u0131"
+  },
+  "d83d_dc60": {
+    "message": "y\u00fcksek topuklu"
+  },
+  "d83d_dc61": {
+    "message": "kad\u0131n terli\u011fi"
+  },
+  "d83d_dc62": {
+    "message": "kad\u0131n \u00e7izmesi"
+  },
+  "d83d_dc63": {
+    "message": "ayak izi"
+  },
+  "d83d_dc64": {
+    "message": "b\u00fcst sil\u00fceti"
+  },
+  "d83d_dc65": {
+    "message": "b\u00fcst sil\u00fcetleri"
+  },
+  "d83d_dc66": {
+    "message": "erkek \u00e7ocuk"
+  },
+  "d83d_dc67": {
+    "message": "k\u0131z \u00e7ocuk"
+  },
+  "d83d_dc68": {
+    "message": "erkek"
+  },
+  "d83d_dc69": {
+    "message": "kad\u0131n"
+  },
+  "d83d_dc6a": {
+    "message": "aile"
+  },
+  "d83d_dc6b": {
+    "message": "erkek ve kad\u0131n"
+  },
+  "d83d_dc6c": {
+    "message": "iki erkek"
+  },
+  "d83d_dc6d": {
+    "message": "iki kad\u0131n"
+  },
+  "d83d_dc6e": {
+    "message": "polis memuru"
+  },
+  "d83d_dc6f": {
+    "message": "tav\u015fan k\u0131z"
+  },
+  "d83d_dc70": {
+    "message": "gelin"
+  },
+  "d83d_dc71": {
+    "message": "sar\u0131\u015f\u0131n"
+  },
+  "d83d_dc72": {
+    "message": "gua pi mao'lu adam"
+  },
+  "d83d_dc73": {
+    "message": "sar\u0131kl\u0131 adam"
+  },
+  "d83d_dc74": {
+    "message": "ya\u015fl\u0131 adam"
+  },
+  "d83d_dc75": {
+    "message": "ya\u015fl\u0131 kad\u0131n"
+  },
+  "d83d_dc76": {
+    "message": "bebek"
+  },
+  "d83d_dc77": {
+    "message": "in\u015faat i\u015f\u00e7isi"
+  },
+  "d83d_dc78": {
+    "message": "prenses"
+  },
+  "d83d_dc79": {
+    "message": "\u00f6c\u00fc"
+  },
+  "d83d_dc7a": {
+    "message": "cin"
+  },
+  "d83d_dc7b": {
+    "message": "hayalet"
+  },
+  "d83d_dc7c": {
+    "message": "bebek melek"
+  },
+  "d83d_dc7d": {
+    "message": "uzayl\u0131"
+  },
+  "d83d_dc7e": {
+    "message": "uzayl\u0131 canavar"
+  },
+  "d83d_dc7f": {
+    "message": "k\u00fc\u00e7\u00fck \u015feytan"
+  },
+  "d83d_dc80": {
+    "message": "kafatas\u0131"
+  },
+  "d83d_dc81": {
+    "message": "dan\u0131\u015fma masas\u0131"
+  },
+  "d83d_dc82": {
+    "message": "muhaf\u0131z"
+  },
+  "d83d_dc83": {
+    "message": "dans\u00e7\u0131"
+  },
+  "d83d_dc84": {
+    "message": "ruj"
+  },
+  "d83d_dc85": {
+    "message": "t\u0131rnak bak\u0131m\u0131"
+  },
+  "d83d_dc86": {
+    "message": "y\u00fcz masaj\u0131"
+  },
+  "d83d_dc87": {
+    "message": "sa\u00e7 kesme"
+  },
+  "d83d_dc88": {
+    "message": "berber d\u00fckkan\u0131"
+  },
+  "d83d_dc89": {
+    "message": "i\u011fne"
+  },
+  "d83d_dc8a": {
+    "message": "hap"
+  },
+  "d83d_dc8b": {
+    "message": "\u00f6p\u00fcc\u00fck i\u015fareti"
+  },
+  "d83d_dc8c": {
+    "message": "a\u015fk mektubu"
+  },
+  "d83d_dc8d": {
+    "message": "y\u00fcz\u00fck"
+  },
+  "d83d_dc8e": {
+    "message": "m\u00fccevher"
+  },
+  "d83d_dc8f": {
+    "message": "\u00f6p\u00fcc\u00fck"
+  },
+  "d83d_dc90": {
+    "message": "buket"
+  },
+  "d83d_dc91": {
+    "message": "\u00e7ift"
+  },
+  "d83d_dc92": {
+    "message": "kilisede nikah t\u00f6reni"
+  },
+  "d83d_dc93": {
+    "message": "atan kalp"
+  },
+  "d83d_dc94": {
+    "message": "k\u0131r\u0131k kalp"
+  },
+  "d83d_dc95": {
+    "message": "iki kalp"
+  },
+  "d83d_dc96": {
+    "message": "par\u0131ldayan kalp"
+  },
+  "d83d_dc97": {
+    "message": "b\u00fcy\u00fcyen kalp"
+  },
+  "d83d_dc98": {
+    "message": "kalp ve ok"
+  },
+  "d83d_dc99": {
+    "message": "mavi kalp"
+  },
+  "d83d_dc9a": {
+    "message": "ye\u015fil kalp"
+  },
+  "d83d_dc9b": {
+    "message": "sar\u0131 kalp"
+  },
+  "d83d_dc9c": {
+    "message": "mor kalp"
+  },
+  "d83d_dc9d": {
+    "message": "kurdeleli kalp"
+  },
+  "d83d_dc9e": {
+    "message": "d\u00f6nen kalpler"
+  },
+  "d83d_dc9f": {
+    "message": "kalpli s\u00fcs"
+  },
+  "d83d_dca0": {
+    "message": "ta\u00e7 yaprak"
+  },
+  "d83d_dca1": {
+    "message": "elektrik ampul\u00fc"
+  },
+  "d83d_dca2": {
+    "message": "\u00f6fke"
+  },
+  "d83d_dca3": {
+    "message": "bomba"
+  },
+  "d83d_dca4": {
+    "message": "uykulu sembol\u00fc"
+  },
+  "d83d_dca5": {
+    "message": "\u00e7arp\u0131\u015fma"
+  },
+  "d83d_dca6": {
+    "message": "ter i\u00e7inde"
+  },
+  "d83d_dca7": {
+    "message": "so\u011fuk ter"
+  },
+  "d83d_dca8": {
+    "message": "d\u00fcz \u00e7izgi"
+  },
+  "d83d_dca9": {
+    "message": "kaka"
+  },
+  "d83d_dcaa": {
+    "message": "pazu"
+  },
+  "d83d_dcab": {
+    "message": "sersemlemi\u015f"
+  },
+  "d83d_dcac": {
+    "message": "konu\u015fma balonu"
+  },
+  "d83d_dcad": {
+    "message": "d\u00fc\u015f\u00fcnce balonu"
+  },
+  "d83d_dcae": {
+    "message": "\u00e7i\u00e7ek bask\u0131s\u0131"
+  },
+  "d83d_dcaf": {
+    "message": "tam puan"
+  },
+  "d83d_dcb0": {
+    "message": "para torbas\u0131"
+  },
+  "d83d_dcb1": {
+    "message": "d\u00f6viz bozma"
+  },
+  "d83d_dcb2": {
+    "message": "dolar i\u015fareti"
+  },
+  "d83d_dcb3": {
+    "message": "kredi kart\u0131"
+  },
+  "d83d_dcb4": {
+    "message": "ka\u011f\u0131t yen"
+  },
+  "d83d_dcb5": {
+    "message": "ka\u011f\u0131t dolar"
+  },
+  "d83d_dcb6": {
+    "message": "Ka\u011f\u0131t avro"
+  },
+  "d83d_dcb7": {
+    "message": "Ka\u011f\u0131t sterlin"
+  },
+  "d83d_dcb8": {
+    "message": "u\u00e7an para"
+  },
+  "d83d_dcb9": {
+    "message": "y\u00fckselen piyasa"
+  },
+  "d83d_dcba": {
+    "message": "koltuk"
+  },
+  "d83d_dcbb": {
+    "message": "PC"
+  },
+  "d83d_dcbc": {
+    "message": "evrak \u00e7antas\u0131"
+  },
+  "d83d_dcbd": {
+    "message": "mini disk"
+  },
+  "d83d_dcbe": {
+    "message": "disket"
+  },
+  "d83d_dcbf": {
+    "message": "blu-ray"
+  },
+  "d83d_dcc0": {
+    "message": "DVD"
+  },
+  "d83d_dcc1": {
+    "message": "klas\u00f6r"
+  },
+  "d83d_dcc2": {
+    "message": "a\u00e7\u0131k klas\u00f6r"
+  },
+  "d83d_dcc3": {
+    "message": "dok\u00fcman"
+  },
+  "d83d_dcc4": {
+    "message": "dok\u00fcman"
+  },
+  "d83d_dcc5": {
+    "message": "takvim"
+  },
+  "d83d_dcc6": {
+    "message": "yaprakl\u0131 takvim"
+  },
+  "d83d_dcc7": {
+    "message": "kartoteks"
+  },
+  "d83d_dcc8": {
+    "message": "yukar\u0131 trend"
+  },
+  "d83d_dcc9": {
+    "message": "a\u015fa\u011f\u0131 trend"
+  },
+  "d83d_dcca": {
+    "message": "\u00e7ubuk grafik"
+  },
+  "d83d_dccb": {
+    "message": "pano"
+  },
+  "d83d_dccc": {
+    "message": "raptiye"
+  },
+  "d83d_dccd": {
+    "message": "yuvarlak raptiye"
+  },
+  "d83d_dcce": {
+    "message": "ata\u015f"
+  },
+  "d83d_dccf": {
+    "message": "d\u00fcz cetvel"
+  },
+  "d83d_dcd0": {
+    "message": "\u00fc\u00e7gen cetvel"
+  },
+  "d83d_dcd1": {
+    "message": "ayra\u00e7lar"
+  },
+  "d83d_dcd2": {
+    "message": "defter"
+  },
+  "d83d_dcd3": {
+    "message": "not defteri"
+  },
+  "d83d_dcd4": {
+    "message": "s\u00fcsl\u00fc defter"
+  },
+  "d83d_dcd5": {
+    "message": "kapal\u0131 kitap"
+  },
+  "d83d_dcd6": {
+    "message": "a\u00e7\u0131k kitap"
+  },
+  "d83d_dcd7": {
+    "message": "ye\u015fil kitap"
+  },
+  "d83d_dcd8": {
+    "message": "kitap"
+  },
+  "d83d_dcd9": {
+    "message": "turuncu kitap"
+  },
+  "d83d_dcda": {
+    "message": "kitaplar"
+  },
+  "d83d_dcdb": {
+    "message": "isim rozeti"
+  },
+  "d83d_dcdc": {
+    "message": "k\u0131vr\u0131lm\u0131\u015f"
+  },
+  "d83d_dcdd": {
+    "message": "not"
+  },
+  "d83d_dcde": {
+    "message": "telefon"
+  },
+  "d83d_dcdf": {
+    "message": "\u00e7a\u011fr\u0131 cihaz\u0131"
+  },
+  "d83d_dce0": {
+    "message": "faks"
+  },
+  "d83d_dce1": {
+    "message": "uydu anteni"
+  },
+  "d83d_dce2": {
+    "message": "hoparl\u00f6r"
+  },
+  "d83d_dce3": {
+    "message": "megafon"
+  },
+  "d83d_dce4": {
+    "message": "g\u00f6nderilen posta"
+  },
+  "d83d_dce5": {
+    "message": "Gelen kutusu"
+  },
+  "d83d_dce6": {
+    "message": "paket"
+  },
+  "d83d_dce7": {
+    "message": "e-posta"
+  },
+  "d83d_dce8": {
+    "message": "gelen posta"
+  },
+  "d83d_dce9": {
+    "message": "giden posta"
+  },
+  "d83d_dcea": {
+    "message": "a\u015fa\u011f\u0131 bayrakl\u0131 kapal\u0131 posta kutusu"
+  },
+  "d83d_dceb": {
+    "message": "yukar\u0131 bayrakl\u0131 kapal\u0131 posta kutusu"
+  },
+  "d83d_dcec": {
+    "message": "yukar\u0131 bayrakl\u0131 a\u00e7\u0131k posta kutusu"
+  },
+  "d83d_dced": {
+    "message": "a\u015fa\u011f\u0131 bayrakl\u0131 a\u00e7\u0131k posta kutusu"
+  },
+  "d83d_dcee": {
+    "message": "posta kutusu"
+  },
+  "d83d_dcef": {
+    "message": "posta kornas\u0131"
+  },
+  "d83d_dcf0": {
+    "message": "gazete"
+  },
+  "d83d_dcf1": {
+    "message": "cep telefonu"
+  },
+  "d83d_dcf2": {
+    "message": "oklu cep telefonu"
+  },
+  "d83d_dcf3": {
+    "message": "titre\u015fim modu"
+  },
+  "d83d_dcf4": {
+    "message": "telefon kapal\u0131"
+  },
+  "d83d_dcf5": {
+    "message": "cep telefonu kullan\u0131lmaz"
+  },
+  "d83d_dcf6": {
+    "message": "mobil sinyalleri"
+  },
+  "d83d_dcf7": {
+    "message": "kamera"
+  },
+  "d83d_dcf9": {
+    "message": "video kamera"
+  },
+  "d83d_dcfa": {
+    "message": "TV"
+  },
+  "d83d_dcfb": {
+    "message": "radyo"
+  },
+  "d83d_dcfc": {
+    "message": "video kaset"
+  },
+  "d83d_dd00": {
+    "message": "\u00e7apraz oklar"
+  },
+  "d83d_dd01": {
+    "message": "saat y\u00f6n\u00fcn\u00fc g\u00f6steren oklar"
+  },
+  "d83d_dd02": {
+    "message": "saat y\u00f6n\u00fcn\u00fcn aksini g\u00f6steren oklar"
+  },
+  "d83d_dd03": {
+    "message": "tekrar y\u00fckle"
+  },
+  "d83d_dd04": {
+    "message": "saat y\u00f6n\u00fcn\u00fcn aksini g\u00f6steren oklar"
+  },
+  "d83d_dd05": {
+    "message": "d\u00fc\u015f\u00fck parlakl\u0131k"
+  },
+  "d83d_dd06": {
+    "message": "y\u00fcksek parlakl\u0131k"
+  },
+  "d83d_dd07": {
+    "message": "konu\u015fmak yasak"
+  },
+  "d83d_dd08": {
+    "message": "hoparl\u00f6r"
+  },
+  "d83d_dd09": {
+    "message": "sesi k\u0131s\u0131k hoparl\u00f6r"
+  },
+  "d83d_dd0a": {
+    "message": "sesi y\u00fcksek hoparl\u00f6r"
+  },
+  "d83d_dd0b": {
+    "message": "pil"
+  },
+  "d83d_dd0c": {
+    "message": "elektrik fi\u015fi"
+  },
+  "d83d_dd0d": {
+    "message": "sola e\u011fik b\u00fcy\u00fcte\u00e7"
+  },
+  "d83d_dd0e": {
+    "message": "sa\u011fa e\u011fik b\u00fcy\u00fcte\u00e7"
+  },
+  "d83d_dd0f": {
+    "message": "dolma kalemli kilit"
+  },
+  "d83d_dd10": {
+    "message": "anahtarl\u0131 kapal\u0131 kilit"
+  },
+  "d83d_dd11": {
+    "message": "anahtar"
+  },
+  "d83d_dd12": {
+    "message": "kapal\u0131 kilit"
+  },
+  "d83d_dd13": {
+    "message": "a\u00e7\u0131k kilit"
+  },
+  "d83d_dd14": {
+    "message": "zil"
+  },
+  "d83d_dd15": {
+    "message": "zil yasak"
+  },
+  "d83d_dd16": {
+    "message": "yer i\u015fareti"
+  },
+  "d83d_dd17": {
+    "message": "ba\u011flant\u0131 i\u015fareti"
+  },
+  "d83d_dd18": {
+    "message": "radyo d\u00fc\u011fmesi"
+  },
+  "d83d_dd19": {
+    "message": "geri"
+  },
+  "d83d_dd1a": {
+    "message": "son"
+  },
+  "d83d_dd1b": {
+    "message": "A\u00c7IK oku"
+  },
+  "d83d_dd1c": {
+    "message": "Az kald\u0131 i\u015fareti"
+  },
+  "d83d_dd1d": {
+    "message": "\u00dcst i\u015fareti"
+  },
+  "d83d_dd1e": {
+    "message": "18 ya\u015f\u0131ndan k\u00fc\u00e7\u00fckler giremez"
+  },
+  "d83d_dd20": {
+    "message": "b\u00fcy\u00fck harf"
+  },
+  "d83d_dd21": {
+    "message": "k\u00fc\u00e7\u00fck harf"
+  },
+  "d83d_dd22": {
+    "message": "say\u0131lar"
+  },
+  "d83d_dd23": {
+    "message": "semboller"
+  },
+  "d83d_dd24": {
+    "message": "Latin Alfabesi"
+  },
+  "d83d_dd25": {
+    "message": "ate\u015f"
+  },
+  "d83d_dd26": {
+    "message": "fener"
+  },
+  "d83d_dd27": {
+    "message": "\u0130ngiliz anahtar\u0131"
+  },
+  "d83d_dd28": {
+    "message": "\u00e7eki\u00e7"
+  },
+  "d83d_dd29": {
+    "message": "somun ve c\u0131vata"
+  },
+  "d83d_dd2a": {
+    "message": "yemek b\u0131\u00e7a\u011f\u0131"
+  },
+  "d83d_dd2b": {
+    "message": "silah"
+  },
+  "d83d_dd2c": {
+    "message": "mikroskop"
+  },
+  "d83d_dd2d": {
+    "message": "teleskop"
+  },
+  "d83d_dd2e": {
+    "message": "kristal k\u00fcre"
+  },
+  "d83d_dd2f": {
+    "message": "alt\u0131 k\u00f6\u015feli y\u0131ld\u0131z"
+  },
+  "d83d_dd30": {
+    "message": "ye\u015fil ve sar\u0131 yaprak"
+  },
+  "d83d_dd31": {
+    "message": "\u00dc\u00e7 u\u00e7lu m\u0131zrak i\u015fareti"
+  },
+  "d83d_dd32": {
+    "message": "dolu \u00e7er\u00e7eveli kare d\u00fc\u011fme"
+  },
+  "d83d_dd33": {
+    "message": "d\u0131\u015f \u00e7izgi \u00e7er\u00e7eveli kare d\u00fc\u011fme"
+  },
+  "d83d_dd34": {
+    "message": "b\u00fcy\u00fck k\u0131rm\u0131z\u0131 daire"
+  },
+  "d83d_dd35": {
+    "message": "b\u00fcy\u00fck mavi daire"
+  },
+  "d83d_dd36": {
+    "message": "b\u00fcy\u00fck turuncu baklava \u015fekli"
+  },
+  "d83d_dd37": {
+    "message": "b\u00fcy\u00fck mavi baklava \u015fekli"
+  },
+  "d83d_dd38": {
+    "message": "k\u00fc\u00e7\u00fck turuncu baklava \u015fekli"
+  },
+  "d83d_dd39": {
+    "message": "k\u00fc\u00e7\u00fck mavi baklava \u015fekli"
+  },
+  "d83d_dd3a": {
+    "message": "yukar\u0131 bakan \u00fc\u00e7gen"
+  },
+  "d83d_dd3b": {
+    "message": "a\u015fa\u011f\u0131 bakan \u00fc\u00e7gen"
+  },
+  "d83d_dd3c": {
+    "message": "yukar\u0131 bakan \u00fc\u00e7gen d\u00fc\u011fmesi"
+  },
+  "d83d_dd3d": {
+    "message": "a\u015fa\u011f\u0131 bakan \u00fc\u00e7gen d\u00fc\u011fmesi"
+  },
+  "d83d_dd50": {
+    "message": "saat 1"
+  },
+  "d83d_dd51": {
+    "message": "saat 2"
+  },
+  "d83d_dd52": {
+    "message": "saat 3"
+  },
+  "d83d_dd53": {
+    "message": "saat 4"
+  },
+  "d83d_dd54": {
+    "message": "saat 5"
+  },
+  "d83d_dd55": {
+    "message": "saat 6"
+  },
+  "d83d_dd56": {
+    "message": "saat 7"
+  },
+  "d83d_dd57": {
+    "message": "saat 8"
+  },
+  "d83d_dd58": {
+    "message": "saat 9"
+  },
+  "d83d_dd59": {
+    "message": "saat 10"
+  },
+  "d83d_dd5a": {
+    "message": "saat 11"
+  },
+  "d83d_dd5b": {
+    "message": "saat 12"
+  },
+  "d83d_dd5c": {
+    "message": "bir bu\u00e7uk"
+  },
+  "d83d_dd5d": {
+    "message": "iki bu\u00e7uk"
+  },
+  "d83d_dd5e": {
+    "message": "\u00fc\u00e7 bu\u00e7uk"
+  },
+  "d83d_dd5f": {
+    "message": "d\u00f6rt bu\u00e7uk"
+  },
+  "d83d_dd60": {
+    "message": "be\u015f bu\u00e7uk"
+  },
+  "d83d_dd61": {
+    "message": "alt\u0131 bu\u00e7uk"
+  },
+  "d83d_dd62": {
+    "message": "yedi bu\u00e7uk"
+  },
+  "d83d_dd63": {
+    "message": "sekiz bu\u00e7uk"
+  },
+  "d83d_dd64": {
+    "message": "dokuz bu\u00e7uk"
+  },
+  "d83d_dd65": {
+    "message": "on bu\u00e7uk"
+  },
+  "d83d_dd66": {
+    "message": "on bir bu\u00e7uk"
+  },
+  "d83d_dd67": {
+    "message": "yar\u0131m"
+  },
+  "d83d_ddfb": {
+    "message": "Fuji da\u011f\u0131"
+  },
+  "d83d_ddfc": {
+    "message": "Tokyo Kulesi"
+  },
+  "d83d_ddfd": {
+    "message": "\u00d6zg\u00fcrl\u00fck Heykeli"
+  },
+  "d83d_ddfe": {
+    "message": "Japonya haritas\u0131"
+  },
+  "d83d_ddff": {
+    "message": "Moyai heykeli"
+  },
+  "d83d_de00": {
+    "message": "s\u0131r\u0131tma"
+  },
+  "d83d_de01": {
+    "message": " g\u00fclen g\u00f6zlerle s\u0131r\u0131tma"
+  },
+  "d83d_de02": {
+    "message": "mutluluk g\u00f6zya\u015flar\u0131"
+  },
+  "d83d_de03": {
+    "message": "a\u011fz\u0131 a\u00e7\u0131k g\u00fcl\u00fcmseme"
+  },
+  "d83d_de04": {
+    "message": "g\u00fclen g\u00f6zlerle a\u011fz\u0131 a\u00e7\u0131k g\u00fcl\u00fcmseme"
+  },
+  "d83d_de05": {
+    "message": "so\u011fuk so\u011fuk terleyen y\u00fcz"
+  },
+  "d83d_de06": {
+    "message": " kapal\u0131 g\u00f6zle a\u011fz\u0131 a\u00e7\u0131k g\u00fcl\u00fcmseme"
+  },
+  "d83d_de07": {
+    "message": "ba\u015f\u0131nda hale ile g\u00fcl\u00fcmseme"
+  },
+  "d83d_de08": {
+    "message": "boynuzlu g\u00fcl\u00fcmseyen y\u00fcz"
+  },
+  "d83d_de09": {
+    "message": "g\u00f6z k\u0131rpan y\u00fcz"
+  },
+  "d83d_de0a": {
+    "message": "g\u00fcl\u00fcmseme"
+  },
+  "d83d_de0b": {
+    "message": "lezzet belirten y\u00fcz"
+  },
+  "d83d_de0c": {
+    "message": "rahatlam\u0131\u015f y\u00fcz"
+  },
+  "d83d_de0d": {
+    "message": "g\u00fclen y\u00fcz"
+  },
+  "d83d_de0e": {
+    "message": "haval\u0131"
+  },
+  "d83d_de0f": {
+    "message": "kurnaz g\u00fcl\u00fc\u015f"
+  },
+  "d83d_de10": {
+    "message": "ruhsuz y\u00fcz"
+  },
+  "d83d_de11": {
+    "message": "ifadesiz"
+  },
+  "d83d_de12": {
+    "message": "keyifsiz"
+  },
+  "d83d_de13": {
+    "message": "so\u011fuk ter"
+  },
+  "d83d_de14": {
+    "message": "d\u00fc\u015f\u00fcnceli y\u00fcz"
+  },
+  "d83d_de15": {
+    "message": "kafas\u0131 kar\u0131\u015fm\u0131\u015f"
+  },
+  "d83d_de16": {
+    "message": "\u015fa\u015fk\u0131na d\u00f6nm\u00fc\u015f y\u00fcz"
+  },
+  "d83d_de17": {
+    "message": "\u00f6pen y\u00fcz"
+  },
+  "d83d_de18": {
+    "message": "\u00f6p\u00fcc\u00fck g\u00f6nderme"
+  },
+  "d83d_de19": {
+    "message": "\u00f6p\u00fcc\u00fck ve g\u00fcl\u00fcmseme"
+  },
+  "d83d_de1a": {
+    "message": "\u00f6p\u00fcyor"
+  },
+  "d83d_de1b": {
+    "message": "dili d\u0131\u015far\u0131da"
+  },
+  "d83d_de1c": {
+    "message": "dil \u00e7\u0131karm\u0131\u015f g\u00f6z k\u0131rpma"
+  },
+  "d83d_de1d": {
+    "message": "i\u011frenme"
+  },
+  "d83d_de1e": {
+    "message": "hayal k\u0131r\u0131kl\u0131\u011f\u0131"
+  },
+  "d83d_de1f": {
+    "message": "endi\u015feli"
+  },
+  "d83d_de20": {
+    "message": "k\u0131zg\u0131n"
+  },
+  "d83d_de21": {
+    "message": "k\u0131zg\u0131n"
+  },
+  "d83d_de22": {
+    "message": "a\u011fl\u0131yor"
+  },
+  "d83d_de23": {
+    "message": "patlama"
+  },
+  "d83d_de24": {
+    "message": "zafer ifadesi"
+  },
+  "d83d_de25": {
+    "message": "vay can\u0131na!"
+  },
+  "d83d_de26": {
+    "message": "somurtan y\u00fcz"
+  },
+  "d83d_de27": {
+    "message": "kederli"
+  },
+  "d83d_de28": {
+    "message": "korkmu\u015f"
+  },
+  "d83d_de29": {
+    "message": "yorgun"
+  },
+  "d83d_de2a": {
+    "message": "uykulu"
+  },
+  "d83d_de2b": {
+    "message": "yorgun"
+  },
+  "d83d_de2c": {
+    "message": "ek\u015fi surat"
+  },
+  "d83d_de2d": {
+    "message": "y\u00fcksek sesle a\u011flama"
+  },
+  "d83d_de2e": {
+    "message": "a\u011fz\u0131 a\u00e7\u0131k y\u00fcz"
+  },
+  "d83d_de2f": {
+    "message": "susturulmu\u015f y\u00fcz"
+  },
+  "d83d_de30": {
+    "message": "acele i\u00e7inde y\u00fcz"
+  },
+  "d83d_de31": {
+    "message": "korkmu\u015f y\u00fcz"
+  },
+  "d83d_de32": {
+    "message": "\u015fa\u015f\u0131rm\u0131\u015f y\u00fcz"
+  },
+  "d83d_de33": {
+    "message": "\u015fa\u015fk\u0131n"
+  },
+  "d83d_de34": {
+    "message": "uyuyor"
+  },
+  "d83d_de35": {
+    "message": "sersemlemi\u015f"
+  },
+  "d83d_de36": {
+    "message": "a\u011fz\u0131 olmayan y\u00fcz"
+  },
+  "d83d_de37": {
+    "message": "maskeli y\u00fcz"
+  },
+  "d83d_de38": {
+    "message": "s\u0131r\u0131tan kedi y\u00fcz\u00fc"
+  },
+  "d83d_de39": {
+    "message": "kedi y\u00fcz\u00fcnde mutluluk g\u00f6zya\u015flar\u0131"
+  },
+  "d83d_de3a": {
+    "message": "g\u00fcl\u00fcmseyen kedi y\u00fcz\u00fc"
+  },
+  "d83d_de3b": {
+    "message": "g\u00fcl\u00fcmseyen kedi y\u00fcz\u00fc"
+  },
+  "d83d_de3c": {
+    "message": "alayc\u0131 kedi y\u00fcz\u00fc"
+  },
+  "d83d_de3d": {
+    "message": "\u00f6pen kedi"
+  },
+  "d83d_de3e": {
+    "message": "as\u0131k kedi y\u00fcz\u00fc"
+  },
+  "d83d_de3f": {
+    "message": "a\u011flayan kedi y\u00fcz\u00fc"
+  },
+  "d83d_de40": {
+    "message": "yorgun kedi y\u00fcz\u00fc"
+  },
+  "d83d_de45": {
+    "message": "\u0130yi hareket yok"
+  },
+  "d83d_de46": {
+    "message": "Tamam i\u015fareti"
+  },
+  "d83d_de47": {
+    "message": "\u00dczg\u00fcn\u00fcm"
+  },
+  "d83d_de48": {
+    "message": "g\u00f6rmedim"
+  },
+  "d83d_de49": {
+    "message": "duymad\u0131m"
+  },
+  "d83d_de4a": {
+    "message": "s\u00f6ylemedim"
+  },
+  "d83d_de4b": {
+    "message": "mutlu ki\u015fi"
+  },
+  "d83d_de4c": {
+    "message": "ya\u015fas\u0131n"
+  },
+  "d83d_de4d": {
+    "message": "somurtan ki\u015fi"
+  },
+  "d83d_de4e": {
+    "message": "as\u0131k surat"
+  },
+  "d83d_de4f": {
+    "message": "birle\u015fik eller"
+  },
+  "d83d_de80": {
+    "message": "roket"
+  },
+  "d83d_de81": {
+    "message": "helikopter"
+  },
+  "d83d_de82": {
+    "message": "buharl\u0131 lokomotif"
+  },
+  "d83d_de83": {
+    "message": "tren"
+  },
+  "d83d_de84": {
+    "message": "y\u00fcksek h\u0131zl\u0131 tren"
+  },
+  "d83d_de85": {
+    "message": "mermi burunlu y\u00fcksek h\u0131zl\u0131 tren"
+  },
+  "d83d_de86": {
+    "message": "tren"
+  },
+  "d83d_de87": {
+    "message": "metro"
+  },
+  "d83d_de88": {
+    "message": "hafif rayl\u0131 ula\u015f\u0131m"
+  },
+  "d83d_de89": {
+    "message": "tren istasyonu"
+  },
+  "d83d_de8a": {
+    "message": "tramvay"
+  },
+  "d83d_de8b": {
+    "message": "tramvay vagonu"
+  },
+  "d83d_de8c": {
+    "message": "otob\u00fcs"
+  },
+  "d83d_de8d": {
+    "message": "gelen otob\u00fcs"
+  },
+  "d83d_de8e": {
+    "message": "troleyb\u00fcs"
+  },
+  "d83d_de8f": {
+    "message": "otob\u00fcs dura\u011f\u0131"
+  },
+  "d83d_de90": {
+    "message": "minib\u00fcs"
+  },
+  "d83d_de91": {
+    "message": "cankurtaran"
+  },
+  "d83d_de92": {
+    "message": "itfaiye"
+  },
+  "d83d_de93": {
+    "message": "polis arabas\u0131"
+  },
+  "d83d_de94": {
+    "message": "gelen polis arabas\u0131"
+  },
+  "d83d_de95": {
+    "message": "taksi"
+  },
+  "d83d_de96": {
+    "message": "gelen taksi"
+  },
+  "d83d_de97": {
+    "message": "araba"
+  },
+  "d83d_de98": {
+    "message": "gelen araba"
+  },
+  "d83d_de99": {
+    "message": "karavan"
+  },
+  "d83d_de9a": {
+    "message": "nakliye kamyonu"
+  },
+  "d83d_de9b": {
+    "message": "kamyon"
+  },
+  "d83d_de9c": {
+    "message": "trakt\u00f6r"
+  },
+  "d83d_de9d": {
+    "message": "tek rayl\u0131 hat"
+  },
+  "d83d_de9e": {
+    "message": "tek rayl\u0131 da\u011f hatt\u0131"
+  },
+  "d83d_de9f": {
+    "message": "asma demiryolu"
+  },
+  "d83d_dea0": {
+    "message": "teleferik"
+  },
+  "d83d_dea1": {
+    "message": "teleferik"
+  },
+  "d83d_dea2": {
+    "message": "gemi"
+  },
+  "d83d_dea3": {
+    "message": "kay\u0131k"
+  },
+  "d83d_dea4": {
+    "message": "s\u00fcrat teknesi"
+  },
+  "d83d_dea5": {
+    "message": "yatay trafik \u0131\u015f\u0131klar\u0131"
+  },
+  "d83d_dea6": {
+    "message": "dikey trafik \u0131\u015f\u0131klar\u0131"
+  },
+  "d83d_dea7": {
+    "message": "in\u015faat"
+  },
+  "d83d_dea8": {
+    "message": "d\u00f6ner fener"
+  },
+  "d83d_dea9": {
+    "message": "konum bayra\u011f\u0131"
+  },
+  "d83d_deaa": {
+    "message": "kap\u0131"
+  },
+  "d83d_deab": {
+    "message": "Girilmez i\u015fareti"
+  },
+  "d83d_deac": {
+    "message": "sigara i\u015fareti"
+  },
+  "d83d_dead": {
+    "message": "sigara i\u00e7ilmez i\u015fareti"
+  },
+  "d83d_deae": {
+    "message": "\u00e7\u00f6p kutusu i\u015fareti"
+  },
+  "d83d_deaf": {
+    "message": "yere \u00e7\u00f6p atma i\u015fareti"
+  },
+  "d83d_deb0": {
+    "message": "i\u00e7me suyu"
+  },
+  "d83d_deb1": {
+    "message": "i\u00e7ilmez su"
+  },
+  "d83d_deb2": {
+    "message": "bisiklet"
+  },
+  "d83d_deb3": {
+    "message": "bisiklet giremez"
+  },
+  "d83d_deb4": {
+    "message": "bisiklet\u00e7i"
+  },
+  "d83d_deb5": {
+    "message": "da\u011f bisiklet\u00e7isi"
+  },
+  "d83d_deb6": {
+    "message": "yaya"
+  },
+  "d83d_deb7": {
+    "message": "yaya giremez"
+  },
+  "d83d_deb8": {
+    "message": "okul ge\u00e7idi"
+  },
+  "d83d_deb9": {
+    "message": "Erkekler i\u00e7in i\u015fareti"
+  },
+  "d83d_deba": {
+    "message": "Kad\u0131nlar i\u00e7in i\u015fareti"
+  },
+  "d83d_debb": {
+    "message": "tuvalet i\u015fareti"
+  },
+  "d83d_debc": {
+    "message": "bebek i\u015fareti"
+  },
+  "d83d_debd": {
+    "message": "tuvalet"
+  },
+  "d83d_debe": {
+    "message": "tuvalet"
+  },
+  "d83d_debf": {
+    "message": "du\u015f"
+  },
+  "d83d_dec0": {
+    "message": "banyo"
+  },
+  "d83d_dec1": {
+    "message": "k\u00fcvet"
+  },
+  "d83d_dec2": {
+    "message": "pasaport kontrol\u00fc"
+  },
+  "d83d_dec3": {
+    "message": "g\u00fcmr\u00fck"
+  },
+  "d83d_dec4": {
+    "message": "bagaj teslimi"
+  },
+  "d83d_dec5": {
+    "message": "emanetteki bavul"
+  },
+  "de_ger_settings_page": {
+    "message": "Almanca Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "de_neo_ger_settings_page": {
+    "message": "Almanca Neo 2 Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "dictionarytoolcategorytitle": {
+    "message": "Kategori"
+  },
+  "dictionarytoolcommentnewinput": {
+    "message": "Yorum"
+  },
+  "dictionarytoolcommenttitle": {
+    "message": "Yorum"
+  },
+  "dictionarytooldeletedictionaryconfirm": {
+    "message": "[object Object] adl\u0131 s\u00f6zl\u00fc\u011f\u00fc silmek istiyor musunuz?"
+  },
+  "dictionarytooldeletedictionarytitle": {
+    "message": "S\u00f6zl\u00fc\u011f\u00fc sil"
+  },
+  "dictionarytooldictionarylisttitle": {
+    "message": "S\u00f6zl\u00fckler"
+  },
+  "dictionarytooldictionaryname": {
+    "message": "S\u00f6zl\u00fck Ad\u0131"
+  },
+  "dictionarytooldonebutton": {
+    "message": "Bitti"
+  },
+  "dictionarytoolexportbutton": {
+    "message": "D\u0131\u015fa aktar"
+  },
+  "dictionarytoolimportbutton": {
+    "message": "\u0130\u00e7e aktar..."
+  },
+  "dictionarytoolmenutitle": {
+    "message": "S\u00f6zl\u00fck y\u00f6netimi"
+  },
+  "dictionarytoolnewdictionarynameplaceholder": {
+    "message": "Yeni s\u00f6zl\u00fck"
+  },
+  "dictionarytoolpagetitle": {
+    "message": "Kullan\u0131c\u0131 s\u00f6zl\u00fckleri"
+  },
+  "dictionarytoolreadingnewinput": {
+    "message": "Yeni okuma"
+  },
+  "dictionarytoolreadingtitle": {
+    "message": "Okuma"
+  },
+  "dictionarytoolstatuserrordictionarynamecontainsinvalidcharacter": {
+    "message": "Ad ge\u00e7ersiz karakterler i\u00e7eriyor."
+  },
+  "dictionarytoolstatuserrordictionarynameduplicated": {
+    "message": "Ad zaten var."
+  },
+  "dictionarytoolstatuserrordictionarynameempty": {
+    "message": "L\u00fctfen bir s\u00f6zl\u00fck ad\u0131 yaz\u0131n."
+  },
+  "dictionarytoolstatuserrordictionarynametoolong": {
+    "message": "Ad \u00e7ok uzun"
+  },
+  "dictionarytoolstatuserrordictionarysizelimitexceeded": {
+    "message": "Ba\u015fka s\u00f6zl\u00fck olu\u015fturulam\u0131yor."
+  },
+  "dictionarytoolstatuserroremptyfile": {
+    "message": "Dosya bo\u015f."
+  },
+  "dictionarytoolstatuserrorentrysizelimitexceeded": {
+    "message": "Bu s\u00f6zl\u00fckte ba\u015fka giri\u015f olu\u015fturulam\u0131yor."
+  },
+  "dictionarytoolstatuserrorfilenotfound": {
+    "message": "Dosya a\u00e7\u0131lamad\u0131."
+  },
+  "dictionarytoolstatuserrorfilesizelimitexceeded": {
+    "message": "Veri boyutu dosya boyutu limitini a\u015f\u0131yor."
+  },
+  "dictionarytoolstatuserrorgeneral": {
+    "message": "\u00c7al\u0131\u015fma ba\u015far\u0131s\u0131z oldu."
+  },
+  "dictionarytoolstatuserrorimportinvalidentries": {
+    "message": "Baz\u0131 kelimeler i\u00e7e aktar\u0131lamad\u0131."
+  },
+  "dictionarytoolstatuserrorimporttoomanywords": {
+    "message": "\u0130\u00e7e aktarma kayna\u011f\u0131nda \u00e7ok fazla kelime var."
+  },
+  "dictionarytoolstatuserrorinvalidfileformat": {
+    "message": "Dosya okunamad\u0131."
+  },
+  "dictionarytoolstatuserrornoundohistory": {
+    "message": "Ba\u015fka geri al\u0131nabilir i\u015flem yok."
+  },
+  "dictionarytoolstatuserrorreadingcontainsinvalidcharacter": {
+    "message": "Okunu\u015fta ge\u00e7ersiz karakterler var. Okunu\u015fta ASCII karakterleri, Hiragana, sesli s\u00f6yleyi\u015f i\u015fareti (\u309b), yar\u0131 sesli s\u00f6yleyi\u015f i\u015fareti (\u309c), orta nokta (\u30fb), uzat\u0131lm\u0131\u015f ses i\u015fareti (\u30fc), Japonca virg\u00fcl (\u3001), Japonca nokta (\u3002), Japonca ayra\u00e7lar\u0131 (\u300c\u300d\u300e\u300f) ve Japonca dalgal\u0131 tire (\u301c) i\u015faretini kullanabilirsiniz."
+  },
+  "dictionarytoolstatuserrorreadingempty": {
+    "message": "L\u00fctfen okunu\u015fu yaz\u0131n."
+  },
+  "dictionarytoolstatuserrorreadingtoolong": {
+    "message": "Okunu\u015f \u00e7ok uzun."
+  },
+  "dictionarytoolstatuserrortitleaddentry": {
+    "message": "Giri\u015f hatas\u0131 ekle"
+  },
+  "dictionarytoolstatuserrortitlecreatedictionary": {
+    "message": "S\u00f6zl\u00fck hatas\u0131 olu\u015ftur"
+  },
+  "dictionarytoolstatuserrortitledeletedictionary": {
+    "message": "S\u00f6zl\u00fck hatas\u0131n\u0131 sil"
+  },
+  "dictionarytoolstatuserrortitledeleteentry": {
+    "message": "Giri\u015f hatas\u0131n\u0131 sil"
+  },
+  "dictionarytoolstatuserrortitleeditentry": {
+    "message": "Giri\u015f hatas\u0131n\u0131 d\u00fczenle"
+  },
+  "dictionarytoolstatuserrortitleimportdata": {
+    "message": "\u0130\u00e7e aktarma hatas\u0131"
+  },
+  "dictionarytoolstatuserrortitlerenamedictionary": {
+    "message": "S\u00f6zl\u00fck hatas\u0131n\u0131 yeniden adland\u0131r"
+  },
+  "dictionarytoolstatuserrorwordcontainsinvalidcharacter": {
+    "message": "Kelimede ge\u00e7ersiz karakterler var."
+  },
+  "dictionarytoolstatuserrorwordempty": {
+    "message": "L\u00fctfen kelimeyi yaz\u0131n."
+  },
+  "dictionarytoolstatuserrorwordtoolong": {
+    "message": "Kelime \u00e7ok uzun."
+  },
+  "dictionarytoolwordnewinput": {
+    "message": "Yeni kelime"
+  },
+  "dictionarytoolwordtitle": {
+    "message": "Kelime"
+  },
+  "dismiss_menu": {
+    "message": "klavye men\u00fcs\u00fcn\u00fc kapat"
+  },
+  "dk_dan_settings_page": {
+    "message": "Danca Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "double_space_period": {
+    "message": "Nokta yazmak i\u00e7in \u00e7ift bo\u015fluk"
+  },
+  "down_arrow": {
+    "message": "a\u015fa\u011f\u0131 ok"
+  },
+  "ee_est_settings_page": {
+    "message": "Estonca Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "emoji_tab_emoticon": {
+    "message": "Emoji ifade kategorisi"
+  },
+  "emoji_tab_face": {
+    "message": "Emoji y\u00fcz kategorisi"
+  },
+  "emoji_tab_hot": {
+    "message": "Emoji s\u0131cak kategorisi"
+  },
+  "emoji_tab_nature": {
+    "message": "Emoji do\u011fa kategorisi"
+  },
+  "emoji_tab_object": {
+    "message": "Emoji nesne kategorisi"
+  },
+  "emoji_tab_place": {
+    "message": "Emoji yer kategorisi"
+  },
+  "emoji_tab_recent": {
+    "message": "Emoji son kullan\u0131lanlar kategorisi"
+  },
+  "emoji_tab_symbol": {
+    "message": "Emoji sembol kategorisi"
+  },
+  "enable_capitalization": {
+    "message": "Otomatik olarak b\u00fcy\u00fck harf yap"
+  },
+  "enable_completion": {
+    "message": "Tamamlamay\u0131 etkinle\u015ftir"
+  },
+  "enable_prediction": {
+    "message": "Sonraki kelime tahminini etkinle\u015ftir"
+  },
+  "enter": {
+    "message": "enter"
+  },
+  "es_cat_cat_settings_page": {
+    "message": "Katalanca Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "es_spa_settings_page": {
+    "message": "\u0130spanyolca Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "expand": {
+    "message": "Geni\u015flet"
+  },
+  "expand_candidates": {
+    "message": "\u00f6neri listesini geni\u015flet"
+  },
+  "fi_fin_settings_page": {
+    "message": "Fince Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "footer_emoji_button": {
+    "message": "emoji'ye ge\u00e7"
+  },
+  "footer_handwriting_button": {
+    "message": "el yaz\u0131s\u0131na ge\u00e7"
+  },
+  "footer_settings_button": {
+    "message": "giri\u015f y\u00f6ntemi ayarlar\u0131n\u0131 a\u00e7"
+  },
+  "fr_fra_settings_page": {
+    "message": "Frans\u0131zca Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "fuzzy_pinyin": {
+    "message": "Benzer Pinyin modunu etkinle\u015ftir"
+  },
+  "gb_dvorak_eng_settings_page": {
+    "message": "\u0130ngiltere Dvorak Klavye (\u0130ngilizce) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "gb_extd_eng_settings_page": {
+    "message": "\u0130ngiltere Klavye (\u0130ngilizce) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "ge_geo_settings_page": {
+    "message": "G\u00fcrc\u00fcce Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "globe": {
+    "message": "\u00f6nceki klavyeye ge\u00e7"
+  },
+  "got_it": {
+    "message": "Tamam"
+  },
+  "gr_gre_settings_page": {
+    "message": "Yunanca Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "handwriting_back": {
+    "message": "Geri"
+  },
+  "handwriting_netowrk_error": {
+    "message": "A\u011f ba\u011flant\u0131s\u0131 olmad\u0131\u011f\u0131ndan maalesef el yaz\u0131s\u0131n\u0131 kullanamazs\u0131n\u0131z."
+  },
+  "handwriting_privacy_info": {
+    "message": "Giri\u015finiz, metnin tan\u0131nmas\u0131 i\u00e7in Google sunucular\u0131na g\u00f6nderilecektir."
+  },
+  "hide_keyboard": {
+    "message": "klavyeyi gizle"
+  },
+  "hr_scr_settings_page": {
+    "message": "H\u0131rvat\u00e7a Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "hu_hun_settings_page": {
+    "message": "Macarca Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "ie_ga_settings_page": {
+    "message": "\u0130rlandaca Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "ignore_correction": {
+    "message": "\u015eu kelime i\u00e7in d\u00fczeltmeyi yoksay"
+  },
+  "ignore_correction_short": {
+    "message": "D\u00fczeltmeyi yoksay"
+  },
+  "il_heb_settings_page": {
+    "message": "\u0130branice Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "init_lang": {
+    "message": "Ba\u015flang\u0131\u00e7 giri\u015f dili \u00c7ince"
+  },
+  "init_punc": {
+    "message": "Ba\u015flang\u0131\u00e7 noktalama geni\u015fli\u011fi Tam"
+  },
+  "init_sbc": {
+    "message": "Ba\u015flang\u0131\u00e7 karakter geni\u015fli\u011fi Tam"
+  },
+  "input_hangul": {
+    "message": "Hangul Modu"
+  },
+  "input_hanja": {
+    "message": "Hanja Modu"
+  },
+  "inputmethod_array": {
+    "message": "Dizi giri\u015f y\u00f6ntemi"
+  },
+  "inputmethod_cangjie": {
+    "message": "Kanji giri\u015f y\u00f6ntemi"
+  },
+  "inputmethod_dayi": {
+    "message": "Dayi giri\u015f y\u00f6ntemi"
+  },
+  "inputmethod_hangul": {
+    "message": "Korece giri\u015f y\u00f6ntemi"
+  },
+  "inputmethod_pinyin": {
+    "message": "Pinyin giri\u015f y\u00f6ntemi"
+  },
+  "inputmethod_quick": {
+    "message": "H\u0131zl\u0131 giri\u015f y\u00f6ntemi"
+  },
+  "inputmethod_traditional_pinyin": {
+    "message": "Geleneksel \u00c7ince i\u00e7in Pinyin giri\u015f y\u00f6ntemi"
+  },
+  "inputmethod_wubi": {
+    "message": "Wubi giri\u015f y\u00f6ntemi"
+  },
+  "inputmethod_zhuyin": {
+    "message": "Zhuyin giri\u015f y\u00f6ntemi"
+  },
+  "is_ice_settings_page": {
+    "message": "\u0130zlandaca Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "it_ita_settings_page": {
+    "message": "\u0130talyanca Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "jp_jpn_settings_page": {
+    "message": "Japonca Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "keyboard_arabic": {
+    "message": "Arap\u00e7a klavye"
+  },
+  "keyboard_armenian_phonetic": {
+    "message": "Ermenice Fonetik klavye"
+  },
+  "keyboard_belarusian": {
+    "message": "Beyaz Rus\u00e7a klavye"
+  },
+  "keyboard_belgian": {
+    "message": "Bel\u00e7ika klavye"
+  },
+  "keyboard_bengali_phonetic": {
+    "message": "Bengalce klavye (Fonetik)"
+  },
+  "keyboard_brazilian": {
+    "message": "Brezilya klavye"
+  },
+  "keyboard_bulgarian": {
+    "message": "Bulgarca klavye"
+  },
+  "keyboard_bulgarian_phonetic": {
+    "message": "Bulgarca fonetik klavye"
+  },
+  "keyboard_canadian_english": {
+    "message": "\u0130ngilizce (Kanada) klavye"
+  },
+  "keyboard_canadian_french": {
+    "message": "Frans\u0131zca (Kanada) klavye"
+  },
+  "keyboard_canadian_multilingual": {
+    "message": "\u00c7ok dilli Kanada klavyesi"
+  },
+  "keyboard_catalan": {
+    "message": "Katalanca klavye"
+  },
+  "keyboard_croatian": {
+    "message": "H\u0131rvat\u00e7a klavye"
+  },
+  "keyboard_czech": {
+    "message": "\u00c7ek\u00e7e klavye"
+  },
+  "keyboard_czech_qwerty": {
+    "message": "\u00c7ek\u00e7e QWERTY klavye"
+  },
+  "keyboard_danish": {
+    "message": "Danca klavye"
+  },
+  "keyboard_devanagari_phonetic": {
+    "message": "Devanagarca klavye (Fonetik)"
+  },
+  "keyboard_estonian": {
+    "message": "Estonca klavye"
+  },
+  "keyboard_ethiopic": {
+    "message": "Etiyopya dili klavye"
+  },
+  "keyboard_finnish": {
+    "message": "Fince klavye"
+  },
+  "keyboard_french": {
+    "message": "Frans\u0131zca klavye"
+  },
+  "keyboard_georgian": {
+    "message": "G\u00fcrc\u00fcce klavye"
+  },
+  "keyboard_german": {
+    "message": "Almanca klavye"
+  },
+  "keyboard_german_neo_2": {
+    "message": "Almanca Beo 2 klavye"
+  },
+  "keyboard_greek": {
+    "message": "Yunanca klavye"
+  },
+  "keyboard_gujarati_phonetic": {
+    "message": "Gucerat\u00e7a klavye (Fonetik)"
+  },
+  "keyboard_hebrew": {
+    "message": "\u0130branice klavye"
+  },
+  "keyboard_hungarian": {
+    "message": "Macarca klavye"
+  },
+  "keyboard_icelandic": {
+    "message": "\u0130zlandaca klavye"
+  },
+  "keyboard_inscript": {
+    "message": "Klavye (Alfabetik)"
+  },
+  "keyboard_irish": {
+    "message": "\u0130rlandaca klavye"
+  },
+  "keyboard_italian": {
+    "message": "\u0130talyanca klavye"
+  },
+  "keyboard_itrans": {
+    "message": "Klavye (itrans)"
+  },
+  "keyboard_japanese": {
+    "message": "Japonca klavye"
+  },
+  "keyboard_kannada_phonetic": {
+    "message": "Kannada dili klavye (Fonetik)"
+  },
+  "keyboard_kedmanee": {
+    "message": "Klavye (Kedmanee)"
+  },
+  "keyboard_khmer": {
+    "message": "Kmer klavye"
+  },
+  "keyboard_lao": {
+    "message": "Lao klavye"
+  },
+  "keyboard_latin_american": {
+    "message": "Latin Amerika klavyesi"
+  },
+  "keyboard_latvian": {
+    "message": "Letonca klavye"
+  },
+  "keyboard_lithuanian": {
+    "message": "Litvanca klavye"
+  },
+  "keyboard_malayalam_phonetic": {
+    "message": "Malayalam dili klavye (Fonetik)"
+  },
+  "keyboard_maltese": {
+    "message": "Maltaca klavye"
+  },
+  "keyboard_mongolian": {
+    "message": "Mo\u011folca klavye"
+  },
+  "keyboard_myanmar": {
+    "message": "Myanmar MM3 klavyesi"
+  },
+  "keyboard_myanmar_myansan": {
+    "message": "Myanmar Myansan klavyesi"
+  },
+  "keyboard_nepali_inscript": {
+    "message": "Nepalce klavye (InScript)"
+  },
+  "keyboard_nepali_phonetic": {
+    "message": "Nepalce klavye (Fonetik)"
+  },
+  "keyboard_netherlands": {
+    "message": "Hollanda klavyesi"
+  },
+  "keyboard_none": {
+    "message": "Klavye"
+  },
+  "keyboard_norwegian": {
+    "message": "Norve\u00e7\u00e7e klavye"
+  },
+  "keyboard_pattachote": {
+    "message": "Klavye (Pattachote)"
+  },
+  "keyboard_persian": {
+    "message": "Far\u00e7a klavye"
+  },
+  "keyboard_phonetic": {
+    "message": "Klavye (Fonetik)"
+  },
+  "keyboard_polish": {
+    "message": "Leh\u00e7e klavye"
+  },
+  "keyboard_portuguese": {
+    "message": "Portekizce klavye"
+  },
+  "keyboard_romanian": {
+    "message": "Romence klavye"
+  },
+  "keyboard_romanian_standard": {
+    "message": "Rumence"
+  },
+  "keyboard_russian": {
+    "message": "Rus\u00e7a klavye"
+  },
+  "keyboard_russian_phonetic": {
+    "message": "Rus\u00e7a fonetik klavye"
+  },
+  "keyboard_russian_phonetic_aatseel": {
+    "message": "Rus\u00e7a fonetik (AATSEEL) klavye"
+  },
+  "keyboard_russian_phonetic_yazhert": {
+    "message": "Rus\u00e7a fonetik (YaZHert) klavye"
+  },
+  "keyboard_serbian": {
+    "message": "S\u0131rp\u00e7a klavye"
+  },
+  "keyboard_sinhala": {
+    "message": "Sinhala klavye"
+  },
+  "keyboard_slovakian": {
+    "message": "Slovak\u00e7a klavye"
+  },
+  "keyboard_slovenian": {
+    "message": "Slovence klavye"
+  },
+  "keyboard_soranikurdish_ar": {
+    "message": "Sorani K\u00fcrt\u00e7e Arap\u00e7a temelli klavye"
+  },
+  "keyboard_soranikurdish_en": {
+    "message": "Sorani K\u00fcrt\u00e7e \u0130ngilizce temelli klavye"
+  },
+  "keyboard_spanish": {
+    "message": "\u0130spanyolca klavye"
+  },
+  "keyboard_swedish": {
+    "message": "\u0130sve\u00e7\u00e7e klavye"
+  },
+  "keyboard_swiss": {
+    "message": "\u0130svi\u00e7re klavye"
+  },
+  "keyboard_swiss_french": {
+    "message": "Frans\u0131zca (\u0130svi\u00e7re) klavye"
+  },
+  "keyboard_tamil99": {
+    "message": "Klavye (Tamil99)"
+  },
+  "keyboard_tamil_inscript": {
+    "message": "Tamilce klavye (Alfabetik)"
+  },
+  "keyboard_tamil_itrans": {
+    "message": "Tamilce klavye (itrans)"
+  },
+  "keyboard_tamil_phonetic": {
+    "message": "Tamilce klavye (Fonetik)"
+  },
+  "keyboard_tamil_tamil99": {
+    "message": "Tamilce klavye (Tamil99)"
+  },
+  "keyboard_tamil_typewriter": {
+    "message": "Tamilce klavye (Daktilo)"
+  },
+  "keyboard_tcvn": {
+    "message": "Klavye (TCVN)"
+  },
+  "keyboard_telex": {
+    "message": "Klavye (Teleks)"
+  },
+  "keyboard_telugu_phonetic": {
+    "message": "Telugu dili klavye (Fonetik)"
+  },
+  "keyboard_thai_kedmanee": {
+    "message": "Tayca klavye (Kedmanee)"
+  },
+  "keyboard_thai_pattachote": {
+    "message": "Tayca klavye (Pattachote)"
+  },
+  "keyboard_thai_tis": {
+    "message": "Tayca klavye (TIS 820-2531)"
+  },
+  "keyboard_tis": {
+    "message": "Klavye (TIS 820-2531)"
+  },
+  "keyboard_turkish": {
+    "message": "T\u00fcrk\u00e7e klavye"
+  },
+  "keyboard_typewriter": {
+    "message": "Klavye (Daktilo)"
+  },
+  "keyboard_uk": {
+    "message": "\u0130ngilizce klavye"
+  },
+  "keyboard_uk_dvorak": {
+    "message": "\u0130ngiltere Dvorak klavye"
+  },
+  "keyboard_ukrainian": {
+    "message": "Ukraynaca klavye"
+  },
+  "keyboard_us": {
+    "message": "ABD klavye"
+  },
+  "keyboard_us_colemak": {
+    "message": "ABD Colemak klavye"
+  },
+  "keyboard_us_dvorak": {
+    "message": "ABD Dvorak klavye"
+  },
+  "keyboard_us_extended": {
+    "message": "ABD geni\u015fletilmi\u015f klavye"
+  },
+  "keyboard_us_international": {
+    "message": "ABD uluslararas\u0131 klavye"
+  },
+  "keyboard_vietnamese_tcvn": {
+    "message": "Vietnamca klavye (TCVN)"
+  },
+  "keyboard_vietnamese_telex": {
+    "message": "Vietnamca klavye (Teleks)"
+  },
+  "keyboard_vietnamese_viqr": {
+    "message": "Vietnamca klavye (VIQR)"
+  },
+  "keyboard_vietnamese_vni": {
+    "message": "Vietnamca klavye (VNI)"
+  },
+  "keyboard_viqr": {
+    "message": "Klavye (VIQR)"
+  },
+  "keyboard_vni": {
+    "message": "Klavye (VNI)"
+  },
+  "korean_hanja_display": {
+    "message": "Hanja \u00d6neri Modu"
+  },
+  "korean_keyboard_layout": {
+    "message": "Korece Klavye D\u00fczeni"
+  },
+  "korean_settings_page": {
+    "message": "Korece Giri\u015f Y\u00f6ntemi Ayarlar\u0131 Sayfas\u0131"
+  },
+  "korean_syllable_input": {
+    "message": "Her seferde tek hece girin"
+  },
+  "latam_spa_settings_page": {
+    "message": "Latin Amerika Klavye (\u0130spanyolca) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "latin_settings_page": {
+    "message": "Ayarlar"
+  },
+  "left_arrow": {
+    "message": "sol ok"
+  },
+  "lt_lit_settings_page": {
+    "message": "Litvanca Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "lv_apostrophe_lav_settings_page": {
+    "message": "Letonca Klavye (Letonca, Let\u00e7e) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "menu_key": {
+    "message": "klavye men\u00fcs\u00fcn\u00fc a\u00e7"
+  },
+  "mn_mon_settings_page": {
+    "message": "Mo\u011folca Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "move_page_key_above": {
+    "message": "\u00d6neri listesi sayfas\u0131 i\u00e7in  - ve = tu\u015flar\u0131n\u0131 kullan"
+  },
+  "move_page_key_below": {
+    "message": "\u00d6neri listesi sayfas\u0131 i\u00e7in , ve . tu\u015flar\u0131n\u0131 kullan"
+  },
+  "never_auto_correct": {
+    "message": "Kapal\u0131"
+  },
+  "no_nob_settings_page": {
+    "message": "Norve\u00e7\u00e7e Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "pause": {
+    "message": "Duraklat"
+  },
+  "physical_auto_correction_level": {
+    "message": "Otomatik d\u00fczeltme"
+  },
+  "physical_enable_capitalization": {
+    "message": "Otomatik olarak b\u00fcy\u00fck harf yap"
+  },
+  "physical_keyboard": {
+    "message": "Fiziksel klavye"
+  },
+  "pinyin_settings_page": {
+    "message": "Pinyin Ayarlar Sayfas\u0131"
+  },
+  "pl_pol_settings_page": {
+    "message": "Leh\u00e7e Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "pt_por_settings_page": {
+    "message": "Portekizce Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "right_arrow": {
+    "message": "sa\u011f ok"
+  },
+  "ro_rum_settings_page": {
+    "message": "Romence Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "rs_srp_settings_page": {
+    "message": "S\u0131rp\u00e7a Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "ru_phonetic_rus_settings_page": {
+    "message": "Rus\u00e7a Fonetik Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "ru_rus_settings_page": {
+    "message": "Rus\u00e7a Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "se_swe_settings_page": {
+    "message": "\u0130sve\u00e7\u00e7e Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "settings": {
+    "message": "Ayarlar"
+  },
+  "shift": {
+    "message": "\u00fcstkrktr"
+  },
+  "shift_lock": {
+    "message": "\u00dcstKrktr Kilitli"
+  },
+  "show_candidate_mode": {
+    "message": "\u00d6neri a\u00e7\u0131l\u0131r listesinin gecikme s\u00fcresi"
+  },
+  "show_candidates_1000": {
+    "message": "\u00d6neri a\u00e7\u0131l\u0131r listesini 1 sn. sonra g\u00f6ster"
+  },
+  "show_candidates_2000": {
+    "message": "\u00d6neri a\u00e7\u0131l\u0131r listesini 2 sn. sonra g\u00f6ster"
+  },
+  "show_candidates_500": {
+    "message": "\u00d6neri a\u00e7\u0131l\u0131r listesini 500 ms. sonra g\u00f6ster"
+  },
+  "show_candidates_5000": {
+    "message": "\u00d6neri a\u00e7\u0131l\u0131r listesini 5 sn. sonra g\u00f6ster"
+  },
+  "show_candidates_backspace": {
+    "message": "\u00d6neri a\u00e7\u0131l\u0131r listesini Geri tu\u015funa bas\u0131ld\u0131\u011f\u0131nda g\u00f6ster"
+  },
+  "show_hangul_candidate": {
+    "message": "Hangul modunda \u00f6nerileri g\u00f6ster"
+  },
+  "shrink_candidates": {
+    "message": "\u00f6neri listesini daralt"
+  },
+  "si_slv_settings_page": {
+    "message": "Slovence Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "sk_slo_settings_page": {
+    "message": "Slovak\u00e7a Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "smiley": {
+    "message": "smiley"
+  },
+  "sometimes_auto_correct": {
+    "message": "Az"
+  },
+  "sound_on_keypress": {
+    "message": "Tu\u015fa bas\u0131ld\u0131\u011f\u0131nda ses \u00e7\u0131kar"
+  },
+  "space": {
+    "message": "bo\u015fluk"
+  },
+  "switch_to": {
+    "message": "\u015fu d\u00fczene ge\u00e7: "
+  },
+  "switch_to_compact_layout": {
+    "message": "K\u00fc\u00e7\u00fck d\u00fczene ge\u00e7"
+  },
+  "switch_to_full_layout": {
+    "message": "Tam d\u00fczene ge\u00e7"
+  },
+  "switch_to_keyboard_prefix": {
+    "message": "\u015fu d\u00fczene ge\u00e7: "
+  },
+  "switched_to": {
+    "message": "\u015fu d\u00fczene ge\u00e7ildi: "
+  },
+  "tab": {
+    "message": "sekme"
+  },
+  "touch_keyboard": {
+    "message": "Dokunmatik klavye"
+  },
+  "tr_tur_settings_page": {
+    "message": "T\u00fcrk\u00e7e Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "transliteration_am": {
+    "message": "Harf \u00e7evirisi (salam \u2192 \u1230\u120b\u121d)"
+  },
+  "transliteration_ar": {
+    "message": "Harf \u00e7evirisi (marhaban \u2190 \u0645\u0631\u062d\u0628\u0627)"
+  },
+  "transliteration_be": {
+    "message": "Harf \u00e7evirisi (pryvitannie \u2192 \u043f\u0440\u044b\u0432\u0456\u0442\u0430\u043d\u043d\u0435)"
+  },
+  "transliteration_bg": {
+    "message": "Harf \u00e7evirisi (zdrasti \u2192 \u0437\u0434\u0440\u0430\u0441\u0442\u0438)"
+  },
+  "transliteration_bn": {
+    "message": "Harf \u00e7evirisi (namaskar \u2192 \u09a8\u09ae\u09b8\u09cd\u0995\u09be\u09b0)"
+  },
+  "transliteration_el": {
+    "message": "Harf \u00e7evirisi (geia \u2192 \u03b3\u03b5\u03b9\u03b1)"
+  },
+  "transliteration_fa": {
+    "message": "Harf \u00e7evirisi (salam \u2190 \u0633\u0644\u0627\u0645)"
+  },
+  "transliteration_gu": {
+    "message": "Harf \u00e7evirisi (namaste \u2192 \u0aa8\u0aae\u0ab8\u0acd\u0aa4\u0ac7)"
+  },
+  "transliteration_he": {
+    "message": "Harf \u00e7evirisi (shalom \u2190 \u05e9\u05dc\u05d5\u05dd)"
+  },
+  "transliteration_hi": {
+    "message": "Harf \u00e7evirisi (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_kn": {
+    "message": "Harf \u00e7evirisi (namaskaram \u2192 \u0ca8\u0cae\u0cb8\u0ccd\u0c95\u0cbe\u0cb0)"
+  },
+  "transliteration_ml": {
+    "message": "Harf \u00e7evirisi (namaskar \u2192 \u0d28\u0d2e\u0d38\u0d4d\u0d15\u0d3e\u0d30\u0d02)"
+  },
+  "transliteration_mr": {
+    "message": "Harf \u00e7evirisi (namaste \u2192 \u0928\u092e\u0938\u094d\u0915\u093e\u0930)"
+  },
+  "transliteration_ne": {
+    "message": "Harf \u00e7evirisi (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_or": {
+    "message": "Harf \u00e7evirisi (mausam \u2192 \u0b28\u0b2e\u0b38\u0b4d\u0b24\u0b47)"
+  },
+  "transliteration_pa": {
+    "message": "Harf \u00e7evirisi (mausam \u2192 \u0a2e\u0a4c\u0a38\u0a2e)"
+  },
+  "transliteration_ru": {
+    "message": "Harf \u00e7evirisi (privet \u2192 \u043f\u0440\u0438\u0432\u0435\u0442)"
+  },
+  "transliteration_sa": {
+    "message": "Harf \u00e7evirisi (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_si": {
+    "message": "Harf \u00e7evirisi (halo \u2192 \u0dc4\u0dbd\u0ddd)"
+  },
+  "transliteration_sr": {
+    "message": "Harf \u00e7evirisi (zdravo \u2192 \u0437\u0434\u0440\u0430\u0432\u043e)"
+  },
+  "transliteration_ta": {
+    "message": "Harf \u00e7evirisi (vanakkam \u2192 \u0bb5\u0ba3\u0b95\u0bcd\u0b95\u0bae\u0bcd)"
+  },
+  "transliteration_te": {
+    "message": "Harf \u00e7evirisi (emandi \u2192 \u0c0f\u0c2e\u0c02\u0c21\u0c40)"
+  },
+  "transliteration_ti": {
+    "message": "Harf \u00e7evirisi (selam \u2192 \u1230\u120b\u121d)"
+  },
+  "transliteration_uk": {
+    "message": "Harf \u00e7evirisi (pryvit \u2192 \u043f\u0440\u0438\u0432\u0456\u0442)"
+  },
+  "transliteration_ur": {
+    "message": "Harf \u00e7evirisi (salam \u2190 \u0633\u0644\u0627\u0645)"
+  },
+  "transliteration_vi": {
+    "message": "Harf \u00e7evirisi (chao \u2192 ch\u00e0o)"
+  },
+  "ua_ukr_settings_page": {
+    "message": "Ukraynaca Klavye Ayarlar\u0131 Sayfas\u0131"
+  },
+  "up_arrow": {
+    "message": "yukar\u0131 ok"
+  },
+  "us_altgr_intl_eng_settings_page": {
+    "message": "ABD Geni\u015fletilmi\u015f Klavye (\u0130ngilizce) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "us_colemak_eng_settings_page": {
+    "message": "ABD Colemak Klavye (\u0130ngilizce) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "us_dvorak_eng_settings_page": {
+    "message": "ABD Dvorak Klavye (\u0130ngilizce) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "us_eng_settings_page": {
+    "message": "ABD Klavye (\u0130ngilizce) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "us_fil_settings_page": {
+    "message": "ABD Klavye (Filipince) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "us_ind_settings_page": {
+    "message": "ABD Klavye (Endonezce) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "us_intl_eng_settings_page": {
+    "message": "ABD Uluslararas\u0131 Klavye (\u0130ngilizce) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "us_intl_nld_settings_page": {
+    "message": "ABD Uluslararas\u0131 Klavye (Felemenk\u00e7e) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "us_intl_por_settings_page": {
+    "message": "ABD Uluslararas\u0131 Klavye (Brezilya Portekizcesi) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "us_msa_settings_page": {
+    "message": "ABD Klavye (Malayca) Ayarlar\u0131 Sayfas\u0131"
+  },
+  "user_dict": {
+    "message": "Ki\u015fisel s\u00f6zl\u00fc\u011f\u00fc etkinle\u015ftir"
+  },
+  "user_dict_add": {
+    "message": "Ekle"
+  },
+  "user_dict_clear": {
+    "message": "T\u00fcm\u00fcn\u00fc Temizle"
+  },
+  "user_dict_manage": {
+    "message": "Ki\u015fisel dizini y\u00f6net..."
+  },
+  "user_dict_new_word": {
+    "message": "Yeni kelime"
+  },
+  "user_dict_remove": {
+    "message": "Se\u00e7ileni Kald\u0131r"
+  },
+  "user_dict_reset": {
+    "message": "T\u00fcm S\u00f6zl\u00fck Giri\u015flerini S\u0131f\u0131rla"
+  },
+  "user_dict_save": {
+    "message": "Kaydet"
+  },
+  "user_dict_sync": {
+    "message": "Ki\u015fisel dizini senkronize et"
+  },
+  "user_dict_title": {
+    "message": "Ki\u015fisel Dizin"
+  },
+  "voice": {
+    "message": "Ses"
+  },
+  "voice_privacy_info": {
+    "message": "Ses giri\u015finiz, metnin tan\u0131nmas\u0131 i\u00e7in Google sunucular\u0131na g\u00f6nderilecektir."
+  },
+  "voice_turn_off": {
+    "message": "ses giri\u015fi arac\u0131n\u0131 kapat"
+  },
+  "voice_turn_on": {
+    "message": "ses giri\u015fi arac\u0131n\u0131 a\u00e7"
+  },
+  "wait": {
+    "message": "Bekle"
+  },
+  "zhuyin_keyboard_layout": {
+    "message": "Klavye t\u00fcr\u00fc"
+  },
+  "zhuyin_page_size": {
+    "message": "Sayfa ba\u015f\u0131na g\u00f6r\u00fcnt\u00fclenecek \u00f6neri say\u0131s\u0131"
+  },
+  "zhuyin_select_keys": {
+    "message": "Se\u00e7im tu\u015flar\u0131"
+  },
+  "zhuyin_settings_page": {
+    "message": "Zhuyin Ayarlar Sayfas\u0131"
+  }
+}

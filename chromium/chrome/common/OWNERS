@@ -1,0 +1,62 @@
+per-file chrome_switches.cc=*
+per-file chrome_switches.h=*
+per-file pref_names.cc=*
+per-file pref_names.h=*
+per-file url_constants.cc=*
+per-file url_constants.h=*
+
+# Mac Sandbox profiles.
+per-file nacl_loader.sb=set noparent
+per-file nacl_loader.sb=rsesek@chromium.org
+
+# Changes to IPC messages require a security review to avoid introducing
+# new sandbox escapes.
+per-file *_messages*.h=set noparent
+per-file *_messages*.h=dcheng@chromium.org
+per-file *_messages*.h=inferno@chromium.org
+per-file *_messages*.h=jln@chromium.org
+per-file *_messages*.h=jorgelo@chromium.org
+per-file *_messages*.h=jschuh@chromium.org
+per-file *_messages*.h=kenrb@chromium.org
+per-file *_messages*.h=mkwst@chromium.org
+per-file *_messages*.h=nasko@chromium.org
+per-file *_messages*.h=palmer@chromium.org
+per-file *_messages*.h=tsepez@chromium.org
+per-file *_messages*.h=wfh@chromium.org
+
+# Spellcheck files. Not using spellcheck* since it covers IPC messages too.
+per-file spellcheck_common.*=groby@chromium.org
+per-file spellcheck_common.*=rouslan@chromium.org
+per-file spellcheck_marker.h=groby@chromium.org
+per-file spellcheck_marker.h=rouslan@chromium.org
+per-file spellcheck_result.h=groby@chromium.org
+per-file spellcheck_result.h=rouslan@chromium.org
+
+# Instant/Search files.
+per-file instant_types*=kmadhusu@chromium.org
+per-file instant_types*=jered@chromium.org
+per-file instant_types*=samarth@chromium.org
+per-file search_types.*=kmadhusu@chromium.org
+per-file search_types.*=jered@chromium.org
+per-file search_types.*=samarth@chromium.org
+
+#Content settings
+per-file content_settings*=markusheintz@chromium.org
+
+# Pepper files.
+per-file pepper_*=bbudge@chromium.org
+per-file pepper_*=dmichael@chromium.org
+per-file pepper_*=raymes@chromium.org
+per-file pepper_*=teravest@chromium.org
+per-file pepper_*=yzshen@chromium.org
+
+# Other stuff.
+per-file autocomplete_match_type.*=mpearson@chromium.org
+per-file autocomplete_match_type.*=pkasting@chromium.org
+per-file autocomplete_match_type.*=sky@chromium.org
+per-file crash_keys*=rsesek@chromium.org
+
+# Tracing
+per-file trace_event_args_whitelist*=nduca@chromium.org
+per-file trace_event_args_whitelist*=dsinclair@chromium.org
+per-file trace_event_args_whitelist*=oysteine@chromium.org

@@ -1,0 +1,30 @@
+include_rules = [
+  "+device/bluetooth",
+  "+cc/debug",
+  "+chromeos",
+  "+components/user_manager",
+  "+components/wallpaper",
+  "+gpu/config",
+  "+grit/ash_resources.h",
+  "+grit/ash_strings.h",
+  "+media",
+  "+skia/ext",
+  "+third_party/cros_system_api",
+  "+third_party/skia",
+  "+net",
+  "+ui",
+  "+win8",
+  "-ash/host",
+]
+
+specific_include_rules = {
+  "root_window_controller\.*": [
+    "+ash/host"
+  ],
+  "shell.cc": [
+    "+ash/host/ash_window_tree_host_init_params.h"
+  ],
+  "touch_transformer_controller\.*": [
+    "+ash/host"
+  ],
+}

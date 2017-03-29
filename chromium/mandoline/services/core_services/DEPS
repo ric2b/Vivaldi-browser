@@ -1,0 +1,14 @@
+include_rules = [
+  "+components/clipboard",
+  "+components/filesystem",
+  "+components/resource_provider",
+  "+components/view_manager",
+  "+mojo/application",
+  "+mojo/common",
+  "+mojo/services/network",
+  "+mojo/services/tracing",
+  "+net",
+  "+third_party/mojo/src/mojo/public",
+  "+third_party/mojo_services/src/clipboard",
+  "+third_party/mojo_services/src/content_handler/public",
+]

@@ -1,0 +1,11 @@
+include_rules = [
+  "-mojo",
+  "+mojo/common",
+  "+mojo/public",
+  "+jni",
+  "+third_party/mojo/src/mojo/public",
+
+  # TODO(abarth) Instead of having the services depend on the shell, we
+  # probably should create a layer below the services.
+  "+mojo/shell",
+]

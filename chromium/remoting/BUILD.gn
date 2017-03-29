@@ -1,0 +1,286 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//build/config/ui.gni")
+import("//remoting/remoting_version.gni")
+import("//remoting/remoting_enable.gni")
+import("//testing/test.gni")
+
+# Various remoting targets need this version definition.
+config("version") {
+  defines = [ "VERSION=$version_full" ]
+}
+
+group("remoting_all") {
+  testonly = true
+
+  deps = [
+    #"//remoting:remoting_browser_test_resources",
+    "//remoting:remoting_unittests",
+    #"//remoting:remoting_webapp_unittests",
+    #"//app_remoting_test.gyp:ar_sample_test_driver",
+    #"//app_remoting_webapp.gyp:ar_sample_app",
+  ]
+
+  # TODO(GYP): add is_mac
+  if ((is_linux && !is_chromeos) || is_win) {
+    deps += [ "//remoting/webapp" ]
+  }
+
+  if (is_win) {
+    deps += [
+      #"//remoting:remoting_breakpad_tester",
+      #"//remoting:remoting_console",
+      #"//remoting:remoting_desktop",
+      #"//remoting:remoting_host_installation",
+    ]
+  }
+
+  if (is_android) {
+    deps += [
+      #"//remoting:remoting_apk",
+      #"//remoting:remoting_test_apk",
+      #"//remoting:remoting_unittests_apk",
+    ]
+  }
+
+  if (enable_remoting_host) {
+    deps += [
+      "//remoting:remoting_perftests",
+      "//remoting/host",
+      "//remoting/host:remoting_start_host",
+      "//remoting/host/it2me:remote_assistance_host",
+
+      #"//remoting:remoting_it2me_native_messaging_host",
+      #"//remoting:remoting_native_messaging_manifests",
+    ]
+  }
+
+  if (enable_me2me_host) {
+    deps += [
+      "//remoting/host:remoting_me2me_host",
+      #"//remoting/host:remoting_me2me_host_archive",
+    ]
+  }
+
+  # TODO(GYP) Depends on crbug.com/471924 being fixed for PNaCl.
+  if (enable_nacl) {
+    deps += [ "//remoting:remoting_key_tester" ]
+  }
+}
+
+# GYP version: remoting/remoting_test.gypi:remoting_test_common
+source_set("test_support") {
+  testonly = true
+
+  sources = [
+    # Files from remoting_test_common not in separate test_support targets.
+    "signaling/fake_signal_strategy.cc",
+    "signaling/fake_signal_strategy.h",
+    "signaling/mock_signal_strategy.cc",
+    "signaling/mock_signal_strategy.h",
+    "test/access_token_fetcher.cc",
+    "test/access_token_fetcher.h",
+    "test/app_remoting_report_issue_request.cc",
+    "test/app_remoting_report_issue_request.h",
+    "test/app_remoting_service_urls.cc",
+    "test/app_remoting_service_urls.h",
+    "test/app_remoting_test_driver_environment.cc",
+    "test/app_remoting_test_driver_environment.h",
+    "test/app_remoting_test_driver_environment_app_details.cc",
+    "test/fake_access_token_fetcher.cc",
+    "test/fake_access_token_fetcher.h",
+    "test/fake_app_remoting_report_issue_request.cc",
+    "test/fake_app_remoting_report_issue_request.h",
+    "test/fake_network_dispatcher.cc",
+    "test/fake_network_dispatcher.h",
+    "test/fake_network_manager.cc",
+    "test/fake_network_manager.h",
+    "test/fake_port_allocator.cc",
+    "test/fake_port_allocator.h",
+    "test/fake_remote_host_info_fetcher.cc",
+    "test/fake_remote_host_info_fetcher.h",
+    "test/fake_socket_factory.cc",
+    "test/fake_socket_factory.h",
+    "test/leaky_bucket.cc",
+    "test/leaky_bucket.h",
+    "test/mock_access_token_fetcher.cc",
+    "test/mock_access_token_fetcher.h",
+    "test/refresh_token_store.cc",
+    "test/refresh_token_store.h",
+    "test/remote_application_details.h",
+    "test/remote_connection_observer.h",
+    "test/remote_host_info.cc",
+    "test/remote_host_info.h",
+    "test/remote_host_info_fetcher.cc",
+    "test/remote_host_info_fetcher.h",
+    "test/test_chromoting_client.cc",
+    "test/test_chromoting_client.h",
+    "test/test_video_renderer.cc",
+    "test/test_video_renderer.h",
+  ]
+
+  deps = [
+    "//base",
+    "//net",
+    "//remoting/base",
+    "//remoting/client",
+    "//remoting/codec",
+    "//remoting/protocol:test_support",
+    "//remoting/resources",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  if (enable_configuration_policy) {
+    deps += [ "//components/policy:test_support" ]
+  }
+
+  if (enable_remoting_host) {
+    deps += [ "//remoting/host:test_support" ]
+  }
+}
+
+# TODO(GYP) remoting_unittests on Mac. Needs to be tested.
+if (!is_mac) {
+  test("remoting_unittests") {
+    # Sources not included in one of the more specific unit_tests deps.
+    sources = [
+      "signaling/iq_sender_unittest.cc",
+      "signaling/log_to_server_unittest.cc",
+      "signaling/server_log_entry_unittest.cc",
+      "signaling/server_log_entry_unittest.h",
+      "test/access_token_fetcher_unittest.cc",
+      "test/app_remoting_report_issue_request_unittest.cc",
+      "test/app_remoting_test_driver_environment_unittest.cc",
+      "test/remote_host_info_fetcher_unittest.cc",
+      "test/test_chromoting_client_unittest.cc",
+      "test/test_video_renderer_unittest.cc",
+    ]
+
+    configs += [
+      ":version",
+
+      # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+      "//build/config/compiler:no_size_t_to_int_warning",
+    ]
+
+    deps = [
+      ":test_support",
+      "//base/allocator",
+      "//google_apis",
+      "//remoting/base:unit_tests",
+      "//remoting/client:unit_tests",
+      "//remoting/protocol:test_support",
+      "//remoting/protocol:unit_tests",
+      "//testing/gmock",
+      "//testing/gtest",
+      "//third_party/webrtc",
+    ]
+
+    if (is_android) {
+      deps += [ "//testing/android/native_test:native_test_native_code" ]
+    } else {
+      deps += [
+        "//remoting/client/plugin",
+        "//remoting/client/plugin:unit_tests",
+      ]
+    }
+
+    if (enable_remoting_host) {
+      deps += [
+        "//remoting/codec:unit_tests",
+        "//remoting/host:unit_tests",
+        "//ui/gfx",
+      ]
+    }
+
+    if (enable_webrtc) {
+      deps += [
+        "//third_party/libjingle:libjingle_webrtc",
+        "//third_party/libjingle:libpeerconnection",
+      ]
+    }
+  }
+
+  if (enable_remoting_host) {
+    test("remoting_perftests") {
+      sources = [
+        "codec/codec_test.cc",
+        "codec/codec_test.h",
+        "codec/video_encoder_vpx_perftest.cc",
+        "test/protocol_perftest.cc",
+      ]
+
+      configs += [ ":version" ]
+
+      deps = [
+        ":test_support",
+        "//base",
+        "//base/test:run_all_unittests",
+        "//base/test:test_support",
+        "//net:test_support",
+        "//remoting/base",
+        "//testing/gtest",
+        "//third_party/webrtc/modules/desktop_capture",
+        "//third_party/libjingle",
+      ]
+
+      if (enable_webrtc) {
+        deps += [ "//third_party/libjingle:libjingle_webrtc" ]
+      }
+    }
+  }
+} else {
+  group("remoting_unittests") {
+  }
+}
+
+if (enable_pnacl) {
+  group("remoting_key_tester") {
+    deps = [
+      ":remoting_key_tester_copies",
+    ]
+  }
+
+  copy("remoting_key_tester_copies") {
+    sources = [
+      "tools/javascript_key_tester/background.js",
+      "tools/javascript_key_tester/chord_tracker.js",
+      "tools/javascript_key_tester/event_listeners.js",
+      "tools/javascript_key_tester/icon_128.png",
+      "tools/javascript_key_tester/main.css",
+      "tools/javascript_key_tester/main.html",
+      "tools/javascript_key_tester/main.js",
+      "tools/javascript_key_tester/manifest.json",
+      "tools/javascript_key_tester/pnacl/remoting_key_tester.nmf",
+
+      # TODO(GYP): crbug.com/471924 "$target_out_dir/remoting_key_tester_newlib.pexe",
+    ]
+
+    outputs = [
+      "$target_out_dir/remoting/key_tester/{{source_file_part}}",
+    ]
+
+    deps = [
+      ":remoting_key_tester_jscompile",
+      ":remoting_key_tester_pexe",
+    ]
+  }
+
+  group("remoting_key_tester_jscompile") {
+    # TODO(GYP): crbug.com/471926 add support for run_jscompile=true.
+    run_jscompile = false
+    if (run_jscompile) {
+    }
+  }
+
+  group("remoting_key_tester_pexe") {
+    # TODO(GYP): crbug.com/471924 implement me when we have a pnacl toolchain.
+    #sources = [
+    # "tools/javascript_key_tester/pnacl/remoting_key_tester.cc",
+    #]
+  }
+}

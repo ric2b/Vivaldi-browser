@@ -1,0 +1,16 @@
+<!-- Copyright 2015 The Chromium Authors. All rights reserved.
+     Use of this source code is governed by a BSD-style license that can be
+     found in the LICENSE file. -->
+
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-spinner/paper-spinner.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
+
+<dom-module name="throbber-notice">
+  <link rel="stylesheet" href="throbber_notice.css">
+  <template>
+    <paper-spinner dir="ltr" active></paper-spinner>
+    <div id="spinner-comment"><span>[[text]]</span></div>
+  </template>
+</dom-module>
+

@@ -1,0 +1,3337 @@
+{
+  "add_to_dictionary": {
+    "message": "Hozz\u00e1ad\u00e1s a sz\u00f3t\u00e1rhoz"
+  },
+  "add_to_personal_dictionary": {
+    "message": "Hozz\u00e1ad\u00e1s a szem\u00e9lyes sz\u00f3t\u00e1rhoz"
+  },
+  "add_word_to_dictionary": {
+    "message": "$1/}\u201d hozz\u00e1ad\u00e1sa a sz\u00f3t\u00e1rhoz",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "advanced": {
+    "message": "Halad\u00f3"
+  },
+  "alt": {
+    "message": "Alt"
+  },
+  "altgr": {
+    "message": "Alt Gr"
+  },
+  "always_auto_correct": {
+    "message": "Agressz\u00edv"
+  },
+  "am_phonetic_arm_settings_page": {
+    "message": "\u00d6rm\u00e9ny fonetikus billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "appnamejpkeyboard": {
+    "message": "Google jap\u00e1n beviteli m\u00f3d (jap\u00e1n billenty\u0171zethez)"
+  },
+  "appnameuskeyboard": {
+    "message": "Google jap\u00e1n beviteli m\u00f3d (USA billenty\u0171zethez)"
+  },
+  "auto_correction_level": {
+    "message": "Automatikus jav\u00edt\u00e1s"
+  },
+  "backspace": {
+    "message": "Backspace"
+  },
+  "basic": {
+    "message": "Alapok"
+  },
+  "be_fra_settings_page": {
+    "message": "Belga (francia) billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "be_ger_settings_page": {
+    "message": "Belga (n\u00e9met) billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "be_nld_settings_page": {
+    "message": "Belga (holland) billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "bg_bul_settings_page": {
+    "message": "Bolg\u00e1r billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "bg_phonetic_bul_settings_page": {
+    "message": "Bolg\u00e1r fonetikus billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "br_por_settings_page": {
+    "message": "Brazil (braz\u00edliai portug\u00e1l) billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "by_bel_settings_page": {
+    "message": "Feh\u00e9rorosz billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "ca_eng_eng_settings_page": {
+    "message": "Kanadai angol (angol) billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "ca_fra_settings_page": {
+    "message": "Kanadai francia (francia) billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "ca_multix_fra_settings_page": {
+    "message": "Kanadai t\u00f6bbnyelv\u0171 (francia) billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "capital": {
+    "message": "Nagybet\u0171"
+  },
+  "capslock": {
+    "message": "Caps Lock"
+  },
+  "ch_fr_fra_settings_page": {
+    "message": "Sv\u00e1jci (francia) billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "ch_ger_settings_page": {
+    "message": "Sv\u00e1jci (n\u00e9met) billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "chos_inputtool_description": {
+    "message": "A Google Beviteli Eszk\u00f6z\u00f6k seg\u00edts\u00e9g\u00e9vel a v\u00e1lasztott nyelven g\u00e9pelhet Chrome OS rendszeren."
+  },
+  "chos_inputtool_title": {
+    "message": "Google beviteli eszk\u00f6z\u00f6k"
+  },
+  "compositionmodedirect": {
+    "message": "K\u00f6zvetlen bevitel"
+  },
+  "compositionmodefullascii": {
+    "message": "Sz\u00e9les latin"
+  },
+  "compositionmodefullkatakana": {
+    "message": "Katakana"
+  },
+  "compositionmodehalfascii": {
+    "message": "Latin"
+  },
+  "compositionmodehalfkatakana": {
+    "message": "F\u00e9lsz\u00e9less\u00e9g\u0171 katakana"
+  },
+  "compositionmodehiragana": {
+    "message": "Hiragana"
+  },
+  "configbasicstitle": {
+    "message": "Alapok"
+  },
+  "configclearhistory": {
+    "message": "Szem\u00e9lyre szab\u00e1si adatok t\u00f6rl\u00e9se\u2026"
+  },
+  "configclearhistorycancelbutton": {
+    "message": "M\u00e9gse"
+  },
+  "configclearhistoryconversionhistory": {
+    "message": "\u00c1tv\u00e1lt\u00e1si el\u0151zm\u00e9nyek"
+  },
+  "configclearhistorymessage": {
+    "message": "T\u00f6r\u00f6lje a k\u00f6vetkez\u0151 elemeket:"
+  },
+  "configclearhistoryokbutton": {
+    "message": "Szem\u00e9lyre szab\u00e1si adatok t\u00f6rl\u00e9se"
+  },
+  "configclearhistorysuggestionhistory": {
+    "message": "Javaslati el\u0151zm\u00e9nyek"
+  },
+  "configclearhistorytitle": {
+    "message": "Szem\u00e9lyre szab\u00e1si adatok t\u00f6rl\u00e9se"
+  },
+  "configcreditsdescription": {
+    "message": "Copyright \u00a9 2013 Google Inc. Minden jog fenntartva."
+  },
+  "configdialogcancel": {
+    "message": "M\u00e9gse"
+  },
+  "configdialogok": {
+    "message": "OK"
+  },
+  "configdictionarytoolbutton": {
+    "message": "Felhaszn\u00e1l\u00f3i sz\u00f3t\u00e1r kezel\u00e9se\u2026"
+  },
+  "configdictionarytooldescription": {
+    "message": "Adja hozz\u00e1 saj\u00e1t szavait a felhaszn\u00e1l\u00f3i sz\u00f3t\u00e1rhoz, \u00edgy szem\u00e9lyre szabhatja az \u00e1tv\u00e1lt\u00e1si lehet\u0151s\u00e9geket."
+  },
+  "configdictionarytooltitle": {
+    "message": "Felhaszn\u00e1l\u00f3i sz\u00f3t\u00e1rak"
+  },
+  "configincognitomode": {
+    "message": "Szem\u00e9lyre szabott \u00e1tv\u00e1lt\u00e1s, javaslatok \u00e9s felhaszn\u00e1l\u00f3i sz\u00f3t\u00e1r kikapcsol\u00e1sa"
+  },
+  "configinputassistancetitle": {
+    "message": "Beviteli seg\u00edts\u00e9g"
+  },
+  "configosscreditsdescription": {
+    "message": "A szoftver l\u00e9trej\u00f6tt\u00e9t <a href=\"./credits_en.html\">ny\u00edlt forr\u00e1sk\u00f3d\u00fa szoftverek</a> tett\u00e9k lehet\u0151v\u00e9."
+  },
+  "configpreeditmethod": {
+    "message": "Beviteli m\u00f3d:"
+  },
+  "configpreeditmethodkana": {
+    "message": "Kana"
+  },
+  "configpreeditmethodromaji": {
+    "message": "Romaji"
+  },
+  "configprivacytitle": {
+    "message": "Adatv\u00e9delem"
+  },
+  "configpunctuationmethod": {
+    "message": "\u00cdr\u00e1sjelek st\u00edlusa:"
+  },
+  "configselectionshortcut": {
+    "message": "Kiv\u00e1laszt\u00e1s gyorsparancs:"
+  },
+  "configselectionshortcutno": {
+    "message": "Nincs gyorsparancs"
+  },
+  "configsessionkeymap": {
+    "message": "Billenty\u0171zetkioszt\u00e1s st\u00edlusa:"
+  },
+  "configsessionkeymapatok": {
+    "message": "ATOK"
+  },
+  "configsessionkeymapchromeos": {
+    "message": "Chrome OS"
+  },
+  "configsessionkeymapcustom": {
+    "message": "Egy\u00e9ni billenty\u0171zetkioszt\u00e1s"
+  },
+  "configsessionkeymapkotoeri": {
+    "message": "Kotoeri"
+  },
+  "configsessionkeymapmsime": {
+    "message": "MS-IME"
+  },
+  "configsettingstitle": {
+    "message": "Jap\u00e1n beviteli be\u00e1ll\u00edt\u00e1sok"
+  },
+  "configshiftkeymodeswitch": {
+    "message": "Shift billenty\u0171m\u00f3d-v\u00e1laszt\u00f3:"
+  },
+  "configshiftkeymodeswitchalphanumeric": {
+    "message": "Alfanumerikus"
+  },
+  "configshiftkeymodeswitchkatakana": {
+    "message": "Katakana"
+  },
+  "configshiftkeymodeswitchoff": {
+    "message": "Ki"
+  },
+  "configspacecharacterform": {
+    "message": "T\u00e9rk\u00f6zbeviteli st\u00edlus:"
+  },
+  "configspacecharacterformfollow": {
+    "message": "Beviteli m\u00f3d k\u00f6vet\u00e9se"
+  },
+  "configspacecharacterformfull": {
+    "message": "Teljes sz\u00e9less\u00e9g"
+  },
+  "configspacecharacterformhalf": {
+    "message": "F\u00e9lsz\u00e9less\u00e9g"
+  },
+  "configsuggestionssize": {
+    "message": "Javaslatok sz\u00e1ma:"
+  },
+  "configsuggesttitle": {
+    "message": "Javaslat"
+  },
+  "configsymbolmethod": {
+    "message": "Szimb\u00f3lumok st\u00edlusa:"
+  },
+  "configuploadusagestats": {
+    "message": "Haszn\u00e1lati statisztik\u00e1k \u00e9s hibajelent\u00e9sek automatikus k\u00fcld\u00e9se a Google-nak"
+  },
+  "configuseautoimeturnoff": {
+    "message": "Automatikus v\u00e1lt\u00e1s f\u00e9lsz\u00e9less\u00e9g m\u00f3dra"
+  },
+  "configusedictionarysuggest": {
+    "message": "Rendszersz\u00f3t\u00e1r haszn\u00e1lata"
+  },
+  "configusehistorysuggest": {
+    "message": "Beviteli el\u0151zm\u00e9nyek haszn\u00e1lata"
+  },
+  "ctrl": {
+    "message": "Ctrl"
+  },
+  "current_keyboard_prefix": {
+    "message": "jelenleg kiv\u00e1lasztott billenty\u0171zet "
+  },
+  "current_lang": {
+    "message": "A beviteli nyelv a k\u00ednai"
+  },
+  "current_punc": {
+    "message": "A k\u00f6zpontoz\u00e1s teljes sz\u00e9less\u00e9g\u0171"
+  },
+  "current_sbc": {
+    "message": "A karaktersz\u00e9less\u00e9g f\u00e9lk\u00f6v\u00e9r"
+  },
+  "cz_cze_settings_page": {
+    "message": "Cseh billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "cz_qwerty_cze_settings_page": {
+    "message": "Cseh QWERTY-billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "d83c_dc04": {
+    "message": "Mahjong-kocka"
+  },
+  "d83c_dccf": {
+    "message": "Joker k\u00e1rtya"
+  },
+  "d83c_dd70": {
+    "message": "A v\u00e9rcsoport"
+  },
+  "d83c_dd71": {
+    "message": "B v\u00e9rcsoport"
+  },
+  "d83c_dd7e": {
+    "message": "0 v\u00e9rcsoport"
+  },
+  "d83c_dd7f": {
+    "message": "parkol\u00e1s"
+  },
+  "d83c_dd8e": {
+    "message": "AB v\u00e9rcsoport"
+  },
+  "d83c_dd91": {
+    "message": "CL"
+  },
+  "d83c_dd92": {
+    "message": "men\u0151"
+  },
+  "d83c_dd93": {
+    "message": "ingyenes"
+  },
+  "d83c_dd94": {
+    "message": "azonos\u00edt\u00f3"
+  },
+  "d83c_dd95": {
+    "message": "\u00daj"
+  },
+  "d83c_dd96": {
+    "message": "NG"
+  },
+  "d83c_dd97": {
+    "message": "OK"
+  },
+  "d83c_dd98": {
+    "message": "SOS"
+  },
+  "d83c_dd99": {
+    "message": "FEL!"
+  },
+  "d83c_dd9a": {
+    "message": "kontra"
+  },
+  "d83c_de01": {
+    "message": "\u201eitt\u201d sz\u00f3 jap\u00e1nul"
+  },
+  "d83c_de02": {
+    "message": "\u201eszolg\u00e1ltat\u00e1s\u201d sz\u00f3 jap\u00e1nul"
+  },
+  "d83c_de1a": {
+    "message": "\u201eingyenes\u201d sz\u00f3 jap\u00e1nul"
+  },
+  "d83c_de2f": {
+    "message": "\u201efoglalt\u201d sz\u00f3 jap\u00e1nul"
+  },
+  "d83c_de32": {
+    "message": "\u201etilos\u201d sz\u00f3 jap\u00e1nul"
+  },
+  "d83c_de33": {
+    "message": "\u201eszabad hely\u201d kifejez\u00e9s k\u00ednaiul"
+  },
+  "d83c_de34": {
+    "message": "\u201emegfelelt\u201d sz\u00f3 k\u00ednaiul"
+  },
+  "d83c_de35": {
+    "message": "\u201emegtelt\u201d sz\u00f3 k\u00ednaiul"
+  },
+  "d83c_de36": {
+    "message": "\u201ed\u00edjak\u201d sz\u00f3 jap\u00e1nul"
+  },
+  "d83c_de37": {
+    "message": "\u201ehavonta\u201d sz\u00f3 jap\u00e1nul"
+  },
+  "d83c_de38": {
+    "message": "\u201ealkalmaz\u00e1s\u201d sz\u00f3 k\u00ednaiul"
+  },
+  "d83c_de39": {
+    "message": "\u201eengedm\u00e9ny\u201d sz\u00f3 jap\u00e1nul"
+  },
+  "d83c_de3a": {
+    "message": "\u201em\u0171k\u00f6dik\u201d sz\u00f3 k\u00ednaiul"
+  },
+  "d83c_de50": {
+    "message": "\u201eel\u0151ny\u201d sz\u00f3 jap\u00e1nul"
+  },
+  "d83c_de51": {
+    "message": "\u201ej\u00f3v\u00e1hagyva\u201d sz\u00f3 k\u00ednaiul"
+  },
+  "d83c_df00": {
+    "message": "ciklon"
+  },
+  "d83c_df01": {
+    "message": "k\u00f6d\u00f6s"
+  },
+  "d83c_df02": {
+    "message": "eserny\u0151"
+  },
+  "d83c_df03": {
+    "message": "\u00e9jszakai csillagok"
+  },
+  "d83c_df04": {
+    "message": "napkelte hegyek f\u00f6l\u00f6tt"
+  },
+  "d83c_df05": {
+    "message": "napkelte"
+  },
+  "d83c_df06": {
+    "message": "v\u00e1ros alkonyatkor"
+  },
+  "d83c_df07": {
+    "message": "napnyugta"
+  },
+  "d83c_df08": {
+    "message": "sziv\u00e1rv\u00e1ny"
+  },
+  "d83c_df09": {
+    "message": "h\u00edd \u00e9jszaka"
+  },
+  "d83c_df0a": {
+    "message": "hull\u00e1m"
+  },
+  "d83c_df0b": {
+    "message": "vulk\u00e1n"
+  },
+  "d83c_df0c": {
+    "message": "Tej\u00fat"
+  },
+  "d83c_df0d": {
+    "message": "f\u00f6ldgoly\u00f3 \u2013 Eur\u00f3pa-Afrika"
+  },
+  "d83c_df0e": {
+    "message": "f\u00f6ldgoly\u00f3 \u2013 Amerika"
+  },
+  "d83c_df0f": {
+    "message": "f\u00f6ldgoly\u00f3 \u2013 \u00c1zsia-Ausztr\u00e1lia"
+  },
+  "d83c_df10": {
+    "message": "f\u00f6ldg\u00f6mb d\u00e9lk\u00f6r\u00f6kkel"
+  },
+  "d83c_df11": {
+    "message": "\u00fajhold"
+  },
+  "d83c_df12": {
+    "message": "n\u00f6vekv\u0151 f\u00e9lhold"
+  },
+  "d83c_df13": {
+    "message": "els\u0151 negyedben l\u00e9v\u0151 hold"
+  },
+  "d83c_df14": {
+    "message": "n\u00f6vekv\u0151 hold"
+  },
+  "d83c_df15": {
+    "message": "telihold"
+  },
+  "d83c_df16": {
+    "message": "fogy\u00f3 hold"
+  },
+  "d83c_df17": {
+    "message": "utols\u00f3 negyedben l\u00e9v\u0151 hold"
+  },
+  "d83c_df18": {
+    "message": "fogy\u00f3 f\u00e9lhold"
+  },
+  "d83c_df19": {
+    "message": "holdsarl\u00f3"
+  },
+  "d83c_df1a": {
+    "message": "\u00fajhold arca"
+  },
+  "d83c_df1b": {
+    "message": "els\u0151 negyedben l\u00e9v\u0151 hold arca"
+  },
+  "d83c_df1c": {
+    "message": "utols\u00f3 negyedben l\u00e9v\u0151 hold arca"
+  },
+  "d83c_df1d": {
+    "message": "telihold arca"
+  },
+  "d83c_df1e": {
+    "message": "nap arca"
+  },
+  "d83c_df1f": {
+    "message": "ragyog\u00f3 csillag"
+  },
+  "d83c_df20": {
+    "message": "hull\u00f3csillag"
+  },
+  "d83c_df30": {
+    "message": "gesztenye"
+  },
+  "d83c_df31": {
+    "message": "fiatal n\u00f6v\u00e9ny"
+  },
+  "d83c_df32": {
+    "message": "\u00f6r\u00f6kz\u00f6ld fa"
+  },
+  "d83c_df33": {
+    "message": "lombhullat\u00f3 fa"
+  },
+  "d83c_df34": {
+    "message": "p\u00e1lmafa"
+  },
+  "d83c_df35": {
+    "message": "kaktusz"
+  },
+  "d83c_df37": {
+    "message": "tulip\u00e1n"
+  },
+  "d83c_df38": {
+    "message": "cseresznyevir\u00e1g"
+  },
+  "d83c_df39": {
+    "message": "r\u00f3zsa"
+  },
+  "d83c_df3a": {
+    "message": "hibiszkusz"
+  },
+  "d83c_df3b": {
+    "message": "napraforg\u00f3"
+  },
+  "d83c_df3c": {
+    "message": "virul\u00e1s"
+  },
+  "d83c_df3d": {
+    "message": "kukorica"
+  },
+  "d83c_df3e": {
+    "message": "rizsn\u00f6v\u00e9ny"
+  },
+  "d83c_df3f": {
+    "message": "f\u0171szern\u00f6v\u00e9ny"
+  },
+  "d83c_df40": {
+    "message": "n\u00e9gylevel\u0171 l\u00f3here"
+  },
+  "d83c_df41": {
+    "message": "juharlev\u00e9l"
+  },
+  "d83c_df42": {
+    "message": "hull\u00f3 levelek"
+  },
+  "d83c_df43": {
+    "message": "sz\u00e9lf\u00fatta lev\u00e9l"
+  },
+  "d83c_df44": {
+    "message": "gomba"
+  },
+  "d83c_df45": {
+    "message": "paradicsom"
+  },
+  "d83c_df46": {
+    "message": "padlizs\u00e1n"
+  },
+  "d83c_df47": {
+    "message": "sz\u0151l\u0151"
+  },
+  "d83c_df48": {
+    "message": "s\u00e1rgadinnye"
+  },
+  "d83c_df49": {
+    "message": "g\u00f6r\u00f6gdinnye"
+  },
+  "d83c_df4a": {
+    "message": "mandarin"
+  },
+  "d83c_df4b": {
+    "message": "citrom"
+  },
+  "d83c_df4c": {
+    "message": "ban\u00e1n"
+  },
+  "d83c_df4d": {
+    "message": "anan\u00e1sz"
+  },
+  "d83c_df4e": {
+    "message": "piros alma"
+  },
+  "d83c_df4f": {
+    "message": "z\u00f6ld alma"
+  },
+  "d83c_df50": {
+    "message": "k\u00f6rte"
+  },
+  "d83c_df51": {
+    "message": "\u0151szibarack"
+  },
+  "d83c_df52": {
+    "message": "cseresznye"
+  },
+  "d83c_df53": {
+    "message": "eper"
+  },
+  "d83c_df54": {
+    "message": "hamburger"
+  },
+  "d83c_df55": {
+    "message": "pizzaszelet"
+  },
+  "d83c_df56": {
+    "message": "h\u00fas"
+  },
+  "d83c_df57": {
+    "message": "csirkecomb"
+  },
+  "d83c_df58": {
+    "message": "rizskeksz"
+  },
+  "d83c_df59": {
+    "message": "rizsgoly\u00f3"
+  },
+  "d83c_df5a": {
+    "message": "f\u0151tt rizs"
+  },
+  "d83c_df5b": {
+    "message": "rizses curry"
+  },
+  "d83c_df5c": {
+    "message": "ramen"
+  },
+  "d83c_df5d": {
+    "message": "spagetti"
+  },
+  "d83c_df5e": {
+    "message": "keny\u00e9r"
+  },
+  "d83c_df5f": {
+    "message": "s\u00fclt burgonya"
+  },
+  "d83c_df60": {
+    "message": "s\u00fclt burgonya"
+  },
+  "d83c_df61": {
+    "message": "mocsi"
+  },
+  "d83c_df62": {
+    "message": "oden"
+  },
+  "d83c_df63": {
+    "message": "szusi"
+  },
+  "d83c_df64": {
+    "message": "s\u00fclt garn\u00e9lar\u00e1k"
+  },
+  "d83c_df65": {
+    "message": "haltorta"
+  },
+  "d83c_df66": {
+    "message": "l\u00e1gy fagylalt"
+  },
+  "d83c_df67": {
+    "message": "j\u00e9gk\u00e1sa"
+  },
+  "d83c_df68": {
+    "message": "fagylalt"
+  },
+  "d83c_df69": {
+    "message": "f\u00e1nk"
+  },
+  "d83c_df6a": {
+    "message": "apr\u00f3s\u00fctem\u00e9ny"
+  },
+  "d83c_df6b": {
+    "message": "csokol\u00e1d\u00e9"
+  },
+  "d83c_df6c": {
+    "message": "cukorka"
+  },
+  "d83c_df6d": {
+    "message": "nyal\u00f3ka"
+  },
+  "d83c_df6e": {
+    "message": "tejsod\u00f3"
+  },
+  "d83c_df6f": {
+    "message": "m\u00e9zesb\u00f6d\u00f6n"
+  },
+  "d83c_df70": {
+    "message": "oml\u00f3s torta"
+  },
+  "d83c_df71": {
+    "message": "bento"
+  },
+  "d83c_df72": {
+    "message": "p\u00f6rk\u00f6lt"
+  },
+  "d83c_df73": {
+    "message": "serpeny\u0151"
+  },
+  "d83c_df74": {
+    "message": "villa \u00e9s k\u00e9s"
+  },
+  "d83c_df75": {
+    "message": "te\u00e1scs\u00e9sze"
+  },
+  "d83c_df76": {
+    "message": "szak\u00e9"
+  },
+  "d83c_df77": {
+    "message": "bor"
+  },
+  "d83c_df78": {
+    "message": "kokt\u00e9l"
+  },
+  "d83c_df79": {
+    "message": "tr\u00f3pusi ital"
+  },
+  "d83c_df7a": {
+    "message": "s\u00f6r"
+  },
+  "d83c_df7b": {
+    "message": "s\u00f6r\u00f6skors\u00f3k"
+  },
+  "d83c_df7c": {
+    "message": "cumis\u00fcveg"
+  },
+  "d83c_df80": {
+    "message": "szalag"
+  },
+  "d83c_df81": {
+    "message": "aj\u00e1nd\u00e9k"
+  },
+  "d83c_df82": {
+    "message": "sz\u00fclet\u00e9snapi torta"
+  },
+  "d83c_df83": {
+    "message": "t\u00f6kl\u00e1mp\u00e1s"
+  },
+  "d83c_df84": {
+    "message": "kar\u00e1csonyfa"
+  },
+  "d83c_df85": {
+    "message": "T\u00e9lap\u00f3"
+  },
+  "d83c_df86": {
+    "message": "t\u0171zij\u00e1t\u00e9k"
+  },
+  "d83c_df87": {
+    "message": "csillagsz\u00f3r\u00f3"
+  },
+  "d83c_df88": {
+    "message": "l\u00e9gg\u00f6mb"
+  },
+  "d83c_df89": {
+    "message": "belt\u00e9ri t\u0171zij\u00e1t\u00e9k"
+  },
+  "d83c_df8a": {
+    "message": "konfetti"
+  },
+  "d83c_df8b": {
+    "message": "fa \u00e9s pap\u00edrszalagok"
+  },
+  "d83c_df8c": {
+    "message": "keresztbe tett z\u00e1szl\u00f3k"
+  },
+  "d83c_df8d": {
+    "message": "feny\u0151dekor\u00e1ci\u00f3"
+  },
+  "d83c_df8e": {
+    "message": "bab\u00e1k"
+  },
+  "d83c_df8f": {
+    "message": "ponty form\u00e1j\u00fa sz\u00e9lzs\u00e1k"
+  },
+  "d83c_df90": {
+    "message": "sz\u00e9lcseng\u0151"
+  },
+  "d83c_df91": {
+    "message": "holdn\u00e9z\u00e9s"
+  },
+  "d83c_df92": {
+    "message": "iskolat\u00e1ska"
+  },
+  "d83c_df93": {
+    "message": "diplomaoszt\u00e1si sapka"
+  },
+  "d83c_dfa0": {
+    "message": "k\u00f6rhinta"
+  },
+  "d83c_dfa1": {
+    "message": "\u00f3ri\u00e1sker\u00e9k"
+  },
+  "d83c_dfa2": {
+    "message": "hull\u00e1mvas\u00fat"
+  },
+  "d83c_dfa3": {
+    "message": "hal\u00e1szat"
+  },
+  "d83c_dfa4": {
+    "message": "mikrofon"
+  },
+  "d83c_dfa5": {
+    "message": "filmfelvev\u0151g\u00e9p"
+  },
+  "d83c_dfa6": {
+    "message": "film"
+  },
+  "d83c_dfa7": {
+    "message": "fejhallgat\u00f3"
+  },
+  "d83c_dfa8": {
+    "message": "paletta"
+  },
+  "d83c_dfa9": {
+    "message": "cilinder"
+  },
+  "d83c_dfaa": {
+    "message": "cirkusz"
+  },
+  "d83c_dfab": {
+    "message": "jegy"
+  },
+  "d83c_dfac": {
+    "message": "csap\u00f3"
+  },
+  "d83c_dfad": {
+    "message": "maszk"
+  },
+  "d83c_dfae": {
+    "message": "videoj\u00e1t\u00e9k"
+  },
+  "d83c_dfaf": {
+    "message": "telital\u00e1lat"
+  },
+  "d83c_dfb0": {
+    "message": "j\u00e1t\u00e9kg\u00e9p"
+  },
+  "d83c_dfb1": {
+    "message": "bili\u00e1rd"
+  },
+  "d83c_dfb2": {
+    "message": "dob\u00f3kocka"
+  },
+  "d83c_dfb3": {
+    "message": "bowling"
+  },
+  "d83c_dfb4": {
+    "message": "j\u00e1t\u00e9kk\u00e1rtya"
+  },
+  "d83c_dfb5": {
+    "message": "hangjegy"
+  },
+  "d83c_dfb6": {
+    "message": "hangjegyek"
+  },
+  "d83c_dfb7": {
+    "message": "szaxofon"
+  },
+  "d83c_dfb8": {
+    "message": "git\u00e1r"
+  },
+  "d83c_dfb9": {
+    "message": "zongora"
+  },
+  "d83c_dfba": {
+    "message": "trombita"
+  },
+  "d83c_dfbb": {
+    "message": "heged\u0171"
+  },
+  "d83c_dfbc": {
+    "message": "kotta"
+  },
+  "d83c_dfbd": {
+    "message": "fut\u00f3p\u00f3l\u00f3"
+  },
+  "d83c_dfbe": {
+    "message": "tenisz"
+  },
+  "d83c_dfbf": {
+    "message": "s\u00ed"
+  },
+  "d83c_dfc0": {
+    "message": "kos\u00e1rlabda"
+  },
+  "d83c_dfc1": {
+    "message": "kock\u00e1s z\u00e1szl\u00f3"
+  },
+  "d83c_dfc2": {
+    "message": "h\u00f3deszk\u00e1s"
+  },
+  "d83c_dfc3": {
+    "message": "fut\u00f3"
+  },
+  "d83c_dfc4": {
+    "message": "sz\u00f6rf\u00f6z\u00e9s"
+  },
+  "d83c_dfc6": {
+    "message": "d\u00edj"
+  },
+  "d83c_dfc7": {
+    "message": "l\u00f3verseny"
+  },
+  "d83c_dfc8": {
+    "message": "amerikai futball"
+  },
+  "d83c_dfc9": {
+    "message": "futball"
+  },
+  "d83c_dfca": {
+    "message": "\u00fasz\u00f3"
+  },
+  "d83c_dfe0": {
+    "message": "h\u00e1z"
+  },
+  "d83c_dfe1": {
+    "message": "otthon"
+  },
+  "d83c_dfe2": {
+    "message": "irodah\u00e1z"
+  },
+  "d83c_dfe3": {
+    "message": "jap\u00e1n posta"
+  },
+  "d83c_dfe4": {
+    "message": "eur\u00f3pai posta"
+  },
+  "d83c_dfe5": {
+    "message": "k\u00f3rh\u00e1z"
+  },
+  "d83c_dfe6": {
+    "message": "bank"
+  },
+  "d83c_dfe7": {
+    "message": "bankautomata"
+  },
+  "d83c_dfe8": {
+    "message": "sz\u00e1lloda"
+  },
+  "d83c_dfe9": {
+    "message": "garnisz\u00e1ll\u00f3"
+  },
+  "d83c_dfea": {
+    "message": "kisbolt"
+  },
+  "d83c_dfeb": {
+    "message": "iskola"
+  },
+  "d83c_dfec": {
+    "message": "\u00e1ruh\u00e1z"
+  },
+  "d83c_dfed": {
+    "message": "gy\u00e1r"
+  },
+  "d83c_dfee": {
+    "message": "piros l\u00e1mp\u00e1s"
+  },
+  "d83c_dfef": {
+    "message": "jap\u00e1n kast\u00e9ly"
+  },
+  "d83c_dff0": {
+    "message": "eur\u00f3pai kast\u00e9ly"
+  },
+  "d83d_dc00": {
+    "message": "patk\u00e1ny"
+  },
+  "d83d_dc01": {
+    "message": "eg\u00e9r"
+  },
+  "d83d_dc02": {
+    "message": "\u00d6k\u00f6r"
+  },
+  "d83d_dc03": {
+    "message": "v\u00edzibivaly"
+  },
+  "d83d_dc04": {
+    "message": "teh\u00e9n"
+  },
+  "d83d_dc06": {
+    "message": "leop\u00e1rd"
+  },
+  "d83d_dc07": {
+    "message": "ny\u00fal"
+  },
+  "d83d_dc08": {
+    "message": "macska"
+  },
+  "d83d_dc09": {
+    "message": "s\u00e1rk\u00e1ny"
+  },
+  "d83d_dc0a": {
+    "message": "krokodil"
+  },
+  "d83d_dc0b": {
+    "message": "b\u00e1lna"
+  },
+  "d83d_dc0c": {
+    "message": "csiga"
+  },
+  "d83d_dc0d": {
+    "message": "k\u00edgy\u00f3"
+  },
+  "d83d_dc0e": {
+    "message": "l\u00f3"
+  },
+  "d83d_dc0f": {
+    "message": "kos"
+  },
+  "d83d_dc10": {
+    "message": "kecske"
+  },
+  "d83d_dc11": {
+    "message": "juh"
+  },
+  "d83d_dc12": {
+    "message": "majom"
+  },
+  "d83d_dc13": {
+    "message": "kakas"
+  },
+  "d83d_dc14": {
+    "message": "csirke"
+  },
+  "d83d_dc15": {
+    "message": "kutya"
+  },
+  "d83d_dc16": {
+    "message": "malac"
+  },
+  "d83d_dc17": {
+    "message": "vaddiszn\u00f3"
+  },
+  "d83d_dc18": {
+    "message": "elef\u00e1nt"
+  },
+  "d83d_dc19": {
+    "message": "polip"
+  },
+  "d83d_dc1a": {
+    "message": "kagyl\u00f3"
+  },
+  "d83d_dc1b": {
+    "message": "bog\u00e1r"
+  },
+  "d83d_dc1c": {
+    "message": "hangya"
+  },
+  "d83d_dc1d": {
+    "message": "m\u00e9h"
+  },
+  "d83d_dc1e": {
+    "message": "katicabog\u00e1r"
+  },
+  "d83d_dc1f": {
+    "message": "hal"
+  },
+  "d83d_dc20": {
+    "message": "tr\u00f3pusi hal"
+  },
+  "d83d_dc21": {
+    "message": "g\u00f6mbhal"
+  },
+  "d83d_dc22": {
+    "message": "tekn\u0151s"
+  },
+  "d83d_dc23": {
+    "message": "kikel\u0151 kiscsibe"
+  },
+  "d83d_dc24": {
+    "message": "kiscsibefej"
+  },
+  "d83d_dc25": {
+    "message": "kiscsibe"
+  },
+  "d83d_dc26": {
+    "message": "mad\u00e1r"
+  },
+  "d83d_dc27": {
+    "message": "pingvin"
+  },
+  "d83d_dc28": {
+    "message": "koala"
+  },
+  "d83d_dc29": {
+    "message": "uszk\u00e1r"
+  },
+  "d83d_dc2a": {
+    "message": "egyp\u00fap\u00fa teve"
+  },
+  "d83d_dc2b": {
+    "message": "k\u00e9tp\u00fap\u00fa teve"
+  },
+  "d83d_dc2c": {
+    "message": "delfin"
+  },
+  "d83d_dc2d": {
+    "message": "eg\u00e9rfej"
+  },
+  "d83d_dc2e": {
+    "message": "teh\u00e9nfej"
+  },
+  "d83d_dc2f": {
+    "message": "tigrisfej"
+  },
+  "d83d_dc30": {
+    "message": "ny\u00falfej"
+  },
+  "d83d_dc31": {
+    "message": "macskafej"
+  },
+  "d83d_dc32": {
+    "message": "s\u00e1rk\u00e1nyfej"
+  },
+  "d83d_dc33": {
+    "message": "v\u00edzet f\u00faj\u00f3 b\u00e1lna"
+  },
+  "d83d_dc34": {
+    "message": "l\u00f3fej"
+  },
+  "d83d_dc35": {
+    "message": "majomfej"
+  },
+  "d83d_dc36": {
+    "message": "kutyafej"
+  },
+  "d83d_dc37": {
+    "message": "malacfej"
+  },
+  "d83d_dc38": {
+    "message": "b\u00e9kafej"
+  },
+  "d83d_dc39": {
+    "message": "h\u00f6rcs\u00f6gfej"
+  },
+  "d83d_dc3a": {
+    "message": "farkasfej"
+  },
+  "d83d_dc3b": {
+    "message": "medvefej"
+  },
+  "d83d_dc3c": {
+    "message": "pandafej"
+  },
+  "d83d_dc3d": {
+    "message": "malacorr"
+  },
+  "d83d_dc3e": {
+    "message": "mancs"
+  },
+  "d83d_dc40": {
+    "message": "szemek"
+  },
+  "d83d_dc42": {
+    "message": "f\u00fcl"
+  },
+  "d83d_dc43": {
+    "message": "orr"
+  },
+  "d83d_dc44": {
+    "message": "sz\u00e1j"
+  },
+  "d83d_dc45": {
+    "message": "nyelv"
+  },
+  "d83d_dc46": {
+    "message": "felfel\u00e9 mutat\u00f3 ujj"
+  },
+  "d83d_dc47": {
+    "message": "lefel\u00e9 mutat\u00f3 ujj"
+  },
+  "d83d_dc48": {
+    "message": "balra mutat\u00f3 ujj"
+  },
+  "d83d_dc49": {
+    "message": "jobbra mutat\u00f3 ujj"
+  },
+  "d83d_dc4a": {
+    "message": "\u00f6sszeszor\u00edtott \u00f6k\u00f6l"
+  },
+  "d83d_dc4b": {
+    "message": "integet\u0151 k\u00e9z"
+  },
+  "d83d_dc4c": {
+    "message": "OK k\u00e9zjel"
+  },
+  "d83d_dc4d": {
+    "message": "felfel\u00e9 mutat\u00f3 h\u00fcvelykujj"
+  },
+  "d83d_dc4e": {
+    "message": "lefel\u00e9 mutat\u00f3 h\u00fcvelykujj"
+  },
+  "d83d_dc4f": {
+    "message": "tapsol\u00f3 k\u00e9z"
+  },
+  "d83d_dc50": {
+    "message": "nyitott kezek"
+  },
+  "d83d_dc51": {
+    "message": "korona"
+  },
+  "d83d_dc52": {
+    "message": "n\u0151i kalap"
+  },
+  "d83d_dc53": {
+    "message": "szem\u00fcveg"
+  },
+  "d83d_dc54": {
+    "message": "nyakkend\u0151"
+  },
+  "d83d_dc55": {
+    "message": "p\u00f3l\u00f3"
+  },
+  "d83d_dc56": {
+    "message": "nadr\u00e1g"
+  },
+  "d83d_dc57": {
+    "message": "ruha"
+  },
+  "d83d_dc58": {
+    "message": "kimon\u00f3"
+  },
+  "d83d_dc59": {
+    "message": "bikini"
+  },
+  "d83d_dc5a": {
+    "message": "n\u0151i ruh\u00e1zat"
+  },
+  "d83d_dc5b": {
+    "message": "p\u00e9nzt\u00e1rca"
+  },
+  "d83d_dc5c": {
+    "message": "k\u00e9zit\u00e1ska"
+  },
+  "d83d_dc5d": {
+    "message": "ersz\u00e9ny"
+  },
+  "d83d_dc5e": {
+    "message": "f\u00e9rfi cip\u0151"
+  },
+  "d83d_dc5f": {
+    "message": "sportcip\u0151"
+  },
+  "d83d_dc60": {
+    "message": "magassark\u00fa"
+  },
+  "d83d_dc61": {
+    "message": "n\u0151i szand\u00e1l"
+  },
+  "d83d_dc62": {
+    "message": "n\u0151i csizma"
+  },
+  "d83d_dc63": {
+    "message": "l\u00e1bnyom"
+  },
+  "d83d_dc64": {
+    "message": "mellszobor sziluettje"
+  },
+  "d83d_dc65": {
+    "message": "mellszobrok sziluettje"
+  },
+  "d83d_dc66": {
+    "message": "fi\u00fa"
+  },
+  "d83d_dc67": {
+    "message": "l\u00e1ny"
+  },
+  "d83d_dc68": {
+    "message": "f\u00e9rfi"
+  },
+  "d83d_dc69": {
+    "message": "n\u0151"
+  },
+  "d83d_dc6a": {
+    "message": "csal\u00e1d"
+  },
+  "d83d_dc6b": {
+    "message": "f\u00e9rfi \u00e9s n\u0151"
+  },
+  "d83d_dc6c": {
+    "message": "k\u00e9t f\u00e9rfi"
+  },
+  "d83d_dc6d": {
+    "message": "k\u00e9t n\u0151"
+  },
+  "d83d_dc6e": {
+    "message": "rend\u0151r"
+  },
+  "d83d_dc6f": {
+    "message": "nyuszil\u00e1ny"
+  },
+  "d83d_dc70": {
+    "message": "menyasszony"
+  },
+  "d83d_dc71": {
+    "message": "sz\u0151ke ember"
+  },
+  "d83d_dc72": {
+    "message": "ember gua pi mao sapk\u00e1ban"
+  },
+  "d83d_dc73": {
+    "message": "turb\u00e1nos ember"
+  },
+  "d83d_dc74": {
+    "message": "id\u0151sebb f\u00e9rfi"
+  },
+  "d83d_dc75": {
+    "message": "id\u0151sebb n\u0151"
+  },
+  "d83d_dc76": {
+    "message": "baba"
+  },
+  "d83d_dc77": {
+    "message": "\u00e9p\u00edt\u0151munk\u00e1s"
+  },
+  "d83d_dc78": {
+    "message": "hercegn\u0151"
+  },
+  "d83d_dc79": {
+    "message": "emberev\u0151 \u00f3ri\u00e1s"
+  },
+  "d83d_dc7a": {
+    "message": "kobold"
+  },
+  "d83d_dc7b": {
+    "message": "szellem"
+  },
+  "d83d_dc7c": {
+    "message": "gyermek angyal"
+  },
+  "d83d_dc7d": {
+    "message": "idegen"
+  },
+  "d83d_dc7e": {
+    "message": "idegen sz\u00f6rny"
+  },
+  "d83d_dc7f": {
+    "message": "man\u00f3"
+  },
+  "d83d_dc80": {
+    "message": "koponya"
+  },
+  "d83d_dc81": {
+    "message": "inform\u00e1ci\u00f3s pult"
+  },
+  "d83d_dc82": {
+    "message": "g\u00e1rdista"
+  },
+  "d83d_dc83": {
+    "message": "t\u00e1ncos"
+  },
+  "d83d_dc84": {
+    "message": "r\u00fazs"
+  },
+  "d83d_dc85": {
+    "message": "k\u00f6r\u00f6m\u00e1pol\u00e1s"
+  },
+  "d83d_dc86": {
+    "message": "arcmassz\u00e1zs"
+  },
+  "d83d_dc87": {
+    "message": "hajv\u00e1g\u00e1s"
+  },
+  "d83d_dc88": {
+    "message": "f\u00e9rfifodr\u00e1szat"
+  },
+  "d83d_dc89": {
+    "message": "l\u00f6v\u00e9s"
+  },
+  "d83d_dc8a": {
+    "message": "tabletta"
+  },
+  "d83d_dc8b": {
+    "message": "r\u00fazslenyomat"
+  },
+  "d83d_dc8c": {
+    "message": "szerelmeslev\u00e9l"
+  },
+  "d83d_dc8d": {
+    "message": "gy\u0171r\u0171"
+  },
+  "d83d_dc8e": {
+    "message": "dr\u00e1gak\u0151"
+  },
+  "d83d_dc8f": {
+    "message": "cs\u00f3k"
+  },
+  "d83d_dc90": {
+    "message": "csokor"
+  },
+  "d83d_dc91": {
+    "message": "p\u00e1r"
+  },
+  "d83d_dc92": {
+    "message": "esk\u00fcv\u0151i k\u00e1polna"
+  },
+  "d83d_dc93": {
+    "message": "l\u00fcktet\u0151 sz\u00edv"
+  },
+  "d83d_dc94": {
+    "message": "sz\u00edvet t\u00e9p\u0151 f\u00e1jdalom"
+  },
+  "d83d_dc95": {
+    "message": "k\u00e9t sz\u00edv"
+  },
+  "d83d_dc96": {
+    "message": "csillog\u00f3 sz\u00edv"
+  },
+  "d83d_dc97": {
+    "message": "n\u00f6vekv\u0151 sz\u00edv"
+  },
+  "d83d_dc98": {
+    "message": "sz\u00edv \u00e9s ny\u00edl"
+  },
+  "d83d_dc99": {
+    "message": "k\u00e9k sz\u00edv"
+  },
+  "d83d_dc9a": {
+    "message": "z\u00f6ld sz\u00edv"
+  },
+  "d83d_dc9b": {
+    "message": "s\u00e1rga sz\u00edv"
+  },
+  "d83d_dc9c": {
+    "message": "lila sz\u00edv"
+  },
+  "d83d_dc9d": {
+    "message": "sz\u00edv szalaggal"
+  },
+  "d83d_dc9e": {
+    "message": "forg\u00f3 sz\u00edvek"
+  },
+  "d83d_dc9f": {
+    "message": "sz\u00edv d\u00edsz\u00edt\u00e9s"
+  },
+  "d83d_dca0": {
+    "message": "vir\u00e1gszirom"
+  },
+  "d83d_dca1": {
+    "message": "villanyk\u00f6rte"
+  },
+  "d83d_dca2": {
+    "message": "harag"
+  },
+  "d83d_dca3": {
+    "message": "bomba"
+  },
+  "d83d_dca4": {
+    "message": "\u00e1lmos szimb\u00f3lum"
+  },
+  "d83d_dca5": {
+    "message": "\u00fctk\u00f6z\u00e9s"
+  },
+  "d83d_dca6": {
+    "message": "fr\u00f6ccsen\u0151 verejt\u00e9k"
+  },
+  "d83d_dca7": {
+    "message": "hideg verejt\u00e9k"
+  },
+  "d83d_dca8": {
+    "message": "fut\u00e1s"
+  },
+  "d83d_dca9": {
+    "message": "kaki"
+  },
+  "d83d_dcaa": {
+    "message": "bicepsz"
+  },
+  "d83d_dcab": {
+    "message": "sz\u00e9d\u00fcl\u0151"
+  },
+  "d83d_dcac": {
+    "message": "sz\u00f3bubor\u00e9k"
+  },
+  "d83d_dcad": {
+    "message": "gondolatbubor\u00e9k"
+  },
+  "d83d_dcae": {
+    "message": "vir\u00e1gb\u00e9lyegz\u0151"
+  },
+  "d83d_dcaf": {
+    "message": "teljes pontsz\u00e1m"
+  },
+  "d83d_dcb0": {
+    "message": "p\u00e9nzeszacsk\u00f3"
+  },
+  "d83d_dcb1": {
+    "message": "p\u00e9nzv\u00e1lt\u00e1s"
+  },
+  "d83d_dcb2": {
+    "message": "doll\u00e1rjel"
+  },
+  "d83d_dcb3": {
+    "message": "hitelk\u00e1rtya"
+  },
+  "d83d_dcb4": {
+    "message": "jen bankjegy"
+  },
+  "d83d_dcb5": {
+    "message": "doll\u00e1r bankjegy"
+  },
+  "d83d_dcb6": {
+    "message": "eur\u00f3 bankjegy"
+  },
+  "d83d_dcb7": {
+    "message": "font bankjegy"
+  },
+  "d83d_dcb8": {
+    "message": "rep\u00fcl\u0151 p\u00e9nz"
+  },
+  "d83d_dcb9": {
+    "message": "n\u00f6vekv\u0151 piac"
+  },
+  "d83d_dcba": {
+    "message": "\u00fcl\u00e9s"
+  },
+  "d83d_dcbb": {
+    "message": "sz\u00e1m\u00edt\u00f3g\u00e9p"
+  },
+  "d83d_dcbc": {
+    "message": "aktat\u00e1ska"
+  },
+  "d83d_dcbd": {
+    "message": "minilemez"
+  },
+  "d83d_dcbe": {
+    "message": "floppy lemez"
+  },
+  "d83d_dcbf": {
+    "message": "blu-ray"
+  },
+  "d83d_dcc0": {
+    "message": "DVD"
+  },
+  "d83d_dcc1": {
+    "message": "irattart\u00f3 mappa"
+  },
+  "d83d_dcc2": {
+    "message": "nyitott mappa"
+  },
+  "d83d_dcc3": {
+    "message": "dokumentum"
+  },
+  "d83d_dcc4": {
+    "message": "dokumentum"
+  },
+  "d83d_dcc5": {
+    "message": "napt\u00e1r"
+  },
+  "d83d_dcc6": {
+    "message": "leszak\u00edthat\u00f3 napt\u00e1r"
+  },
+  "d83d_dcc7": {
+    "message": "forg\u00f3 n\u00e9vjegytart\u00f3"
+  },
+  "d83d_dcc8": {
+    "message": "emelked\u0151 trend"
+  },
+  "d83d_dcc9": {
+    "message": "cs\u00f6kken\u0151 trend"
+  },
+  "d83d_dcca": {
+    "message": "oszlopdiagram"
+  },
+  "d83d_dccb": {
+    "message": "fel\u00edr\u00f3t\u00e1bla"
+  },
+  "d83d_dccc": {
+    "message": "rajzszeg"
+  },
+  "d83d_dccd": {
+    "message": "kerek rajzszeg"
+  },
+  "d83d_dcce": {
+    "message": "gemkapocs"
+  },
+  "d83d_dccf": {
+    "message": "egyenes vonalz\u00f3"
+  },
+  "d83d_dcd0": {
+    "message": "h\u00e1romsz\u00f6gvonalz\u00f3"
+  },
+  "d83d_dcd1": {
+    "message": "k\u00f6nyvjelz\u0151 lapok"
+  },
+  "d83d_dcd2": {
+    "message": "f\u0151k\u00f6nyv"
+  },
+  "d83d_dcd3": {
+    "message": "jegyzetf\u00fczet"
+  },
+  "d83d_dcd4": {
+    "message": "d\u00edszes jegyzetf\u00fczet"
+  },
+  "d83d_dcd5": {
+    "message": "becsukott k\u00f6nyv"
+  },
+  "d83d_dcd6": {
+    "message": "nyitott k\u00f6nyv"
+  },
+  "d83d_dcd7": {
+    "message": "z\u00f6ld k\u00f6nyv"
+  },
+  "d83d_dcd8": {
+    "message": "k\u00f6nyv"
+  },
+  "d83d_dcd9": {
+    "message": "narancss\u00e1rga k\u00f6nyv"
+  },
+  "d83d_dcda": {
+    "message": "k\u00f6nyvek"
+  },
+  "d83d_dcdb": {
+    "message": "n\u00e9vkit\u0171z\u0151"
+  },
+  "d83d_dcdc": {
+    "message": "pap\u00edrtekercs"
+  },
+  "d83d_dcdd": {
+    "message": "feljegyz\u00e9s"
+  },
+  "d83d_dcde": {
+    "message": "telefon"
+  },
+  "d83d_dcdf": {
+    "message": "szem\u00e9lyh\u00edv\u00f3"
+  },
+  "d83d_dce0": {
+    "message": "fax"
+  },
+  "d83d_dce1": {
+    "message": "parabolaantenna"
+  },
+  "d83d_dce2": {
+    "message": "hangsz\u00f3r\u00f3"
+  },
+  "d83d_dce3": {
+    "message": "hangosbesz\u00e9l\u0151"
+  },
+  "d83d_dce4": {
+    "message": "elk\u00fcld\u00f6tt lev\u00e9l"
+  },
+  "d83d_dce5": {
+    "message": "Be\u00e9rkez\u0151 levelek"
+  },
+  "d83d_dce6": {
+    "message": "csomag"
+  },
+  "d83d_dce7": {
+    "message": "e-mail"
+  },
+  "d83d_dce8": {
+    "message": "be\u00e9rkez\u0151 lev\u00e9l"
+  },
+  "d83d_dce9": {
+    "message": "kimen\u0151 lev\u00e9l"
+  },
+  "d83d_dcea": {
+    "message": "z\u00e1rt postal\u00e1da lefel\u00e9 mutat\u00f3 z\u00e1szl\u00f3val"
+  },
+  "d83d_dceb": {
+    "message": "z\u00e1rt postal\u00e1da felfel\u00e9 mutat\u00f3 z\u00e1szl\u00f3val"
+  },
+  "d83d_dcec": {
+    "message": "nyitott postal\u00e1da felfel\u00e9 mutat\u00f3 z\u00e1szl\u00f3val"
+  },
+  "d83d_dced": {
+    "message": "nyitott postal\u00e1da lefel\u00e9 mutat\u00f3 z\u00e1szl\u00f3val"
+  },
+  "d83d_dcee": {
+    "message": "postal\u00e1da"
+  },
+  "d83d_dcef": {
+    "message": "postak\u00fcrt"
+  },
+  "d83d_dcf0": {
+    "message": "\u00fajs\u00e1g"
+  },
+  "d83d_dcf1": {
+    "message": "mobiltelefon"
+  },
+  "d83d_dcf2": {
+    "message": "mobiltelefon ny\u00edllal"
+  },
+  "d83d_dcf3": {
+    "message": "rezg\u00e9s m\u00f3d"
+  },
+  "d83d_dcf4": {
+    "message": "telefon kikapcsol\u00e1sa"
+  },
+  "d83d_dcf5": {
+    "message": "\u00e1th\u00fazott mobiltelefon"
+  },
+  "d83d_dcf6": {
+    "message": "mobil jelek"
+  },
+  "d83d_dcf7": {
+    "message": "f\u00e9nyk\u00e9pez\u0151g\u00e9p"
+  },
+  "d83d_dcf9": {
+    "message": "videokamera"
+  },
+  "d83d_dcfa": {
+    "message": "t\u00e9v\u00e9"
+  },
+  "d83d_dcfb": {
+    "message": "r\u00e1di\u00f3"
+  },
+  "d83d_dcfc": {
+    "message": "videokazetta"
+  },
+  "d83d_dd00": {
+    "message": "keresztezett nyilak"
+  },
+  "d83d_dd01": {
+    "message": "\u00f3ramutat\u00f3 j\u00e1r\u00e1s\u00e1val megegyez\u0151 ir\u00e1nyba mutat\u00f3 nyilak"
+  },
+  "d83d_dd02": {
+    "message": "\u00f3ramutat\u00f3 j\u00e1r\u00e1s\u00e1val megegyez\u0151 ir\u00e1nyba mutat\u00f3 nyilak"
+  },
+  "d83d_dd03": {
+    "message": "\u00fajrat\u00f6lt\u00e9s"
+  },
+  "d83d_dd04": {
+    "message": "\u00f3ramutat\u00f3 j\u00e1r\u00e1s\u00e1val ellent\u00e9tes ir\u00e1nyba mutat\u00f3 nyilak"
+  },
+  "d83d_dd05": {
+    "message": "kis f\u00e9nyer\u0151"
+  },
+  "d83d_dd06": {
+    "message": "nagy f\u00e9nyer\u0151"
+  },
+  "d83d_dd07": {
+    "message": "besz\u00e9lni tilos"
+  },
+  "d83d_dd08": {
+    "message": "hangsz\u00f3r\u00f3"
+  },
+  "d83d_dd09": {
+    "message": "hangsz\u00f3r\u00f3 kis hanger\u0151n"
+  },
+  "d83d_dd0a": {
+    "message": "hangsz\u00f3r\u00f3 nagy hanger\u0151n"
+  },
+  "d83d_dd0b": {
+    "message": "elem"
+  },
+  "d83d_dd0c": {
+    "message": "elektromos csatlakoz\u00f3"
+  },
+  "d83d_dd0d": {
+    "message": "balra d\u00f6nt\u00f6tt nagy\u00edt\u00f3"
+  },
+  "d83d_dd0e": {
+    "message": "jobbra d\u00f6nt\u00f6tt nagy\u00edt\u00f3"
+  },
+  "d83d_dd0f": {
+    "message": "lakat t\u00f6lt\u0151tollal"
+  },
+  "d83d_dd10": {
+    "message": "z\u00e1rt lakat kulccsal"
+  },
+  "d83d_dd11": {
+    "message": "kulcs"
+  },
+  "d83d_dd12": {
+    "message": "z\u00e1rt lakat"
+  },
+  "d83d_dd13": {
+    "message": "nyitott lakat"
+  },
+  "d83d_dd14": {
+    "message": "cseng\u0151"
+  },
+  "d83d_dd15": {
+    "message": "cseng\u0151 \u00e1th\u00fazva"
+  },
+  "d83d_dd16": {
+    "message": "k\u00f6nyvjelz\u0151"
+  },
+  "d83d_dd17": {
+    "message": "link jel"
+  },
+  "d83d_dd18": {
+    "message": "v\u00e1laszt\u00f3gomb"
+  },
+  "d83d_dd19": {
+    "message": "vissza"
+  },
+  "d83d_dd1a": {
+    "message": "v\u00e9ge"
+  },
+  "d83d_dd1b": {
+    "message": "BE ny\u00edl"
+  },
+  "d83d_dd1c": {
+    "message": "Hamarosan jel"
+  },
+  "d83d_dd1d": {
+    "message": "fels\u0151 jel"
+  },
+  "d83d_dd1e": {
+    "message": "18 \u00e9v alatt tilos"
+  },
+  "d83d_dd20": {
+    "message": "nagybet\u0171k"
+  },
+  "d83d_dd21": {
+    "message": "kisbet\u0171k"
+  },
+  "d83d_dd22": {
+    "message": "sz\u00e1mok"
+  },
+  "d83d_dd23": {
+    "message": "szimb\u00f3lumok"
+  },
+  "d83d_dd24": {
+    "message": "latin \u00e1b\u00e9c\u00e9"
+  },
+  "d83d_dd25": {
+    "message": "t\u0171z"
+  },
+  "d83d_dd26": {
+    "message": "zsebl\u00e1mpa"
+  },
+  "d83d_dd27": {
+    "message": "csavarkulcs"
+  },
+  "d83d_dd28": {
+    "message": "kalap\u00e1cs"
+  },
+  "d83d_dd29": {
+    "message": "anya \u00e9s csavar"
+  },
+  "d83d_dd2a": {
+    "message": "konyhai k\u00e9s"
+  },
+  "d83d_dd2b": {
+    "message": "l\u0151fegyver"
+  },
+  "d83d_dd2c": {
+    "message": "mikroszk\u00f3p"
+  },
+  "d83d_dd2d": {
+    "message": "t\u00e1vcs\u0151"
+  },
+  "d83d_dd2e": {
+    "message": "krist\u00e1lyg\u00f6mb"
+  },
+  "d83d_dd2f": {
+    "message": "hat\u00e1g\u00fa csillag"
+  },
+  "d83d_dd30": {
+    "message": "z\u00f6ld \u00e9s s\u00e1rga lev\u00e9l"
+  },
+  "d83d_dd31": {
+    "message": "szigony jel"
+  },
+  "d83d_dd32": {
+    "message": "fekete n\u00e9gyzet gomb"
+  },
+  "d83d_dd33": {
+    "message": "feh\u00e9r n\u00e9gyzet gomb"
+  },
+  "d83d_dd34": {
+    "message": "nagy piros k\u00f6r"
+  },
+  "d83d_dd35": {
+    "message": "nagy k\u00e9k k\u00f6r"
+  },
+  "d83d_dd36": {
+    "message": "nagy narancss\u00e1rga gy\u00e9m\u00e1nt"
+  },
+  "d83d_dd37": {
+    "message": "nagy k\u00e9k gy\u00e9m\u00e1nt"
+  },
+  "d83d_dd38": {
+    "message": "kis narancss\u00e1rga gy\u00e9m\u00e1nt"
+  },
+  "d83d_dd39": {
+    "message": "kis k\u00e9k gy\u00e9m\u00e1nt"
+  },
+  "d83d_dd3a": {
+    "message": "felfel\u00e9 mutat\u00f3 h\u00e1romsz\u00f6g"
+  },
+  "d83d_dd3b": {
+    "message": "lefel\u00e9 mutat\u00f3 h\u00e1romsz\u00f6g"
+  },
+  "d83d_dd3c": {
+    "message": "felfel\u00e9 mutat\u00f3 h\u00e1romsz\u00f6g gomb"
+  },
+  "d83d_dd3d": {
+    "message": "lefel\u00e9 mutat\u00f3 h\u00e1romsz\u00f6g gomb"
+  },
+  "d83d_dd50": {
+    "message": "1 \u00f3ra"
+  },
+  "d83d_dd51": {
+    "message": "2 \u00f3ra"
+  },
+  "d83d_dd52": {
+    "message": "3 \u00f3ra"
+  },
+  "d83d_dd53": {
+    "message": "4 \u00f3ra"
+  },
+  "d83d_dd54": {
+    "message": "5 \u00f3ra"
+  },
+  "d83d_dd55": {
+    "message": "6 \u00f3ra"
+  },
+  "d83d_dd56": {
+    "message": "7 \u00f3ra"
+  },
+  "d83d_dd57": {
+    "message": "8 \u00f3ra"
+  },
+  "d83d_dd58": {
+    "message": "9 \u00f3ra"
+  },
+  "d83d_dd59": {
+    "message": "10 \u00f3ra"
+  },
+  "d83d_dd5a": {
+    "message": "11 \u00f3ra"
+  },
+  "d83d_dd5b": {
+    "message": "12 \u00f3ra"
+  },
+  "d83d_dd5c": {
+    "message": "f\u00e9l kett\u0151"
+  },
+  "d83d_dd5d": {
+    "message": "f\u00e9l h\u00e1rom"
+  },
+  "d83d_dd5e": {
+    "message": "f\u00e9l n\u00e9gy"
+  },
+  "d83d_dd5f": {
+    "message": "f\u00e9l \u00f6t"
+  },
+  "d83d_dd60": {
+    "message": "f\u00e9l hat"
+  },
+  "d83d_dd61": {
+    "message": "f\u00e9l h\u00e9t"
+  },
+  "d83d_dd62": {
+    "message": "f\u00e9l nyolc"
+  },
+  "d83d_dd63": {
+    "message": "f\u00e9l kilenc"
+  },
+  "d83d_dd64": {
+    "message": "f\u00e9l t\u00edz"
+  },
+  "d83d_dd65": {
+    "message": "f\u00e9l tizenegy"
+  },
+  "d83d_dd66": {
+    "message": "f\u00e9l tizenkett\u0151"
+  },
+  "d83d_dd67": {
+    "message": "f\u00e9l egy"
+  },
+  "d83d_ddfb": {
+    "message": "Fuji hegy"
+  },
+  "d83d_ddfc": {
+    "message": "Tokyo Tower"
+  },
+  "d83d_ddfd": {
+    "message": "Szabads\u00e1g-szobor"
+  },
+  "d83d_ddfe": {
+    "message": "Jap\u00e1n t\u00e9rk\u00e9pe"
+  },
+  "d83d_ddff": {
+    "message": "Moyai szobor"
+  },
+  "d83d_de00": {
+    "message": "vigyor"
+  },
+  "d83d_de01": {
+    "message": " vigyorg\u00e1s mosolyg\u00f3 szemmel"
+  },
+  "d83d_de02": {
+    "message": "\u00f6r\u00f6mk\u00f6nnyek"
+  },
+  "d83d_de03": {
+    "message": "mosoly nyitott sz\u00e1jjal"
+  },
+  "d83d_de04": {
+    "message": "mosoly nyitott sz\u00e1jjal, mosolyg\u00f3s szemmel"
+  },
+  "d83d_de05": {
+    "message": "hideg verejt\u00e9k mosoly"
+  },
+  "d83d_de06": {
+    "message": " mosoly nyitott sz\u00e1jjal \u00e9s csukott szemmel"
+  },
+  "d83d_de07": {
+    "message": "mosoly gl\u00f3ri\u00e1val"
+  },
+  "d83d_de08": {
+    "message": "mosoly szarvakkal"
+  },
+  "d83d_de09": {
+    "message": "kacsint\u00f3 arc"
+  },
+  "d83d_de0a": {
+    "message": "mosoly"
+  },
+  "d83d_de0b": {
+    "message": "\u00e9hes arc"
+  },
+  "d83d_de0c": {
+    "message": "megk\u00f6nnyebb\u00fclt arc"
+  },
+  "d83d_de0d": {
+    "message": "mosolyg\u00f3 arc"
+  },
+  "d83d_de0e": {
+    "message": "men\u0151"
+  },
+  "d83d_de0f": {
+    "message": "\u00f6nel\u00e9g\u00fclt mosoly"
+  },
+  "d83d_de10": {
+    "message": "pl\u00e9hpofa"
+  },
+  "d83d_de11": {
+    "message": "kifejez\u00e9stelen"
+  },
+  "d83d_de12": {
+    "message": "unott"
+  },
+  "d83d_de13": {
+    "message": "hideg verejt\u00e9k"
+  },
+  "d83d_de14": {
+    "message": "t\u00f6preng\u0151 arc"
+  },
+  "d83d_de15": {
+    "message": "zavarban l\u00e9v\u0151 arc"
+  },
+  "d83d_de16": {
+    "message": "megh\u00f6kkent arc"
+  },
+  "d83d_de17": {
+    "message": "cs\u00f3kot dob\u00f3 arc"
+  },
+  "d83d_de18": {
+    "message": "puszidob\u00e1l\u00e1s"
+  },
+  "d83d_de19": {
+    "message": "puszi \u00e9s mosoly"
+  },
+  "d83d_de1a": {
+    "message": "cs\u00f3kol"
+  },
+  "d83d_de1b": {
+    "message": "nyelv\u00f6lt\u00e9s"
+  },
+  "d83d_de1c": {
+    "message": "nyelv\u00f6lt\u00e9s kacsint\u00e1ssal"
+  },
+  "d83d_de1d": {
+    "message": "f\u00faj"
+  },
+  "d83d_de1e": {
+    "message": "csal\u00f3dott"
+  },
+  "d83d_de1f": {
+    "message": "agg\u00f3d\u00f3"
+  },
+  "d83d_de20": {
+    "message": "d\u00fch\u00f6s"
+  },
+  "d83d_de21": {
+    "message": "ajakbiggyeszt\u00e9s"
+  },
+  "d83d_de22": {
+    "message": "s\u00edr\u00e1s"
+  },
+  "d83d_de23": {
+    "message": "elsz\u00fartam"
+  },
+  "d83d_de24": {
+    "message": "diadalmas pillant\u00e1s"
+  },
+  "d83d_de25": {
+    "message": "h\u0171ha!"
+  },
+  "d83d_de26": {
+    "message": "komor arc"
+  },
+  "d83d_de27": {
+    "message": "elk\u00ednzott"
+  },
+  "d83d_de28": {
+    "message": "retteg\u0151"
+  },
+  "d83d_de29": {
+    "message": "f\u00e1radt"
+  },
+  "d83d_de2a": {
+    "message": "\u00e1lmos"
+  },
+  "d83d_de2b": {
+    "message": "f\u00e1radt"
+  },
+  "d83d_de2c": {
+    "message": "fintor"
+  },
+  "d83d_de2d": {
+    "message": "hangos s\u00edr\u00e1s"
+  },
+  "d83d_de2e": {
+    "message": "arc nyitott sz\u00e1jjal"
+  },
+  "d83d_de2f": {
+    "message": "lecsendes\u00edtett arc"
+  },
+  "d83d_de30": {
+    "message": "hajszolt arc"
+  },
+  "d83d_de31": {
+    "message": "f\u00e9l\u0151 arc"
+  },
+  "d83d_de32": {
+    "message": "d\u00f6bbent arc"
+  },
+  "d83d_de33": {
+    "message": "elv\u00f6r\u00f6s\u00f6d\u00f6tt"
+  },
+  "d83d_de34": {
+    "message": "alv\u00e1s"
+  },
+  "d83d_de35": {
+    "message": "sz\u00e9d\u00fcl\u0151"
+  },
+  "d83d_de36": {
+    "message": "sz\u00e1j n\u00e9lk\u00fcli arc"
+  },
+  "d83d_de37": {
+    "message": "arc maszkkal"
+  },
+  "d83d_de38": {
+    "message": "vigyorg\u00f3 macskafej"
+  },
+  "d83d_de39": {
+    "message": "\u00f6r\u00f6mk\u00f6nnyeket hullat\u00f3 macskafej"
+  },
+  "d83d_de3a": {
+    "message": "mosolyg\u00f3 macskafej"
+  },
+  "d83d_de3b": {
+    "message": "mosolyg\u00f3 macskafej"
+  },
+  "d83d_de3c": {
+    "message": "ferde mosoly\u00fa macskafej"
+  },
+  "d83d_de3d": {
+    "message": "puszit dob\u00f3 macska"
+  },
+  "d83d_de3e": {
+    "message": "ajk\u00e1t biggyeszt\u0151 macskafej"
+  },
+  "d83d_de3f": {
+    "message": "s\u00edr\u00f3 macskafej"
+  },
+  "d83d_de40": {
+    "message": "f\u00e1radt macskafej"
+  },
+  "d83d_de45": {
+    "message": "\u201enem j\u00f3\u201d k\u00e9zmozdulat"
+  },
+  "d83d_de46": {
+    "message": "OK k\u00e9zmozdulat"
+  },
+  "d83d_de47": {
+    "message": "sajn\u00e1lom"
+  },
+  "d83d_de48": {
+    "message": "letakart szem"
+  },
+  "d83d_de49": {
+    "message": "eltakart f\u00fcl"
+  },
+  "d83d_de4a": {
+    "message": "letakart sz\u00e1j"
+  },
+  "d83d_de4b": {
+    "message": "boldog ember"
+  },
+  "d83d_de4c": {
+    "message": "hurr\u00e1"
+  },
+  "d83d_de4d": {
+    "message": "komor szem\u00e9ly"
+  },
+  "d83d_de4e": {
+    "message": "ajakbiggyeszt\u00e9s"
+  },
+  "d83d_de4f": {
+    "message": "\u00f6sszekulcsolt k\u00e9z"
+  },
+  "d83d_de80": {
+    "message": "rak\u00e9ta"
+  },
+  "d83d_de81": {
+    "message": "helikopter"
+  },
+  "d83d_de82": {
+    "message": "g\u0151zmozdony"
+  },
+  "d83d_de83": {
+    "message": "vonat"
+  },
+  "d83d_de84": {
+    "message": "gyorsvas\u00fat"
+  },
+  "d83d_de85": {
+    "message": "sinkanszen"
+  },
+  "d83d_de86": {
+    "message": "vonat"
+  },
+  "d83d_de87": {
+    "message": "metr\u00f3"
+  },
+  "d83d_de88": {
+    "message": "helyi vas\u00fat"
+  },
+  "d83d_de89": {
+    "message": "vas\u00fat\u00e1llom\u00e1s"
+  },
+  "d83d_de8a": {
+    "message": "villamos"
+  },
+  "d83d_de8b": {
+    "message": "villamoskocsi"
+  },
+  "d83d_de8c": {
+    "message": "busz"
+  },
+  "d83d_de8d": {
+    "message": "szembej\u00f6v\u0151 busz"
+  },
+  "d83d_de8e": {
+    "message": "trolibusz"
+  },
+  "d83d_de8f": {
+    "message": "buszmeg\u00e1ll\u00f3"
+  },
+  "d83d_de90": {
+    "message": "minibusz"
+  },
+  "d83d_de91": {
+    "message": "ment\u0151aut\u00f3"
+  },
+  "d83d_de92": {
+    "message": "t\u0171zolt\u00f3aut\u00f3"
+  },
+  "d83d_de93": {
+    "message": "rend\u0151raut\u00f3"
+  },
+  "d83d_de94": {
+    "message": "szembej\u00f6v\u0151 rend\u0151raut\u00f3"
+  },
+  "d83d_de95": {
+    "message": "taxi"
+  },
+  "d83d_de96": {
+    "message": "szembej\u00f6v\u0151 taxi"
+  },
+  "d83d_de97": {
+    "message": "aut\u00f3"
+  },
+  "d83d_de98": {
+    "message": "szembej\u00f6v\u0151 aut\u00f3"
+  },
+  "d83d_de99": {
+    "message": "lak\u00f3kocsi"
+  },
+  "d83d_de9a": {
+    "message": "sz\u00e1ll\u00edt\u00f3 teheraut\u00f3"
+  },
+  "d83d_de9b": {
+    "message": "teherg\u00e9pkocsi"
+  },
+  "d83d_de9c": {
+    "message": "traktor"
+  },
+  "d83d_de9d": {
+    "message": "egys\u00edn\u0171 vas\u00fat"
+  },
+  "d83d_de9e": {
+    "message": "hegyi vas\u00fat"
+  },
+  "d83d_de9f": {
+    "message": "f\u00fcgg\u0151vas\u00fat"
+  },
+  "d83d_dea0": {
+    "message": "hegyi k\u00f6t\u00e9lp\u00e1lya"
+  },
+  "d83d_dea1": {
+    "message": "sikl\u00f3"
+  },
+  "d83d_dea2": {
+    "message": "haj\u00f3"
+  },
+  "d83d_dea3": {
+    "message": "cs\u00f3nak"
+  },
+  "d83d_dea4": {
+    "message": "motorcs\u00f3nak"
+  },
+  "d83d_dea5": {
+    "message": "v\u00edzszintes k\u00f6zleked\u00e9si l\u00e1mp\u00e1k"
+  },
+  "d83d_dea6": {
+    "message": "f\u00fcgg\u0151leges k\u00f6zleked\u00e9si l\u00e1mp\u00e1k"
+  },
+  "d83d_dea7": {
+    "message": "\u00e9p\u00edt\u00e9s alatt"
+  },
+  "d83d_dea8": {
+    "message": "forg\u00f3 f\u00e9ny"
+  },
+  "d83d_dea9": {
+    "message": "hely z\u00e1szl\u00f3"
+  },
+  "d83d_deaa": {
+    "message": "ajt\u00f3"
+  },
+  "d83d_deab": {
+    "message": "Bel\u00e9pni tilos jel"
+  },
+  "d83d_deac": {
+    "message": "doh\u00e1nyz\u00e1s jel"
+  },
+  "d83d_dead": {
+    "message": "tilos a doh\u00e1nyz\u00e1s jel"
+  },
+  "d83d_deae": {
+    "message": "szemetes jel"
+  },
+  "d83d_deaf": {
+    "message": "szemetelni tilos jel"
+  },
+  "d83d_deb0": {
+    "message": "iv\u00f3v\u00edz"
+  },
+  "d83d_deb1": {
+    "message": "nem iv\u00f3v\u00edz"
+  },
+  "d83d_deb2": {
+    "message": "ker\u00e9kp\u00e1r"
+  },
+  "d83d_deb3": {
+    "message": "\u00e1th\u00fazott ker\u00e9kp\u00e1r"
+  },
+  "d83d_deb4": {
+    "message": "ker\u00e9kp\u00e1ros"
+  },
+  "d83d_deb5": {
+    "message": "hegyiker\u00e9kp\u00e1ros"
+  },
+  "d83d_deb6": {
+    "message": "gyalogos"
+  },
+  "d83d_deb7": {
+    "message": "\u00e1th\u00fazott gyalogos"
+  },
+  "d83d_deb8": {
+    "message": "\u00e1thalad\u00f3 gyermekek"
+  },
+  "d83d_deb9": {
+    "message": "F\u00e9rfiak jel"
+  },
+  "d83d_deba": {
+    "message": "N\u0151k jel"
+  },
+  "d83d_debb": {
+    "message": "mell\u00e9khelyis\u00e9g jel"
+  },
+  "d83d_debc": {
+    "message": "baba jel"
+  },
+  "d83d_debd": {
+    "message": "v\u00e9c\u00e9cs\u00e9sze"
+  },
+  "d83d_debe": {
+    "message": "WC"
+  },
+  "d83d_debf": {
+    "message": "zuhany"
+  },
+  "d83d_dec0": {
+    "message": "f\u00fcrd\u0151"
+  },
+  "d83d_dec1": {
+    "message": "f\u00fcrd\u0151k\u00e1d"
+  },
+  "d83d_dec2": {
+    "message": "\u00fatlev\u00e9l-ellen\u0151rz\u00e9s"
+  },
+  "d83d_dec3": {
+    "message": "v\u00e1m"
+  },
+  "d83d_dec4": {
+    "message": "poggy\u00e1szkiad\u00e1s"
+  },
+  "d83d_dec5": {
+    "message": "csomagmeg\u0151rz\u0151"
+  },
+  "de_ger_settings_page": {
+    "message": "N\u00e9met billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "de_neo_ger_settings_page": {
+    "message": "N\u00e9met Neo 2 billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "dictionarytoolcategorytitle": {
+    "message": "Kateg\u00f3ria"
+  },
+  "dictionarytoolcommentnewinput": {
+    "message": "Megjegyz\u00e9s"
+  },
+  "dictionarytoolcommenttitle": {
+    "message": "Megjegyz\u00e9s"
+  },
+  "dictionarytooldeletedictionaryconfirm": {
+    "message": "Biztosan t\u00f6rli a k\u00f6vetkez\u0151t: [object Object]?"
+  },
+  "dictionarytooldeletedictionarytitle": {
+    "message": "Sz\u00f3t\u00e1r t\u00f6rl\u00e9se"
+  },
+  "dictionarytooldictionarylisttitle": {
+    "message": "Sz\u00f3t\u00e1rak"
+  },
+  "dictionarytooldictionaryname": {
+    "message": "Sz\u00f3t\u00e1r c\u00edme"
+  },
+  "dictionarytooldonebutton": {
+    "message": "K\u00e9sz"
+  },
+  "dictionarytoolexportbutton": {
+    "message": "Export\u00e1l\u00e1s"
+  },
+  "dictionarytoolimportbutton": {
+    "message": "Import\u00e1l\u00e1s\u2026"
+  },
+  "dictionarytoolmenutitle": {
+    "message": "Sz\u00f3t\u00e1r kezel\u00e9se"
+  },
+  "dictionarytoolnewdictionarynameplaceholder": {
+    "message": "\u00daj sz\u00f3t\u00e1r"
+  },
+  "dictionarytoolpagetitle": {
+    "message": "Felhaszn\u00e1l\u00f3i sz\u00f3t\u00e1rak"
+  },
+  "dictionarytoolreadingnewinput": {
+    "message": "\u00daj felolvas\u00e1s"
+  },
+  "dictionarytoolreadingtitle": {
+    "message": "Felolvas\u00e1s"
+  },
+  "dictionarytoolstatuserrordictionarynamecontainsinvalidcharacter": {
+    "message": "A n\u00e9v egy vagy t\u00f6bb \u00e9rv\u00e9nytelen karaktert tartalmaz."
+  },
+  "dictionarytoolstatuserrordictionarynameduplicated": {
+    "message": "A n\u00e9v m\u00e1r l\u00e9tezik."
+  },
+  "dictionarytoolstatuserrordictionarynameempty": {
+    "message": "K\u00e9rj\u00fck, \u00edrjon be egy sz\u00f3t\u00e1rc\u00edmet."
+  },
+  "dictionarytoolstatuserrordictionarynametoolong": {
+    "message": "A n\u00e9v t\u00fal hossz\u00fa."
+  },
+  "dictionarytoolstatuserrordictionarysizelimitexceeded": {
+    "message": "Nem lehet tov\u00e1bbi sz\u00f3t\u00e1rakat l\u00e9trehozni."
+  },
+  "dictionarytoolstatuserroremptyfile": {
+    "message": "A f\u00e1jl \u00fcres."
+  },
+  "dictionarytoolstatuserrorentrysizelimitexceeded": {
+    "message": "Nem lehet tov\u00e1bbi bejegyz\u00e9seket l\u00e9trehozni ebben a sz\u00f3t\u00e1rban."
+  },
+  "dictionarytoolstatuserrorfilenotfound": {
+    "message": "Nem lehetett megnyitni a f\u00e1jlt."
+  },
+  "dictionarytoolstatuserrorfilesizelimitexceeded": {
+    "message": "Az adatm\u00e9ret meghaladja a maxim\u00e1lis f\u00e1jlm\u00e9retet."
+  },
+  "dictionarytoolstatuserrorgeneral": {
+    "message": "A m\u0171velet nem siker\u00fclt."
+  },
+  "dictionarytoolstatuserrorimportinvalidentries": {
+    "message": "Egyes szavakat nem lehetett import\u00e1lni."
+  },
+  "dictionarytoolstatuserrorimporttoomanywords": {
+    "message": "Az import\u00e1l\u00e1si forr\u00e1s t\u00fal sok sz\u00f3t tartalmaz."
+  },
+  "dictionarytoolstatuserrorinvalidfileformat": {
+    "message": "Nem lehetett olvasni a f\u00e1jlt."
+  },
+  "dictionarytoolstatuserrornoundohistory": {
+    "message": "Nincs t\u00f6bb visszavonhat\u00f3 m\u0171velet."
+  },
+  "dictionarytoolstatuserrorreadingcontainsinvalidcharacter": {
+    "message": "A felolvasand\u00f3 sz\u00f6veg egy vagy t\u00f6bb \u00e9rv\u00e9nytelen karaktert tartalmaz. A sz\u00f6vegben felhaszn\u00e1lhat ASCII-karaktereket, Hiragan\u00e1kat, z\u00f6ng\u00e9s hangz\u00f3jelet (\u309b), f\u00e9lig z\u00f6ng\u00e9s hangz\u00f3jelet (\u309c), k\u00f6z\u00e9ps\u0151 pontot (\u30fb), ny\u00fajtotthang-jelet (\u30fc), jap\u00e1n vessz\u0151t (\u3001), jap\u00e1n pontot (\u3002), jap\u00e1n z\u00e1r\u00f3jelet (\u300c\u300d\u300e\u300f) \u00e9s jap\u00e1n hull\u00e1mvonalat (\u301c)."
+  },
+  "dictionarytoolstatuserrorreadingempty": {
+    "message": "K\u00e9rj\u00fck, \u00edrja be a felolvasand\u00f3 sz\u00f6veget."
+  },
+  "dictionarytoolstatuserrorreadingtoolong": {
+    "message": "A felolvasand\u00f3 sz\u00f6veg t\u00fal hossz\u00fa."
+  },
+  "dictionarytoolstatuserrortitleaddentry": {
+    "message": "Hiba a bejegyz\u00e9s hozz\u00e1ad\u00e1sakor"
+  },
+  "dictionarytoolstatuserrortitlecreatedictionary": {
+    "message": "Hiba a sz\u00f3t\u00e1r l\u00e9trehoz\u00e1sakor"
+  },
+  "dictionarytoolstatuserrortitledeletedictionary": {
+    "message": "Hiba a sz\u00f3t\u00e1r t\u00f6rl\u00e9sekor"
+  },
+  "dictionarytoolstatuserrortitledeleteentry": {
+    "message": "Hiba a bejegyz\u00e9s t\u00f6rl\u00e9sekor"
+  },
+  "dictionarytoolstatuserrortitleeditentry": {
+    "message": "Hiba a bejegyz\u00e9s szerkeszt\u00e9sekor"
+  },
+  "dictionarytoolstatuserrortitleimportdata": {
+    "message": "Import\u00e1l\u00e1si hiba"
+  },
+  "dictionarytoolstatuserrortitlerenamedictionary": {
+    "message": "Hiba a sz\u00f3t\u00e1r \u00e1tnevez\u00e9sekor"
+  },
+  "dictionarytoolstatuserrorwordcontainsinvalidcharacter": {
+    "message": "A sz\u00f3 egy vagy t\u00f6bb \u00e9rv\u00e9nytelen karaktert tartalmaz."
+  },
+  "dictionarytoolstatuserrorwordempty": {
+    "message": "K\u00e9rj\u00fck, \u00edrja be a sz\u00f3t."
+  },
+  "dictionarytoolstatuserrorwordtoolong": {
+    "message": "A sz\u00f3 t\u00fal hossz\u00fa."
+  },
+  "dictionarytoolwordnewinput": {
+    "message": "\u00daj sz\u00f3"
+  },
+  "dictionarytoolwordtitle": {
+    "message": "Sz\u00f3"
+  },
+  "dismiss_menu": {
+    "message": "billenty\u0171zetmen\u00fc elvet\u00e9se"
+  },
+  "dk_dan_settings_page": {
+    "message": "D\u00e1n billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "double_space_period": {
+    "message": "Dupla sz\u00f3k\u00f6z pont \u00edr\u00e1s\u00e1hoz"
+  },
+  "down_arrow": {
+    "message": "Lefel\u00e9 ny\u00edl"
+  },
+  "ee_est_settings_page": {
+    "message": "\u00c9szt billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "emoji_tab_emoticon": {
+    "message": "Hangulatjel-kateg\u00f3ria \u2013 hangulatjel"
+  },
+  "emoji_tab_face": {
+    "message": "Hangulatjel-kateg\u00f3ria \u2013 arc"
+  },
+  "emoji_tab_hot": {
+    "message": "Hangulatjel-kateg\u00f3ria \u2013 legjobbak"
+  },
+  "emoji_tab_nature": {
+    "message": "Hangulatjel-kateg\u00f3ria \u2013 term\u00e9szet"
+  },
+  "emoji_tab_object": {
+    "message": "Hangulatjel-kateg\u00f3ria \u2013 t\u00e1rgy"
+  },
+  "emoji_tab_place": {
+    "message": "Hangulatjel-kateg\u00f3ria \u2013 hely"
+  },
+  "emoji_tab_recent": {
+    "message": "Hangulatjel-kateg\u00f3ria \u2013 leg\u00fajabbak"
+  },
+  "emoji_tab_symbol": {
+    "message": "Hangulatjel-kateg\u00f3ria \u2013 szimb\u00f3lum"
+  },
+  "enable_capitalization": {
+    "message": "Automatikus kezd\u0151 nagybet\u0171"
+  },
+  "enable_completion": {
+    "message": "Kieg\u00e9sz\u00edt\u00e9s enged\u00e9lyez\u00e9se"
+  },
+  "enable_prediction": {
+    "message": "K\u00f6vetkez\u0151 sz\u00f3 el\u0151rejelz\u00e9s\u00e9nek enged\u00e9lyez\u00e9se"
+  },
+  "enter": {
+    "message": "Enter"
+  },
+  "es_cat_cat_settings_page": {
+    "message": "Katal\u00e1n billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "es_spa_settings_page": {
+    "message": "Spanyol billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "expand": {
+    "message": "Kibont\u00e1s"
+  },
+  "expand_candidates": {
+    "message": "javaslati lista kibont\u00e1sa"
+  },
+  "fi_fin_settings_page": {
+    "message": "Finn billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "footer_emoji_button": {
+    "message": "v\u00e1lt\u00e1s hangulatjelre"
+  },
+  "footer_handwriting_button": {
+    "message": "v\u00e1lt\u00e1s k\u00e9z\u00edr\u00e1sra"
+  },
+  "footer_settings_button": {
+    "message": "beviteli m\u00f3dszerek be\u00e1ll\u00edt\u00e1sainak megnyit\u00e1sa"
+  },
+  "fr_fra_settings_page": {
+    "message": "Francia billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "fuzzy_pinyin": {
+    "message": "R\u00e9szleges pinjin m\u00f3d enged\u00e9lyez\u00e9se"
+  },
+  "gb_dvorak_eng_settings_page": {
+    "message": "Egyes\u00fclt kir\u00e1lys\u00e1gbeli Dvorak billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "gb_extd_eng_settings_page": {
+    "message": "Egyes\u00fclt kir\u00e1lys\u00e1gbeli billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "ge_geo_settings_page": {
+    "message": "Gr\u00faz billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "globe": {
+    "message": "v\u00e1lt\u00e1s az el\u0151z\u0151 billenty\u0171zetre"
+  },
+  "got_it": {
+    "message": "\u00c9rtem"
+  },
+  "gr_gre_settings_page": {
+    "message": "G\u00f6r\u00f6g billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "handwriting_back": {
+    "message": "Vissza"
+  },
+  "handwriting_netowrk_error": {
+    "message": "Sajnos nem lehet haszn\u00e1lni a k\u00e9z\u00edr\u00e1sos bevitelt, mert nincs h\u00e1l\u00f3zati kapcsolat."
+  },
+  "handwriting_privacy_info": {
+    "message": "A be\u00edrt sz\u00f6veget a Google megkapja a felismer\u00e9s \u00e9rdek\u00e9ben"
+  },
+  "hide_keyboard": {
+    "message": "Billenty\u0171zet elrejt\u00e9se"
+  },
+  "hr_scr_settings_page": {
+    "message": "Horv\u00e1t billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "hu_hun_settings_page": {
+    "message": "Magyar billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "ie_ga_settings_page": {
+    "message": "\u00cdr billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "ignore_correction": {
+    "message": "Jav\u00edt\u00e1s mell\u0151z\u00e9se enn\u00e9l a sz\u00f3n\u00e1l:"
+  },
+  "ignore_correction_short": {
+    "message": "Jav\u00edt\u00e1s mell\u0151z\u00e9se"
+  },
+  "il_heb_settings_page": {
+    "message": "H\u00e9ber billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "init_lang": {
+    "message": "Az alap\u00e9rtelmezett beviteli nyelv a k\u00ednai"
+  },
+  "init_punc": {
+    "message": "Az alap\u00e9rtelmezett k\u00f6zpontoz\u00e1s teljes sz\u00e9less\u00e9g\u0171"
+  },
+  "init_sbc": {
+    "message": "Az alap\u00e9rtelmezett karaktersz\u00e9less\u00e9g f\u00e9lk\u00f6v\u00e9r"
+  },
+  "input_hangul": {
+    "message": "Hangul m\u00f3d"
+  },
+  "input_hanja": {
+    "message": "Handzsa m\u00f3d"
+  },
+  "inputmethod_array": {
+    "message": "T\u00f6mb\u00f6s beviteli m\u00f3d"
+  },
+  "inputmethod_cangjie": {
+    "message": "Cang-csie beviteli m\u00f3d"
+  },
+  "inputmethod_dayi": {
+    "message": "Dayi beviteli m\u00f3d"
+  },
+  "inputmethod_hangul": {
+    "message": "Koreai beviteli m\u00f3d"
+  },
+  "inputmethod_pinyin": {
+    "message": "Pinjin beviteli m\u00f3d"
+  },
+  "inputmethod_quick": {
+    "message": "Gyors beviteli m\u00f3d"
+  },
+  "inputmethod_traditional_pinyin": {
+    "message": "Pinjin beviteli m\u00f3d hagyom\u00e1nyos k\u00ednai nyelvhez"
+  },
+  "inputmethod_wubi": {
+    "message": "Wubi beviteli m\u00f3d"
+  },
+  "inputmethod_zhuyin": {
+    "message": "Zujin beviteli m\u00f3d"
+  },
+  "is_ice_settings_page": {
+    "message": "Izlandi billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "it_ita_settings_page": {
+    "message": "Olasz billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "jp_jpn_settings_page": {
+    "message": "Jap\u00e1n billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "keyboard_arabic": {
+    "message": "arab billenty\u0171zet"
+  },
+  "keyboard_armenian_phonetic": {
+    "message": "\u00d6rm\u00e9ny fonetikus billenty\u0171zet"
+  },
+  "keyboard_belarusian": {
+    "message": "Feh\u00e9rorosz billenty\u0171zet"
+  },
+  "keyboard_belgian": {
+    "message": "Belga billenty\u0171zet"
+  },
+  "keyboard_bengali_phonetic": {
+    "message": "Beng\u00e1li billenty\u0171zet (fonetikus)"
+  },
+  "keyboard_brazilian": {
+    "message": "Brazil billenty\u0171zet"
+  },
+  "keyboard_bulgarian": {
+    "message": "Bolg\u00e1r billenty\u0171zet"
+  },
+  "keyboard_bulgarian_phonetic": {
+    "message": "Bolg\u00e1r fonetikus billenty\u0171zet"
+  },
+  "keyboard_canadian_english": {
+    "message": "Kanadai angol billenty\u0171zet"
+  },
+  "keyboard_canadian_french": {
+    "message": "Kanadai francia billenty\u0171zet"
+  },
+  "keyboard_canadian_multilingual": {
+    "message": "Kanadai t\u00f6bbnyelv\u0171 billenty\u0171zet"
+  },
+  "keyboard_catalan": {
+    "message": "Katal\u00e1n billenty\u0171zet"
+  },
+  "keyboard_croatian": {
+    "message": "Horv\u00e1t billenty\u0171zet"
+  },
+  "keyboard_czech": {
+    "message": "Cseh billenty\u0171zet"
+  },
+  "keyboard_czech_qwerty": {
+    "message": "Cseh QWERTY-billenty\u0171zet"
+  },
+  "keyboard_danish": {
+    "message": "D\u00e1n billenty\u0171zet"
+  },
+  "keyboard_devanagari_phonetic": {
+    "message": "D\u00e9van\u00e1gari billenty\u0171zet (fonetikus)"
+  },
+  "keyboard_estonian": {
+    "message": "\u00c9szt billenty\u0171zet"
+  },
+  "keyboard_ethiopic": {
+    "message": "Eti\u00f3p billenty\u0171zet"
+  },
+  "keyboard_finnish": {
+    "message": "Finn billenty\u0171zet"
+  },
+  "keyboard_french": {
+    "message": "Francia billenty\u0171zet"
+  },
+  "keyboard_georgian": {
+    "message": "Gr\u00faz billenty\u0171zet"
+  },
+  "keyboard_german": {
+    "message": "N\u00e9met billenty\u0171zet"
+  },
+  "keyboard_german_neo_2": {
+    "message": "N\u00e9met Neo 2 billenty\u0171zet"
+  },
+  "keyboard_greek": {
+    "message": "G\u00f6r\u00f6g billenty\u0171zet"
+  },
+  "keyboard_gujarati_phonetic": {
+    "message": "Gudzsar\u00e1ti billenty\u0171zet (fonetikus)"
+  },
+  "keyboard_hebrew": {
+    "message": "H\u00e9ber billenty\u0171zet"
+  },
+  "keyboard_hungarian": {
+    "message": "Magyar billenty\u0171zet"
+  },
+  "keyboard_icelandic": {
+    "message": "Izlandi billenty\u0171zet"
+  },
+  "keyboard_inscript": {
+    "message": "Billenty\u0171zet (InScript)"
+  },
+  "keyboard_irish": {
+    "message": "\u00cdr billenty\u0171zet"
+  },
+  "keyboard_italian": {
+    "message": "Olasz billenty\u0171zet"
+  },
+  "keyboard_itrans": {
+    "message": "Billenty\u0171zet (itrans)"
+  },
+  "keyboard_japanese": {
+    "message": "Jap\u00e1n billenty\u0171zet"
+  },
+  "keyboard_kannada_phonetic": {
+    "message": "Kannada billenty\u0171zet (fonetikus)"
+  },
+  "keyboard_kedmanee": {
+    "message": "Billenty\u0171zet (Kedmanee)"
+  },
+  "keyboard_khmer": {
+    "message": "Khmer billenty\u0171zet"
+  },
+  "keyboard_lao": {
+    "message": "Lao billenty\u0171zet"
+  },
+  "keyboard_latin_american": {
+    "message": "Latin-amerikai billenty\u0171zet"
+  },
+  "keyboard_latvian": {
+    "message": "Lett billenty\u0171zet"
+  },
+  "keyboard_lithuanian": {
+    "message": "Litv\u00e1n billenty\u0171zet"
+  },
+  "keyboard_malayalam_phonetic": {
+    "message": "Malayalam billenty\u0171zet (fonetikus)"
+  },
+  "keyboard_maltese": {
+    "message": "M\u00e1ltai billenty\u0171zet"
+  },
+  "keyboard_mongolian": {
+    "message": "Mongol billenty\u0171zet"
+  },
+  "keyboard_myanmar": {
+    "message": "Mianmari MM3 billenty\u0171zet"
+  },
+  "keyboard_myanmar_myansan": {
+    "message": "Mianmari myansan billenty\u0171zet"
+  },
+  "keyboard_nepali_inscript": {
+    "message": "Nep\u00e1li billenty\u0171zet (InScript)"
+  },
+  "keyboard_nepali_phonetic": {
+    "message": "Nep\u00e1li billenty\u0171zet (fonetikus)"
+  },
+  "keyboard_netherlands": {
+    "message": "Holland billenty\u0171zet"
+  },
+  "keyboard_none": {
+    "message": "Billenty\u0171zet"
+  },
+  "keyboard_norwegian": {
+    "message": "Norv\u00e9g billenty\u0171zet"
+  },
+  "keyboard_pattachote": {
+    "message": "Billenty\u0171zet (Pattachote)"
+  },
+  "keyboard_persian": {
+    "message": "Perzsa billenty\u0171zet"
+  },
+  "keyboard_phonetic": {
+    "message": "Billenty\u0171zet (fonetikus)"
+  },
+  "keyboard_polish": {
+    "message": "Lengyel billenty\u0171zet"
+  },
+  "keyboard_portuguese": {
+    "message": "Portug\u00e1l billenty\u0171zet"
+  },
+  "keyboard_romanian": {
+    "message": "Rom\u00e1n billenty\u0171zet"
+  },
+  "keyboard_romanian_standard": {
+    "message": "Hagyom\u00e1nyos rom\u00e1n billenty\u0171zet"
+  },
+  "keyboard_russian": {
+    "message": "Orosz billenty\u0171zet"
+  },
+  "keyboard_russian_phonetic": {
+    "message": "Orosz fonetikus billenty\u0171zet"
+  },
+  "keyboard_russian_phonetic_aatseel": {
+    "message": "Orosz fonetikus (AATSEEL) billenty\u0171zet"
+  },
+  "keyboard_russian_phonetic_yazhert": {
+    "message": "Orosz fonetikus (YaZHert) billenty\u0171zet"
+  },
+  "keyboard_serbian": {
+    "message": "Szerb billenty\u0171zet"
+  },
+  "keyboard_sinhala": {
+    "message": "Sinhala billenty\u0171zet"
+  },
+  "keyboard_slovakian": {
+    "message": "Szlov\u00e1k billenty\u0171zet"
+  },
+  "keyboard_slovenian": {
+    "message": "Szlov\u00e9n billenty\u0171zet"
+  },
+  "keyboard_soranikurdish_ar": {
+    "message": "Sorani kurd arab alap\u00fa billenty\u0171zet"
+  },
+  "keyboard_soranikurdish_en": {
+    "message": "Sorani kurd angol alap\u00fa billenty\u0171zet"
+  },
+  "keyboard_spanish": {
+    "message": "Spanyol billenty\u0171zet"
+  },
+  "keyboard_swedish": {
+    "message": "Sv\u00e9d billenty\u0171zet"
+  },
+  "keyboard_swiss": {
+    "message": "Sv\u00e1jci billenty\u0171zet"
+  },
+  "keyboard_swiss_french": {
+    "message": "Sv\u00e1jci francia billenty\u0171zet"
+  },
+  "keyboard_tamil99": {
+    "message": "Billenty\u0171zet (Tamil99)"
+  },
+  "keyboard_tamil_inscript": {
+    "message": "Tamil billenty\u0171zet (InScript)"
+  },
+  "keyboard_tamil_itrans": {
+    "message": "Tamil billenty\u0171zet (itrans)"
+  },
+  "keyboard_tamil_phonetic": {
+    "message": "Tamil billenty\u0171zet (fonetikus)"
+  },
+  "keyboard_tamil_tamil99": {
+    "message": "Tamil billenty\u0171zet (Tamil99)"
+  },
+  "keyboard_tamil_typewriter": {
+    "message": "Tamil billenty\u0171zet (\u00edr\u00f3g\u00e9p)"
+  },
+  "keyboard_tcvn": {
+    "message": "Billenty\u0171zet (TCVN)"
+  },
+  "keyboard_telex": {
+    "message": "Billenty\u0171zet (Telex)"
+  },
+  "keyboard_telugu_phonetic": {
+    "message": "Telugu billenty\u0171zet (fonetikus)"
+  },
+  "keyboard_thai_kedmanee": {
+    "message": "Thai billenty\u0171zet (Kedmanee)"
+  },
+  "keyboard_thai_pattachote": {
+    "message": "Thai billenty\u0171zet (Pattachote)"
+  },
+  "keyboard_thai_tis": {
+    "message": "Thai billenty\u0171zet (TIS 820-2531)"
+  },
+  "keyboard_tis": {
+    "message": "Billenty\u0171zet (TIS 820-2531)"
+  },
+  "keyboard_turkish": {
+    "message": "T\u00f6r\u00f6k billenty\u0171zet"
+  },
+  "keyboard_typewriter": {
+    "message": "Billenty\u0171zet (\u00edr\u00f3g\u00e9p)"
+  },
+  "keyboard_uk": {
+    "message": "Egyes\u00fclt kir\u00e1lys\u00e1gbeli billenty\u0171zet"
+  },
+  "keyboard_uk_dvorak": {
+    "message": "Egyes\u00fclt kir\u00e1lys\u00e1gbeli Dvorak billenty\u0171zet"
+  },
+  "keyboard_ukrainian": {
+    "message": "Ukr\u00e1n billenty\u0171zet"
+  },
+  "keyboard_us": {
+    "message": "USA billenty\u0171zet"
+  },
+  "keyboard_us_colemak": {
+    "message": "Amerikai Colemak billenty\u0171zet"
+  },
+  "keyboard_us_dvorak": {
+    "message": "Amerikai Dvorak billenty\u0171zet"
+  },
+  "keyboard_us_extended": {
+    "message": "Amerikai b\u0151v\u00edtett billenty\u0171zet"
+  },
+  "keyboard_us_international": {
+    "message": "Amerikai nemzetk\u00f6zi billenty\u0171zet"
+  },
+  "keyboard_vietnamese_tcvn": {
+    "message": "Vietnami billenty\u0171zet (TCVN)"
+  },
+  "keyboard_vietnamese_telex": {
+    "message": "Vietnami billenty\u0171zet (Telex)"
+  },
+  "keyboard_vietnamese_viqr": {
+    "message": "Vietnami billenty\u0171zet (VIQR)"
+  },
+  "keyboard_vietnamese_vni": {
+    "message": "Vietnami billenty\u0171zet (VNI)"
+  },
+  "keyboard_viqr": {
+    "message": "Billenty\u0171zet (VIQR)"
+  },
+  "keyboard_vni": {
+    "message": "Billenty\u0171zet (VNI)"
+  },
+  "korean_hanja_display": {
+    "message": "Handzsa javaslati m\u00f3d"
+  },
+  "korean_keyboard_layout": {
+    "message": "Koreai billenty\u0171zetkioszt\u00e1s"
+  },
+  "korean_settings_page": {
+    "message": "Koreai beviteli m\u00f3d be\u00e1ll\u00edt\u00e1si oldala"
+  },
+  "korean_syllable_input": {
+    "message": "Egyszerre egy sz\u00f3tag bevitele"
+  },
+  "latam_spa_settings_page": {
+    "message": "Latin-amerikai (spanyol) billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "latin_settings_page": {
+    "message": "Be\u00e1ll\u00edt\u00e1sok"
+  },
+  "left_arrow": {
+    "message": "Bal ny\u00edl"
+  },
+  "lt_lit_settings_page": {
+    "message": "Litv\u00e1n billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "lv_apostrophe_lav_settings_page": {
+    "message": "Lett billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "menu_key": {
+    "message": "billenty\u0171zetmen\u00fc megnyit\u00e1sa"
+  },
+  "mn_mon_settings_page": {
+    "message": "Mongol billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "move_page_key_above": {
+    "message": "Haszn\u00e1lja a - \u00e9s az = billenty\u0171t a jel\u00f6ltlista lapoz\u00e1s\u00e1hoz"
+  },
+  "move_page_key_below": {
+    "message": "Haszn\u00e1lja a , \u00e9s a . billenty\u0171t a jel\u00f6ltlista lapoz\u00e1s\u00e1hoz"
+  },
+  "never_auto_correct": {
+    "message": "Ki"
+  },
+  "no_nob_settings_page": {
+    "message": "Norv\u00e9g billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "pause": {
+    "message": "Sz\u00fcnet"
+  },
+  "physical_auto_correction_level": {
+    "message": "Automatikus jav\u00edt\u00e1s"
+  },
+  "physical_enable_capitalization": {
+    "message": "Automatikus kezd\u0151 nagybet\u0171"
+  },
+  "physical_keyboard": {
+    "message": "Fizikai billenty\u0171zet"
+  },
+  "pinyin_settings_page": {
+    "message": "Pinjin-be\u00e1ll\u00edt\u00e1sok oldala"
+  },
+  "pl_pol_settings_page": {
+    "message": "Lengyel billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "pt_por_settings_page": {
+    "message": "Portug\u00e1l billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "right_arrow": {
+    "message": "Jobb ny\u00edl"
+  },
+  "ro_rum_settings_page": {
+    "message": "Rom\u00e1n billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "rs_srp_settings_page": {
+    "message": "Szerb billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "ru_phonetic_rus_settings_page": {
+    "message": "Orosz fonetikus billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "ru_rus_settings_page": {
+    "message": "Orosz billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "se_swe_settings_page": {
+    "message": "Sv\u00e9d billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "settings": {
+    "message": "Be\u00e1ll\u00edt\u00e1sok"
+  },
+  "shift": {
+    "message": "Shift"
+  },
+  "shift_lock": {
+    "message": "Shift z\u00e1rolva"
+  },
+  "show_candidate_mode": {
+    "message": "Javaslatok leg\u00f6rd\u00fcl\u0151 men\u00fcj\u00e9nek k\u00e9sleltet\u00e9se"
+  },
+  "show_candidates_1000": {
+    "message": "A javaslatok leg\u00f6rd\u00fcl\u0151 men\u00fcj\u00e9nek megjelen\u00edt\u00e9se 1 m\u00e1sodperc m\u00falva"
+  },
+  "show_candidates_2000": {
+    "message": "A javaslatok leg\u00f6rd\u00fcl\u0151 men\u00fcj\u00e9nek megjelen\u00edt\u00e9se 2 m\u00e1sodperc m\u00falva"
+  },
+  "show_candidates_500": {
+    "message": "A javaslatok leg\u00f6rd\u00fcl\u0151 men\u00fcj\u00e9nek megjelen\u00edt\u00e9se 500 ms m\u00falva"
+  },
+  "show_candidates_5000": {
+    "message": "A javaslatok leg\u00f6rd\u00fcl\u0151 men\u00fcj\u00e9nek megjelen\u00edt\u00e9se 5 m\u00e1sodperc m\u00falva"
+  },
+  "show_candidates_backspace": {
+    "message": "A javaslatok leg\u00f6rd\u00fcl\u0151 men\u00fcje a Backspace billenty\u0171vel jelen\u00edthet\u0151 meg"
+  },
+  "show_hangul_candidate": {
+    "message": "Tal\u00e1latok megjelen\u00edt\u00e9se Hangul m\u00f3dban"
+  },
+  "shrink_candidates": {
+    "message": "javaslati lista \u00f6sszecsuk\u00e1sa"
+  },
+  "si_slv_settings_page": {
+    "message": "Szlov\u00e9n billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "sk_slo_settings_page": {
+    "message": "Szlov\u00e1k billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "smiley": {
+    "message": "hangulatjel"
+  },
+  "sometimes_auto_correct": {
+    "message": "Visszafogott"
+  },
+  "sound_on_keypress": {
+    "message": "Hangjelz\u00e9s billenty\u0171 megnyom\u00e1sakor"
+  },
+  "space": {
+    "message": "Sz\u00f3k\u00f6z"
+  },
+  "switch_to": {
+    "message": "v\u00e1lt\u00e1s a k\u00f6vetkez\u0151re "
+  },
+  "switch_to_compact_layout": {
+    "message": "V\u00e1lt\u00e1s kompakt elrendez\u00e9sre"
+  },
+  "switch_to_full_layout": {
+    "message": "V\u00e1lt\u00e1s teljes elrendez\u00e9sre"
+  },
+  "switch_to_keyboard_prefix": {
+    "message": "v\u00e1lt\u00e1s a k\u00f6vetkez\u0151re "
+  },
+  "switched_to": {
+    "message": "\u00e1tv\u00e1ltott a k\u00f6vetkez\u0151re "
+  },
+  "tab": {
+    "message": "Tab"
+  },
+  "touch_keyboard": {
+    "message": "K\u00e9perny\u0151-billenty\u0171zet"
+  },
+  "tr_tur_settings_page": {
+    "message": "T\u00f6r\u00f6k billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "transliteration_am": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (salam \u2192 \u1230\u120b\u121d)"
+  },
+  "transliteration_ar": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (marhaban \u2190 \u0645\u0631\u062d\u0628\u0627)"
+  },
+  "transliteration_be": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (pryvitannie \u2192 \u043f\u0440\u044b\u0432\u0456\u0442\u0430\u043d\u043d\u0435)"
+  },
+  "transliteration_bg": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (zdrasti \u2192 \u0437\u0434\u0440\u0430\u0441\u0442\u0438)"
+  },
+  "transliteration_bn": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (namaskar \u2192 \u09a8\u09ae\u09b8\u09cd\u0995\u09be\u09b0)"
+  },
+  "transliteration_el": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (geia \u2192 \u03b3\u03b5\u03b9\u03b1)"
+  },
+  "transliteration_fa": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (salam \u2190 \u0633\u0644\u0627\u0645)"
+  },
+  "transliteration_gu": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (namaste \u2192 \u0aa8\u0aae\u0ab8\u0acd\u0aa4\u0ac7)"
+  },
+  "transliteration_he": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (shalom \u2190 \u05e9\u05dc\u05d5\u05dd)"
+  },
+  "transliteration_hi": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_kn": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (namaskaram \u2192 \u0ca8\u0cae\u0cb8\u0ccd\u0c95\u0cbe\u0cb0)"
+  },
+  "transliteration_ml": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (namaskar \u2192 \u0d28\u0d2e\u0d38\u0d4d\u0d15\u0d3e\u0d30\u0d02)"
+  },
+  "transliteration_mr": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (namaste \u2192 \u0928\u092e\u0938\u094d\u0915\u093e\u0930)"
+  },
+  "transliteration_ne": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_or": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (mausam \u2192 \u0b28\u0b2e\u0b38\u0b4d\u0b24\u0b47)"
+  },
+  "transliteration_pa": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (mausam \u2192 \u0a2e\u0a4c\u0a38\u0a2e)"
+  },
+  "transliteration_ru": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (privet \u2192 \u043f\u0440\u0438\u0432\u0435\u0442)"
+  },
+  "transliteration_sa": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_si": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (halo \u2192 \u0dc4\u0dbd\u0ddd)"
+  },
+  "transliteration_sr": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (zdravo \u2192 \u0437\u0434\u0440\u0430\u0432\u043e)"
+  },
+  "transliteration_ta": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (vanakkam \u2192 \u0bb5\u0ba3\u0b95\u0bcd\u0b95\u0bae\u0bcd)"
+  },
+  "transliteration_te": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (emandi \u2192 \u0c0f\u0c2e\u0c02\u0c21\u0c40)"
+  },
+  "transliteration_ti": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (selam \u2192 \u1230\u120b\u121d)"
+  },
+  "transliteration_uk": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (pryvit \u2192 \u043f\u0440\u0438\u0432\u0456\u0442)"
+  },
+  "transliteration_ur": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (salam \u2190 \u0633\u0644\u0627\u0645)"
+  },
+  "transliteration_vi": {
+    "message": "Bet\u0171 szerinti \u00e1t\u00edr\u00e1s (chao \u2192 ch\u00e0o)"
+  },
+  "ua_ukr_settings_page": {
+    "message": "Ukr\u00e1n billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "up_arrow": {
+    "message": "Felfel\u00e9 ny\u00edl"
+  },
+  "us_altgr_intl_eng_settings_page": {
+    "message": "USA b\u0151v\u00edtett billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "us_colemak_eng_settings_page": {
+    "message": "USA Colemak (angol) billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "us_dvorak_eng_settings_page": {
+    "message": "USA Dvorak (angol) billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "us_eng_settings_page": {
+    "message": "USA (angol) billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "us_fil_settings_page": {
+    "message": "USA (filipp\u00edn\u00f3) billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "us_ind_settings_page": {
+    "message": "USA (indon\u00e9z) billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "us_intl_eng_settings_page": {
+    "message": "USA nemzetk\u00f6zi (angol) billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "us_intl_nld_settings_page": {
+    "message": "USA nemzetk\u00f6zi (holland) billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "us_intl_por_settings_page": {
+    "message": "USA nemzetk\u00f6zi (brazil portug\u00e1l) billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "us_msa_settings_page": {
+    "message": "USA (mal\u00e1j) billenty\u0171zet be\u00e1ll\u00edt\u00e1sainak oldala"
+  },
+  "user_dict": {
+    "message": "A szem\u00e9lyes sz\u00f3t\u00e1r enged\u00e9lyez\u00e9se"
+  },
+  "user_dict_add": {
+    "message": "Hozz\u00e1ad\u00e1s"
+  },
+  "user_dict_clear": {
+    "message": "\u00d6sszes t\u00f6rl\u00e9se"
+  },
+  "user_dict_manage": {
+    "message": "Szem\u00e9lyes sz\u00f3t\u00e1r kezel\u00e9se..."
+  },
+  "user_dict_new_word": {
+    "message": "\u00daj sz\u00f3"
+  },
+  "user_dict_remove": {
+    "message": "Kijel\u00f6lt(ek) elt\u00e1vol\u00edt\u00e1sa"
+  },
+  "user_dict_reset": {
+    "message": "A sz\u00f3t\u00e1rban v\u00e9grehajtott \u00f6sszes m\u00f3dos\u00edt\u00e1s vissza\u00e1ll\u00edt\u00e1sa"
+  },
+  "user_dict_save": {
+    "message": "Ment\u00e9s"
+  },
+  "user_dict_sync": {
+    "message": "Szem\u00e9lyes sz\u00f3t\u00e1r szinkroniz\u00e1l\u00e1sa"
+  },
+  "user_dict_title": {
+    "message": "Szem\u00e9lyes sz\u00f3t\u00e1r"
+  },
+  "voice": {
+    "message": "Hang"
+  },
+  "voice_privacy_info": {
+    "message": "A hangfelv\u00e9telt a Google megkapja a felismer\u00e9s \u00e9rdek\u00e9ben"
+  },
+  "voice_turn_off": {
+    "message": "hangbeviteli eszk\u00f6z kikapcsol\u00e1sa"
+  },
+  "voice_turn_on": {
+    "message": "hangbeviteli eszk\u00f6z bekapcsol\u00e1sa"
+  },
+  "wait": {
+    "message": "V\u00e1rakoz\u00e1s"
+  },
+  "zhuyin_keyboard_layout": {
+    "message": "Billenty\u0171zet t\u00edpusa"
+  },
+  "zhuyin_page_size": {
+    "message": "Az egy oldalon megjelen\u00edtett jel\u00f6ltek sz\u00e1ma"
+  },
+  "zhuyin_select_keys": {
+    "message": "Kiv\u00e1laszt\u00f3gombok"
+  },
+  "zhuyin_settings_page": {
+    "message": "Zujin-be\u00e1ll\u00edt\u00e1sok oldala"
+  }
+}

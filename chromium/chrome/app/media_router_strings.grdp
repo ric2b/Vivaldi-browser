@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Media Router-specific strings (included from generated_resources.grd). -->
+<grit-part>
+  <!-- General -->
+  <message name="IDS_MEDIA_ROUTER_TITLE" desc="Title for media router">
+    Media Router
+  </message>
+
+  <!-- Cast Modes -->
+  <message name="IDS_MEDIA_ROUTER_DEFAULT_CAST_MODE" desc="Message for default cast mode.">
+    Cast <ph name="HOST_NAME">$1<ex>google.com</ex></ph>
+  </message>
+  <message name="IDS_MEDIA_ROUTER_DEFAULT_CAST_MODE_TITLE" desc="Title for default cast mode.">
+    Cast <ph name="HOST_NAME">$1<ex>google.com</ex></ph> to...
+  </message>
+  <message name="IDS_MEDIA_ROUTER_DESKTOP_OR_WINDOW_MIRROR_CAST_MODE" desc="Message for desktop/window mirror cast mode.">
+    Cast desktop or window
+  </message>
+  <message name="IDS_MEDIA_ROUTER_DESKTOP_OR_WINDOW_MIRROR_CAST_MODE_TITLE" desc="Title for desktop/window mirror cast mode.">
+    Cast desktop or window to...
+  </message>
+  <message name="IDS_MEDIA_ROUTER_SOUND_OPTIMIZED_TAB_MIRROR_CAST_MODE" desc="Message for default cast mode.">
+    Cast this tab (optimized for audio)
+  </message>
+  <message name="IDS_MEDIA_ROUTER_SOUND_OPTIMIZED_TAB_MIRROR_CAST_MODE_TITLE" desc="Title for sound optimized tab mirror cast mode.">
+    Cast this tab (optimized for audio) to...
+  </message>
+  <message name="IDS_MEDIA_ROUTER_TAB_MIRROR_CAST_MODE" desc="Message for tab mirror cast mode.">
+    Cast this tab
+  </message>
+  <message name="IDS_MEDIA_ROUTER_TAB_MIRROR_CAST_MODE_TITLE" desc="Title for tab mirror cast mode.">
+    Cast this tab to...
+  </message>
+
+  <!-- Cast Mode Picker -->
+  <message name="IDS_MEDIA_ROUTER_SELECT_CAST_MODE_HEADER" desc="Header for select cast mode view.">
+   Select cast mode
+  </message>
+
+  <!-- Issue Actions -->
+  <message name="IDS_MEDIA_ROUTER_CANCEL_BUTTON" desc="Text of Cancel button.">
+    Cancel
+  </message>
+  <message name="IDS_MEDIA_ROUTER_DISMISS_BUTTON" desc="Text of Dismiss button.">
+    Dismiss
+  </message>
+  <message name="IDS_MEDIA_ROUTER_LEARN_MORE_BUTTON" desc="Text of Learn More button.">
+    Learn More
+  </message>
+  <message name="IDS_MEDIA_ROUTER_OK_BUTTON" desc="Text of Ok button.">
+    Ok
+  </message>
+
+  <!-- Route Details -->
+  <message name="IDS_MEDIA_ROUTER_CASTING_ACTIVITY_STATUS" desc="Label of activity status.">
+    Casting to <ph name="sinkName">$1<ex>Living Room TV</ex></ph>
+  </message>
+  <message name="IDS_MEDIA_ROUTER_STOP_CASTING_BUTTON" desc="Text of Stop casting button.">
+    Stop casting
+  </message>
+
+  <!-- Sink List -->
+  <message name="IDS_MEDIA_ROUTER_DEVICE_MISSING" desc="Text to display when no devices are found.">
+    Device missing?
+  </message>
+</grit-part>

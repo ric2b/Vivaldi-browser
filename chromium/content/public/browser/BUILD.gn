@@ -1,0 +1,70 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//content/browser/browser.gni")
+import("//build/config/ui.gni")
+
+# See //content/BUILD.gn for how this works.
+group("browser") {
+  if (is_component_build) {
+    public_deps = [
+      "//content",
+    ]
+  } else {
+    public_deps = [
+      ":browser_sources",
+    ]
+  }
+}
+
+source_set("browser_sources") {
+  visibility = [ "//content/*" ]
+
+  if (is_ios) {
+    # iOS doesn't get the normal file list and only takes these whitelisted
+    # files.
+    sources = [
+      "browser_main_parts.cc",
+      "content_browser_client.cc",
+      "favicon_status.cc",
+      "navigation_details.cc",
+      "notification_registrar.cc",
+      "page_navigator.cc",
+      "web_ui_controller.cc",
+    ]
+  } else {
+    sources = rebase_path(content_browser_gypi_values.public_browser_sources,
+                          ".",
+                          "//content")
+  }
+
+  if (use_aura) {
+    sources -= [ "context_factory.h" ]
+  }
+
+  configs += [ "//content:content_implementation" ]
+
+  public_deps = [
+    "//content/public/common:mojo_bindings",
+
+    # We expose skia headers in the public API.
+    "//skia",
+    "//third_party/mojo/src/mojo/public/cpp/bindings",
+    "//third_party/mojo/src/mojo/public/cpp/system",
+  ]
+  deps = [
+    "//content/browser",
+    "//content/public/common:common_sources",
+    "//net",
+    "//ui/accessibility",
+    "//ui/base",
+    "//ui/events",
+  ]
+
+  allow_circular_includes_from = [
+    # This target is a pair with content/browser. They always go together and
+    # include headers from each other.
+    "//content/browser",
+  ]
+}

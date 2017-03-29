@@ -1,0 +1,88 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//testing/test.gni")
+import("//third_party/mojo/src/mojo/public/tools/bindings/mojom.gni")
+
+mojom("client_channel") {
+  sources = [
+    "client_channel.mojom",
+  ]
+}
+
+component("mojo") {
+  sources = [
+    "async_handle_waiter.cc",
+    "async_handle_waiter.h",
+    "client_channel.mojom",
+    "ipc_channel_mojo.cc",
+    "ipc_channel_mojo.h",
+    "ipc_message_pipe_reader.cc",
+    "ipc_message_pipe_reader.h",
+    "ipc_mojo_bootstrap.cc",
+    "ipc_mojo_bootstrap.h",
+    "ipc_mojo_handle_attachment.cc",
+    "ipc_mojo_handle_attachment.h",
+    "ipc_mojo_message_helper.cc",
+    "ipc_mojo_message_helper.h",
+    "ipc_mojo_param_traits.cc",
+    "ipc_mojo_param_traits.h",
+    "scoped_ipc_support.cc",
+    "scoped_ipc_support.h",
+  ]
+
+  defines = [ "IPC_MOJO_IMPLEMENTATION" ]
+
+  deps = [
+    "//base",
+    "//base/third_party/dynamic_annotations",
+    "//ipc",
+    "//mojo/environment:chromium",
+    "//third_party/mojo/src/mojo/edk/system",
+    "//third_party/mojo/src/mojo/public/c/environment:environment",
+    "//third_party/mojo/src/mojo/public/cpp/bindings",
+    ":client_channel",
+  ]
+}
+
+test("ipc_mojo_unittests") {
+  sources = [
+    "async_handle_waiter_unittest.cc",
+    "ipc_channel_mojo_unittest.cc",
+    "ipc_mojo_bootstrap_unittest.cc",
+    "run_all_unittests.cc",
+  ]
+
+  deps = [
+    "//base",
+    "//base/test:test_support",
+    "//base/third_party/dynamic_annotations",
+    "//ipc",
+    "//ipc:test_support",
+    "//ipc/mojo",
+    "//mojo/environment:chromium",
+    "//testing/gtest",
+    "//third_party/mojo/src/mojo/edk/system",
+    "//url",
+  ]
+}
+
+test("ipc_mojo_perftests") {
+  sources = [
+    "ipc_mojo_perftest.cc",
+  ]
+
+  deps = [
+    "//base",
+    "//base/test:test_support",
+    "//base/test:test_support_perf",
+    "//base/third_party/dynamic_annotations",
+    "//ipc",
+    "//ipc:test_support",
+    "//ipc/mojo",
+    "//mojo/environment:chromium",
+    "//third_party/mojo/src/mojo/edk/system",
+    "//url",
+  ]
+}

@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="utf-8"?>
+<grit-part>
+
+  <message name="IDS_AUTOFILL_CLEAR_FORM_MENU_ITEM" desc="The entry in the suggestions dropdown that clears an auto-filled form.">
+    Clear form
+  </message>
+  <message name="IDS_AUTOFILL_WARNING_FORM_DISABLED" desc="Warning text to show when autofill is disabled by the website for a given form.">
+    This webpage has disabled automatic filling for this form.
+  </message>
+  <message name="IDS_AUTOFILL_WARNING_INSECURE_CONNECTION" desc="Warning text to show when credit card autofill is disabled because the website is not using a secure connection.">
+    Automatic credit card filling is disabled because this form does not use a secure connection.
+  </message>
+  <message name="IDS_AUTOFILL_DELETE_AUTOCOMPLETE_SUGGESTION_CONFIRMATION_BODY" desc="Text in a dialog to confirm that the user wants to delete an autocomplete form history suggestion.">
+    Remove form suggestion from Chrome?
+  </message>
+  <message name="IDS_AUTOFILL_DELETE_CREDIT_CARD_SUGGESTION_CONFIRMATION_BODY" desc="Text in a dialog to confirm that the user wants to delete a credit card from Chrome Autofill.">
+    Remove credit card from Chrome?
+  </message>
+  <message name="IDS_AUTOFILL_DELETE_PROFILE_SUGGESTION_CONFIRMATION_BODY" desc="Text in a dialog to confirm that the user wants to delete an address from Chrome Autofill.">
+    Remove address from Chrome?
+  </message>
+  <message name="IDS_AUTOFILL_CC_AMEX" desc="Full American Express credit card name.">
+    American Express
+  </message>
+  <message name="IDS_AUTOFILL_CC_AMEX_SHORT" desc="Shorter name for American Express credit card.">
+    Amex
+  </message>
+  <message name="IDS_AUTOFILL_CC_DINERS" desc="Diners Club credit card name.">
+    Diners Club
+  </message>
+  <message name="IDS_AUTOFILL_CC_DISCOVER" desc="Discover credit card name.">
+    Discover
+  </message>
+  <message name="IDS_AUTOFILL_CC_JCB" desc="JCB credit card name.">
+    JCB
+  </message>
+  <message name="IDS_AUTOFILL_CC_MASTERCARD" desc="MasterCard credit card name.">
+    MasterCard
+  </message>
+  <message name="IDS_AUTOFILL_CC_UNION_PAY" desc="China UnionPay credit card name.">
+    China UnionPay
+  </message>
+  <message name="IDS_AUTOFILL_CC_VISA" desc="Visa credit card name.">
+    Visa
+  </message>
+  <message name="IDS_AUTOFILL_CC_GENERIC" desc="Generic credit card name.">
+    Card
+  </message>
+  <message name="IDS_AUTOFILL_ADDRESS_LINE_SEPARATOR" desc="The separator character used to join multi-line addresses.">
+    , '''
+  </message>
+  <message name="IDS_AUTOFILL_ADDRESS_SUMMARY_SEPARATOR" desc="The separator character used in the summary of an address.">
+    , '''
+  </message>
+
+  <!-- These are all variants of the same logical field: The major subdivision below the "country" level. -->
+  <message name="IDS_AUTOFILL_FIELD_LABEL_STATE" desc="The label of the State entry.">
+    State
+  </message>
+  <message name="IDS_AUTOFILL_FIELD_LABEL_AREA" desc="The label of the Area entry.">
+    Area
+  </message>
+  <message name="IDS_AUTOFILL_FIELD_LABEL_COUNTY" desc="The label of the County entry.">
+    County
+  </message>
+  <message name="IDS_AUTOFILL_FIELD_LABEL_DEPARTMENT" desc="The label of the Department entry.">
+    Department
+  </message>
+  <message name="IDS_AUTOFILL_FIELD_LABEL_DISTRICT" desc="The label of the District entry.">
+    District
+  </message>
+  <message name="IDS_AUTOFILL_FIELD_LABEL_EMIRATE" desc="The label of the Emirate entry.">
+    Emirate
+  </message>
+  <message name="IDS_AUTOFILL_FIELD_LABEL_ISLAND" desc="The label of the Island entry.">
+    Island
+  </message>
+  <message name="IDS_AUTOFILL_FIELD_LABEL_PARISH" desc="The label of the Parish entry.">
+    Parish
+  </message>
+  <message name="IDS_AUTOFILL_FIELD_LABEL_PREFECTURE" desc="The label of the Prefecture entry.">
+    Prefecture
+  </message>
+  <message name="IDS_AUTOFILL_FIELD_LABEL_PROVINCE" desc="The label of the Province entry.">
+    Province
+  </message>
+  <!-- End state variants. -->
+
+  <message name="IDS_AUTOFILL_FIELD_LABEL_ZIP_CODE" desc="The label of the ZIP code entry.">
+    ZIP code
+  </message>
+  <message name="IDS_AUTOFILL_FIELD_LABEL_POSTAL_CODE" desc="The label of the Postal code entry.">
+    Postal code
+  </message>
+  <message name="IDS_AUTOFILL_FIELD_LABEL_COUNTRY" desc="The label of the Country entry.">
+    Country
+  </message>
+
+  <message name="IDS_AUTOFILL_SHOW_PREDICTIONS_TITLE" desc="The title for form elements when annotated with Autofill predictions.">
+    heuristic type: <ph name="HEURISTIC_TYPE">$1<ex>NAME_FIRST</ex></ph>
+    server type: <ph name="SERVER_TYPE">$2<ex>NAME_FIRST</ex></ph>
+    field signature: <ph name="FIELD_SIGNATURE">$3<ex>12345678</ex></ph>
+    form signature: <ph name="FORM_SIGNATURE">$4<ex>1234567812345678</ex></ph>
+    experiment id: "<ph name="EXPERIMENT_ID">$5<ex>ar1</ex></ph>"
+  </message>
+
+  <!-- Autofill dialog: legal documents -->
+  <message name="IDS_AUTOFILL_DIALOG_PRIVACY_POLICY_LINK" desc="The text of an extra link that is appended to the end of whatever other legal documents need to be accepted or updated.">
+    Privacy Policy
+  </message>
+
+  <if expr="_google_chrome">
+    <message name="IDS_AUTOFILL_OPTIONS_POPUP" desc="The text displayed in the Autofill popup to direct the user to the Autofill settings UI.">
+      Chrome Autofill settings...
+    </message>
+  </if>
+  <if expr="not _google_chrome">
+    <message name="IDS_AUTOFILL_OPTIONS_POPUP" desc="The text displayed in the Autofill popup to direct the user to the Autofill settings UI.">
+      Chromium Autofill settings...
+    </message>
+  </if>
+
+  <message name="IDS_AUTOFILL_CREDIT_CARD_NOT_SUPPORTED_BY_WALLET" desc="Message displayed to user when user entered a credit card number that is not supported by Google Payments.">
+    This type of card is not supported by Google Payments. Please select a different card.
+  </message>
+  <message name="IDS_AUTOFILL_CREDIT_CARD_NOT_SUPPORTED_BY_WALLET_FOR_MERCHANT" desc="Message displayed to user when user entered a credit card number that is not supported by Google Payments for the particular merchant site the user is on.">
+    This type of card is not supported by Google Payments for this merchant. Please select a different card.
+  </message>
+
+  <!-- Autofill on OSX -->
+  <if expr="is_macosx">
+    <message name="IDS_AUTOFILL_ACCESS_MAC_CONTACTS" desc="When the user selects this Autofill entry, the browser prompts the user for access to the user's OSX contacts.">
+      Enable Autofill using Contacts…
+    </message>
+  </if>
+
+  <message name="IDS_AUTOFILL_SCAN_CREDIT_CARD" desc="An item in the autofill popup that triggers a new credit card to be scanned using the camera on the device.">
+    Scan new card
+  </message>
+
+  <message name="IDS_AUTOFILL_PASSWORD_FIELD_SUGGESTIONS_TITLE" desc="Text shown as the title of the suggestion drop down when a password field is clicked.">
+    Use password for:
+  </message>
+
+  <!-- Autofill infobar -->
+  <message name="IDS_AUTOFILL_CC_INFOBAR_ACCEPT" desc="Text to show for the Autofill credit card request infobar accept button.">
+    Save
+  </message>
+  <message name="IDS_AUTOFILL_CC_INFOBAR_DENY" desc="Text to show for the Autofill credit card request infobar deny button.">
+    Don't save
+  </message>
+  <message name="IDS_AUTOFILL_CC_INFOBAR_TEXT" desc="Text to show in the Autofill credit card request infobar.">
+    Do you want Chrome to save this credit card information for completing web forms?
+  </message>
+
+  <!-- Autofill credit card unmask prompt -->
+  <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_ERROR_TRY_AGAIN" desc="Error message that encourages the user to try to re-enter their credit card CVC after a previous failed attempt.">
+    Check your CVC and try again
+  </message>
+  <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_ERROR_TRY_AGAIN_WITH_EXPIRATION" desc="Error message that encourages the user to try to re-enter their credit card expiration date and CVC after a previous failed attempt.">
+    Check your expiration date and CVC and try again
+  </message>
+  <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_ERROR_PERMANENT" desc="Error message to show when a credit card cannot be verified and the user isn't allowed to retry.">
+    Chrome was unable to verify your card at this time. Please try again later.
+  </message>
+  <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_ERROR_NETWORK" desc="Error message to show when a credit card cannot be verified because Wallet servers can't be reached.">
+    There was a problem verifying your card. Check your internet connection and try again.
+  </message>
+  <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_TITLE" desc="Title for the credit card unmasking dialog.">
+    Verify your <ph name="CREDIT_CARD">$1<ex>Visa - 5679</ex></ph>
+  </message>
+  <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_UPDATE_TITLE" desc="Title for the credit card unmasking dialog when the credit card is expired.">
+    Update and verify your <ph name="CREDIT_CARD">$1<ex>Visa - 5679</ex></ph>
+  </message>
+  <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_INSTRUCTIONS" desc="Text explaining what the user should do in the card unmasking dialog.">
+    Enter the 3-digit CVC from the back of your card
+  </message>
+  <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_INSTRUCTIONS_AMEX" desc="Text explaining what the user should do in the card unmasking dialog for amex cards.">
+    Enter the 4-digit CVC from the front of your card
+  </message>
+  <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_INSTRUCTIONS_EXPIRED" desc="Text explaining what the user should do in the card unmasking dialog to update an expired card.">
+    Enter the expiration date and 3-digit CVC from the back of your card
+  </message>
+  <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_INSTRUCTIONS_EXPIRED_AMEX" desc="Text explaining what the user should do in the card unmasking dialog to update an expired amex card.">
+    Enter the expiration date and 4-digit CVC from the front of your card
+  </message>
+
+</grit-part>

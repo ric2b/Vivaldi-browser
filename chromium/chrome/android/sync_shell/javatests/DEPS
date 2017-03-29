@@ -1,0 +1,6 @@
+include_rules = [
+  "+components/bookmarks",
+  "+content/public/android/java",
+  "+sync/android/java/src/org/chromium/sync",
+  "+sync/test/android/javatests/src/org/chromium/sync/test/util",
+]

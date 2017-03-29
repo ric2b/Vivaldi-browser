@@ -1,0 +1,9 @@
+{
+  "name": "Platform App Test: OAuth2 platform app",
+  "version": "1",
+  "app": {
+    "background": {
+      "scripts": ["test.js"]
+    }
+  }
+}

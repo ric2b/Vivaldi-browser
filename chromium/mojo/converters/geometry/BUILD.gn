@@ -1,0 +1,26 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# This target does NOT depend on skia. One can depend on this target to avoid
+# picking up a dependency on skia.
+component("geometry") {
+  output_name = "mojo_geometry_lib"
+
+  public_deps = [
+    "//ui/gfx/geometry",
+  ]
+  deps = [
+    "//mojo/environment:chromium",
+    "//third_party/mojo/src/mojo/public/c/system:for_component",
+    "//ui/mojo/geometry:interfaces",
+  ]
+
+  defines = [ "MOJO_GEOMETRY_IMPLEMENTATION" ]
+
+  sources = [
+    "geometry_type_converters.cc",
+    "geometry_type_converters.h",
+    "mojo_geometry_export.h",
+  ]
+}

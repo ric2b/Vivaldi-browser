@@ -1,0 +1,53 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# GYP version: mojo/mojo.gyp:mojo_aura_support
+source_set("aura") {
+  sources = [
+    "aura_init.cc",
+    "aura_init.h",
+    "input_method_mandoline.cc",
+    "input_method_mandoline.h",
+    "native_widget_view_manager.cc",
+    "native_widget_view_manager.h",
+    "surface_binding.cc",
+    "surface_binding.h",
+    "surface_context_factory.cc",
+    "surface_context_factory.h",
+    "window_tree_host_mojo.cc",
+    "window_tree_host_mojo.h",
+  ]
+
+  public_deps = [
+    "//components/view_manager/public/cpp",
+  ]
+  deps = [
+    "//base",
+    "//base:i18n",
+    "//base/third_party/dynamic_annotations",
+    "//cc",
+    "//cc/surfaces",
+    "//components/resource_provider/public/cpp",
+    "//components/resource_provider/public/interfaces",
+    "//components/view_manager/gles2:lib",
+    "//components/view_manager/public/cpp",
+    "//components/view_manager/public/interfaces",
+    "//skia",
+    "//mojo/application/public/cpp",
+    "//mojo/application/public/interfaces",
+    "//mojo/cc",
+    "//mojo/converters/geometry",
+    "//mojo/converters/input_events",
+    "//mojo/converters/surfaces",
+    "//third_party/mojo/src/mojo/public/c/gles2",
+    "//third_party/icu",
+    "//ui/aura",
+    "//ui/compositor",
+    "//ui/events",
+    "//ui/events:events_base",
+    "//ui/gl",
+    "//ui/mojo/init",
+    "//ui/views",
+  ]
+}

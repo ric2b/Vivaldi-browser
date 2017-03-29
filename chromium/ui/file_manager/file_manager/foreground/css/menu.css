@@ -1,0 +1,57 @@
+/* Copyright 2013 The Chromium Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file. */
+
+/* Derived from /ui/webui/resources/css/menu.css. */
+
+cr-menu {
+  position: fixed;
+  white-space: nowrap;
+  z-index: 3;
+}
+
+cr-menu:not(.decorated) {
+  display: none;
+}
+
+cr-menu > * {
+  box-sizing: border-box;
+  display: block;
+  text-align: start;
+  width: 100%;
+}
+
+cr-menu > hr {
+  border: 0;
+  height: 1px;
+}
+
+cr-menu > [hidden] {
+  display: none;
+}
+
+cr-menu > [shortcutText]::after {
+  -webkit-padding-start: 30px;
+  color: rgb(100, 100, 100);
+  content: attr(shortcutText);
+  float: right;
+}
+
+html[dir='rtl'] cr-menu > [shortcutText]::after {
+  float: left;
+}
+
+/* Icon on the left of the item label for cr.ui.ProvidersMenuItem.
+   TODO(mtomasz): Upstream to cr.ui.MenuItem. */
+cr-menu-item.providers-menu-item .menu-icon {
+  -webkit-margin-end: 8px;
+  background: no-repeat 0 center;
+  display: inline-block;
+  float: left;
+  height: 32px;
+  width: 16px;
+}
+
+html[dir='rtl'] cr-menu-item.providers-menu-item .menu-icon {
+  float: right;
+}

@@ -1,0 +1,3337 @@
+{
+  "add_to_dictionary": {
+    "message": "L\u00e4gg till i ordlistan"
+  },
+  "add_to_personal_dictionary": {
+    "message": "L\u00e4gg till i personlig ordlista"
+  },
+  "add_word_to_dictionary": {
+    "message": "L\u00e4gg till $1 i ordlistan",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "advanced": {
+    "message": "Avancerat"
+  },
+  "alt": {
+    "message": "alt"
+  },
+  "altgr": {
+    "message": "alt (grafisk)"
+  },
+  "always_auto_correct": {
+    "message": "Alltid"
+  },
+  "am_phonetic_arm_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r armeniskt fonetiskt tangentbord"
+  },
+  "appnamejpkeyboard": {
+    "message": "Googles inmatning av japanska (f\u00f6r japanskt tangentbord)"
+  },
+  "appnameuskeyboard": {
+    "message": "Googles inmatning av japanska (f\u00f6r amerikanskt tangentbord)"
+  },
+  "auto_correction_level": {
+    "message": "Automatisk korrigering"
+  },
+  "backspace": {
+    "message": "backsteg"
+  },
+  "basic": {
+    "message": "Grunderna"
+  },
+  "be_fra_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r belgiskt tangentbord (franska)"
+  },
+  "be_ger_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r belgiskt tangentbord (tyska)"
+  },
+  "be_nld_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r belgiskt tangentbord (nederl\u00e4ndska)"
+  },
+  "bg_bul_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r bulgariskt tangentbord"
+  },
+  "bg_phonetic_bul_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r bulgariskt fonetiskt tangentbord"
+  },
+  "br_por_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r brasilianskt tangentbord (brasiliansk portugisiska)"
+  },
+  "by_bel_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r vitryskt tangentbord"
+  },
+  "ca_eng_eng_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r kanadensiskt-engelskt tangentbord (engelska)"
+  },
+  "ca_fra_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r kanadensiskt-franskt tangentbord (franska)"
+  },
+  "ca_multix_fra_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r kanadensiskt flerspr\u00e5kigt tangentbord (franska)"
+  },
+  "capital": {
+    "message": "stor bokstav"
+  },
+  "capslock": {
+    "message": "capslock"
+  },
+  "ch_fr_fra_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r schweiziskt-franskt tangentbord (franska)"
+  },
+  "ch_ger_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r schweiziskt tangentbord (tyska)"
+  },
+  "chos_inputtool_description": {
+    "message": "Med Google Inmatningsverktyg f\u00f6r Chrome OS kan du skriva p\u00e5 valfritt spr\u00e5k i Chrome OS."
+  },
+  "chos_inputtool_title": {
+    "message": "Google Inmatningsverktyg"
+  },
+  "compositionmodedirect": {
+    "message": "Direktinmatning"
+  },
+  "compositionmodefullascii": {
+    "message": "Wide Latin"
+  },
+  "compositionmodefullkatakana": {
+    "message": "Katakana"
+  },
+  "compositionmodehalfascii": {
+    "message": "Latinskt"
+  },
+  "compositionmodehalfkatakana": {
+    "message": "Katakana med halv bredd"
+  },
+  "compositionmodehiragana": {
+    "message": "Hiragana"
+  },
+  "configbasicstitle": {
+    "message": "Grunderna"
+  },
+  "configclearhistory": {
+    "message": "Rensa egen data \u2026"
+  },
+  "configclearhistorycancelbutton": {
+    "message": "Avbryt"
+  },
+  "configclearhistoryconversionhistory": {
+    "message": "Konverteringshistorik"
+  },
+  "configclearhistorymessage": {
+    "message": "Ta bort f\u00f6ljande objekt:"
+  },
+  "configclearhistoryokbutton": {
+    "message": "Rensa egen data"
+  },
+  "configclearhistorysuggestionhistory": {
+    "message": "F\u00f6rslagshistorik"
+  },
+  "configclearhistorytitle": {
+    "message": "Rensa egen data"
+  },
+  "configcreditsdescription": {
+    "message": "Copyright \u00a9 2013 Google Inc. Med ensamr\u00e4tt."
+  },
+  "configdialogcancel": {
+    "message": "Avbryt"
+  },
+  "configdialogok": {
+    "message": "OK"
+  },
+  "configdictionarytoolbutton": {
+    "message": "Hantera egen ordlista \u2026"
+  },
+  "configdictionarytooldescription": {
+    "message": "Anpassa vilka kandidater som visas f\u00f6r teckenkonvertering genom att l\u00e4gga till ord i den egna ordlistan."
+  },
+  "configdictionarytooltitle": {
+    "message": "Egna ordlistor"
+  },
+  "configincognitomode": {
+    "message": "Inaktivera egna teckenkonverteringar och f\u00f6rslag samt egen ordlista"
+  },
+  "configinputassistancetitle": {
+    "message": "Inmatningshj\u00e4lp"
+  },
+  "configosscreditsdescription": {
+    "message": "Denna programvara fungerar tack vare <a href=\"./credits_en.html\">\u00f6ppen k\u00e4llkod</a>."
+  },
+  "configpreeditmethod": {
+    "message": "Inmatningsl\u00e4ge:"
+  },
+  "configpreeditmethodkana": {
+    "message": "Kana"
+  },
+  "configpreeditmethodromaji": {
+    "message": "Romaji"
+  },
+  "configprivacytitle": {
+    "message": "Sekretess"
+  },
+  "configpunctuationmethod": {
+    "message": "Skiljeteckensformat:"
+  },
+  "configselectionshortcut": {
+    "message": "Kortkommando f\u00f6r val:"
+  },
+  "configselectionshortcutno": {
+    "message": "Inget kortkommando"
+  },
+  "configsessionkeymap": {
+    "message": "Tangentupps\u00e4ttningens format:"
+  },
+  "configsessionkeymapatok": {
+    "message": "ATOK"
+  },
+  "configsessionkeymapchromeos": {
+    "message": "Chrome OS"
+  },
+  "configsessionkeymapcustom": {
+    "message": "Anpassad tangentupps\u00e4ttning"
+  },
+  "configsessionkeymapkotoeri": {
+    "message": "Kotoeri"
+  },
+  "configsessionkeymapmsime": {
+    "message": "MS-IME"
+  },
+  "configsettingstitle": {
+    "message": "Inmatningsinst\u00e4llningar f\u00f6r japanska"
+  },
+  "configshiftkeymodeswitch": {
+    "message": "L\u00e4gesv\u00e4xling med Skift-tangenten:"
+  },
+  "configshiftkeymodeswitchalphanumeric": {
+    "message": "Alfanumeriskt"
+  },
+  "configshiftkeymodeswitchkatakana": {
+    "message": "Katakana"
+  },
+  "configshiftkeymodeswitchoff": {
+    "message": "Av"
+  },
+  "configspacecharacterform": {
+    "message": "Inmatningsformat f\u00f6r blanksteg:"
+  },
+  "configspacecharacterformfollow": {
+    "message": "F\u00f6lj inmatningsl\u00e4ge"
+  },
+  "configspacecharacterformfull": {
+    "message": "Med fullbredd"
+  },
+  "configspacecharacterformhalf": {
+    "message": "Med halv bredd"
+  },
+  "configsuggestionssize": {
+    "message": "Antal f\u00f6rslag:"
+  },
+  "configsuggesttitle": {
+    "message": "F\u00f6resl\u00e5"
+  },
+  "configsymbolmethod": {
+    "message": "Symbolformat:"
+  },
+  "configuploadusagestats": {
+    "message": "Skicka anv\u00e4ndningsstatistik och kraschrapporter till Google automatiskt"
+  },
+  "configuseautoimeturnoff": {
+    "message": "Byt automatiskt till halv bredd"
+  },
+  "configusedictionarysuggest": {
+    "message": "Anv\u00e4nd systemets ordlista"
+  },
+  "configusehistorysuggest": {
+    "message": "Anv\u00e4nd inmatningshistorik"
+  },
+  "ctrl": {
+    "message": "ctrl"
+  },
+  "current_keyboard_prefix": {
+    "message": "aktuellt tangentbord "
+  },
+  "current_lang": {
+    "message": "Inmatningsspr\u00e5ket \u00e4r kinesiska"
+  },
+  "current_punc": {
+    "message": "Punktbredden \u00e4r full"
+  },
+  "current_sbc": {
+    "message": "Teckenbredden \u00e4r full"
+  },
+  "cz_cze_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r tjeckiskt tangentbord"
+  },
+  "cz_qwerty_cze_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r tjeckiskt QWERTY-tangentbord"
+  },
+  "d83c_dc04": {
+    "message": "Mahjong-bricka"
+  },
+  "d83c_dccf": {
+    "message": "joker"
+  },
+  "d83c_dd70": {
+    "message": "blodgrupp A"
+  },
+  "d83c_dd71": {
+    "message": "blodgrupp B"
+  },
+  "d83c_dd7e": {
+    "message": "blodgrupp O"
+  },
+  "d83c_dd7f": {
+    "message": "parkering"
+  },
+  "d83c_dd8e": {
+    "message": "blodgrupp AB"
+  },
+  "d83c_dd91": {
+    "message": "Texten CL"
+  },
+  "d83c_dd92": {
+    "message": "cool"
+  },
+  "d83c_dd93": {
+    "message": "gratis"
+  },
+  "d83c_dd94": {
+    "message": "id"
+  },
+  "d83c_dd95": {
+    "message": "Ny"
+  },
+  "d83c_dd96": {
+    "message": "Texten NG"
+  },
+  "d83c_dd97": {
+    "message": "OK"
+  },
+  "d83c_dd98": {
+    "message": "SOS"
+  },
+  "d83c_dd99": {
+    "message": "Texten UP!"
+  },
+  "d83c_dd9a": {
+    "message": "Texten VS"
+  },
+  "d83c_de01": {
+    "message": "japanskt ord \u201dh\u00e4r\u201d"
+  },
+  "d83c_de02": {
+    "message": "japanskt ord \u201dtj\u00e4nst\u201d"
+  },
+  "d83c_de1a": {
+    "message": "japanskt ord \u201dgratis\u201d"
+  },
+  "d83c_de2f": {
+    "message": "japanskt ord \u201dreserverat\u201d"
+  },
+  "d83c_de32": {
+    "message": "japanskt ord \u201df\u00f6rbjudet\u201d"
+  },
+  "d83c_de33": {
+    "message": "kinesiskt ord \u201dledigt utrymme\u201d"
+  },
+  "d83c_de34": {
+    "message": "kinesiskt ord \u201dgodk\u00e4nt\u201d"
+  },
+  "d83c_de35": {
+    "message": "kineiskt ord \u201dfull\u201d"
+  },
+  "d83c_de36": {
+    "message": "japanskt ord \u201davgifter\u201d"
+  },
+  "d83c_de37": {
+    "message": "japanskt ord \u201dm\u00e5natligen\u201d"
+  },
+  "d83c_de38": {
+    "message": "kinesiskt ord \u201dans\u00f6kan\u201d"
+  },
+  "d83c_de39": {
+    "message": "japanskt ord \u201drabatt\u201d"
+  },
+  "d83c_de3a": {
+    "message": "kinesiskt ord \u201dverksam\u201d"
+  },
+  "d83c_de50": {
+    "message": "japanskt ord \u201df\u00f6rdel\u201d"
+  },
+  "d83c_de51": {
+    "message": "kinesiskt ord \u201dgodk\u00e4nd\u201d"
+  },
+  "d83c_df00": {
+    "message": "cyklon"
+  },
+  "d83c_df01": {
+    "message": "dimmigt"
+  },
+  "d83c_df02": {
+    "message": "paraply"
+  },
+  "d83c_df03": {
+    "message": "stj\u00e4rnklar natt"
+  },
+  "d83c_df04": {
+    "message": "soluppg\u00e5ng \u00f6ver bergen"
+  },
+  "d83c_df05": {
+    "message": "soluppg\u00e5ng"
+  },
+  "d83c_df06": {
+    "message": "stad i skymning"
+  },
+  "d83c_df07": {
+    "message": "solnedg\u00e5ng"
+  },
+  "d83c_df08": {
+    "message": "regnb\u00e5ge"
+  },
+  "d83c_df09": {
+    "message": "bro p\u00e5 natten"
+  },
+  "d83c_df0a": {
+    "message": "v\u00e5g"
+  },
+  "d83c_df0b": {
+    "message": "vulkan"
+  },
+  "d83c_df0c": {
+    "message": "Vintergatan"
+  },
+  "d83c_df0d": {
+    "message": "jordglob Europa\u2013Afrika"
+  },
+  "d83c_df0e": {
+    "message": "jordglob Nord- och Sydamerika"
+  },
+  "d83c_df0f": {
+    "message": "jordglob Asien\u2013Australien"
+  },
+  "d83c_df10": {
+    "message": "jordglob med meridianer"
+  },
+  "d83c_df11": {
+    "message": "nym\u00e5ne"
+  },
+  "d83c_df12": {
+    "message": "tilltagande halvm\u00e5ne"
+  },
+  "d83c_df13": {
+    "message": "f\u00f6rsta kvartm\u00e5ne"
+  },
+  "d83c_df14": {
+    "message": "mellan halvm\u00e5ne och fullm\u00e5ne"
+  },
+  "d83c_df15": {
+    "message": "fullm\u00e5ne"
+  },
+  "d83c_df16": {
+    "message": "avtagande m\u00e5ne"
+  },
+  "d83c_df17": {
+    "message": "sista kvartsm\u00e5ne"
+  },
+  "d83c_df18": {
+    "message": "avtagande halvm\u00e5ne"
+  },
+  "d83c_df19": {
+    "message": "halvm\u00e5ne"
+  },
+  "d83c_df1a": {
+    "message": "nym\u00e5ne med ansikte"
+  },
+  "d83c_df1b": {
+    "message": "f\u00f6rsta kvartsm\u00e5ne med ansikte"
+  },
+  "d83c_df1c": {
+    "message": "sista kvartsm\u00e5ne med ansikte"
+  },
+  "d83c_df1d": {
+    "message": "fullm\u00e5ne med ansikte"
+  },
+  "d83c_df1e": {
+    "message": "sol med ansikte"
+  },
+  "d83c_df1f": {
+    "message": "bl\u00e4nkande stj\u00e4rna"
+  },
+  "d83c_df20": {
+    "message": "stj\u00e4rnfall"
+  },
+  "d83c_df30": {
+    "message": "kastanj"
+  },
+  "d83c_df31": {
+    "message": "liten v\u00e4xt"
+  },
+  "d83c_df32": {
+    "message": "vintergr\u00f6nt tr\u00e4d"
+  },
+  "d83c_df33": {
+    "message": "l\u00f6vtr\u00e4d"
+  },
+  "d83c_df34": {
+    "message": "palm"
+  },
+  "d83c_df35": {
+    "message": "kaktus"
+  },
+  "d83c_df37": {
+    "message": "tulpan"
+  },
+  "d83c_df38": {
+    "message": "k\u00f6rsb\u00e4rsblommor"
+  },
+  "d83c_df39": {
+    "message": "ros"
+  },
+  "d83c_df3a": {
+    "message": "hibiskus"
+  },
+  "d83c_df3b": {
+    "message": "solros"
+  },
+  "d83c_df3c": {
+    "message": "blomma"
+  },
+  "d83c_df3d": {
+    "message": "majs"
+  },
+  "d83c_df3e": {
+    "message": "risplanta"
+  },
+  "d83c_df3f": {
+    "message": "\u00f6rt"
+  },
+  "d83c_df40": {
+    "message": "fyrkl\u00f6ver"
+  },
+  "d83c_df41": {
+    "message": "l\u00f6nnl\u00f6v"
+  },
+  "d83c_df42": {
+    "message": "fallande l\u00f6v"
+  },
+  "d83c_df43": {
+    "message": "l\u00f6v i vinden"
+  },
+  "d83c_df44": {
+    "message": "svamp"
+  },
+  "d83c_df45": {
+    "message": "tomat"
+  },
+  "d83c_df46": {
+    "message": "aubergine"
+  },
+  "d83c_df47": {
+    "message": "vindruvor"
+  },
+  "d83c_df48": {
+    "message": "melon"
+  },
+  "d83c_df49": {
+    "message": "vattenmelon"
+  },
+  "d83c_df4a": {
+    "message": "apelsin"
+  },
+  "d83c_df4b": {
+    "message": "citron"
+  },
+  "d83c_df4c": {
+    "message": "banan"
+  },
+  "d83c_df4d": {
+    "message": "ananas"
+  },
+  "d83c_df4e": {
+    "message": "r\u00f6tt \u00e4pple"
+  },
+  "d83c_df4f": {
+    "message": "gr\u00f6nt \u00e4pple"
+  },
+  "d83c_df50": {
+    "message": "p\u00e4ron"
+  },
+  "d83c_df51": {
+    "message": "persika"
+  },
+  "d83c_df52": {
+    "message": "k\u00f6rsb\u00e4r"
+  },
+  "d83c_df53": {
+    "message": "jordgubbe"
+  },
+  "d83c_df54": {
+    "message": "hamburgare"
+  },
+  "d83c_df55": {
+    "message": "pizzabit"
+  },
+  "d83c_df56": {
+    "message": "k\u00f6tt"
+  },
+  "d83c_df57": {
+    "message": "kycklingl\u00e5r"
+  },
+  "d83c_df58": {
+    "message": "riskaka"
+  },
+  "d83c_df59": {
+    "message": "risportion"
+  },
+  "d83c_df5a": {
+    "message": "kokt ris"
+  },
+  "d83c_df5b": {
+    "message": "curry och ris"
+  },
+  "d83c_df5c": {
+    "message": "nudelsoppa"
+  },
+  "d83c_df5d": {
+    "message": "spagetti"
+  },
+  "d83c_df5e": {
+    "message": "br\u00f6d"
+  },
+  "d83c_df5f": {
+    "message": "pommes frites"
+  },
+  "d83c_df60": {
+    "message": "rostad potatis"
+  },
+  "d83c_df61": {
+    "message": "dumplings"
+  },
+  "d83c_df62": {
+    "message": "skaldjursspett"
+  },
+  "d83c_df63": {
+    "message": "sushi"
+  },
+  "d83c_df64": {
+    "message": "friterad r\u00e4ka"
+  },
+  "d83c_df65": {
+    "message": "fiskkaka"
+  },
+  "d83c_df66": {
+    "message": "mjukglass"
+  },
+  "d83c_df67": {
+    "message": "sorbet"
+  },
+  "d83c_df68": {
+    "message": "glass"
+  },
+  "d83c_df69": {
+    "message": "munk"
+  },
+  "d83c_df6a": {
+    "message": "kaka"
+  },
+  "d83c_df6b": {
+    "message": "choklad"
+  },
+  "d83c_df6c": {
+    "message": "godis"
+  },
+  "d83c_df6d": {
+    "message": "klubba"
+  },
+  "d83c_df6e": {
+    "message": "cr\u00e8me br\u00fbl\u00e9e"
+  },
+  "d83c_df6f": {
+    "message": "honungsburk"
+  },
+  "d83c_df70": {
+    "message": "t\u00e5rtbit"
+  },
+  "d83c_df71": {
+    "message": "bento"
+  },
+  "d83c_df72": {
+    "message": "gryta"
+  },
+  "d83c_df73": {
+    "message": "stekpanna"
+  },
+  "d83c_df74": {
+    "message": "gaffel och kniv"
+  },
+  "d83c_df75": {
+    "message": "tekopp"
+  },
+  "d83c_df76": {
+    "message": "sake"
+  },
+  "d83c_df77": {
+    "message": "vin"
+  },
+  "d83c_df78": {
+    "message": "drink"
+  },
+  "d83c_df79": {
+    "message": "tropisk drink"
+  },
+  "d83c_df7a": {
+    "message": "\u00f6l"
+  },
+  "d83c_df7b": {
+    "message": "\u00f6lglas"
+  },
+  "d83c_df7c": {
+    "message": "nappflaska"
+  },
+  "d83c_df80": {
+    "message": "rosett"
+  },
+  "d83c_df81": {
+    "message": "present"
+  },
+  "d83c_df82": {
+    "message": "t\u00e5rta"
+  },
+  "d83c_df83": {
+    "message": "pumpa"
+  },
+  "d83c_df84": {
+    "message": "julgran"
+  },
+  "d83c_df85": {
+    "message": "tomte"
+  },
+  "d83c_df86": {
+    "message": "fyrverkeri"
+  },
+  "d83c_df87": {
+    "message": "fyrverkeriglitter"
+  },
+  "d83c_df88": {
+    "message": "ballong"
+  },
+  "d83c_df89": {
+    "message": "festdekorationer"
+  },
+  "d83c_df8a": {
+    "message": "konfetti"
+  },
+  "d83c_df8b": {
+    "message": "tr\u00e4d med pappersremsor"
+  },
+  "d83c_df8c": {
+    "message": "korsade flaggor"
+  },
+  "d83c_df8d": {
+    "message": "dekoration"
+  },
+  "d83c_df8e": {
+    "message": "dockor"
+  },
+  "d83c_df8f": {
+    "message": "vindstrut"
+  },
+  "d83c_df90": {
+    "message": "vindspel"
+  },
+  "d83c_df91": {
+    "message": "m\u00e5nsk\u00e5dning"
+  },
+  "d83c_df92": {
+    "message": "skolv\u00e4ska"
+  },
+  "d83c_df93": {
+    "message": "studentm\u00f6ssa"
+  },
+  "d83c_dfa0": {
+    "message": "karusell"
+  },
+  "d83c_dfa1": {
+    "message": "pariserhjul"
+  },
+  "d83c_dfa2": {
+    "message": "berg- och dalbana"
+  },
+  "d83c_dfa3": {
+    "message": "fiske"
+  },
+  "d83c_dfa4": {
+    "message": "mikrofon"
+  },
+  "d83c_dfa5": {
+    "message": "filmkamera"
+  },
+  "d83c_dfa6": {
+    "message": "film"
+  },
+  "d83c_dfa7": {
+    "message": "h\u00f6rlur"
+  },
+  "d83c_dfa8": {
+    "message": "f\u00e4rgpalett"
+  },
+  "d83c_dfa9": {
+    "message": "h\u00f6g hatt"
+  },
+  "d83c_dfaa": {
+    "message": "cirkus"
+  },
+  "d83c_dfab": {
+    "message": "biljett"
+  },
+  "d83c_dfac": {
+    "message": "filmklappa"
+  },
+  "d83c_dfad": {
+    "message": "teatermask"
+  },
+  "d83c_dfae": {
+    "message": "tv-spel"
+  },
+  "d83c_dfaf": {
+    "message": "mitt i prick"
+  },
+  "d83c_dfb0": {
+    "message": "enarmad bandit"
+  },
+  "d83c_dfb1": {
+    "message": "biljard"
+  },
+  "d83c_dfb2": {
+    "message": "t\u00e4rning"
+  },
+  "d83c_dfb3": {
+    "message": "bowling"
+  },
+  "d83c_dfb4": {
+    "message": "spelkort"
+  },
+  "d83c_dfb5": {
+    "message": "not"
+  },
+  "d83c_dfb6": {
+    "message": "noter"
+  },
+  "d83c_dfb7": {
+    "message": "saxofon"
+  },
+  "d83c_dfb8": {
+    "message": "gitarr"
+  },
+  "d83c_dfb9": {
+    "message": "piano"
+  },
+  "d83c_dfba": {
+    "message": "trumpet"
+  },
+  "d83c_dfbb": {
+    "message": "fiol"
+  },
+  "d83c_dfbc": {
+    "message": "g-klav"
+  },
+  "d83c_dfbd": {
+    "message": "tr\u00e4ningslinne"
+  },
+  "d83c_dfbe": {
+    "message": "tennis"
+  },
+  "d83c_dfbf": {
+    "message": "skid\u00e5kning"
+  },
+  "d83c_dfc0": {
+    "message": "basket"
+  },
+  "d83c_dfc1": {
+    "message": "rutig flagga"
+  },
+  "d83c_dfc2": {
+    "message": "snowboard\u00e5kare"
+  },
+  "d83c_dfc3": {
+    "message": "l\u00f6pare"
+  },
+  "d83c_dfc4": {
+    "message": "surfing"
+  },
+  "d83c_dfc6": {
+    "message": "pokal"
+  },
+  "d83c_dfc7": {
+    "message": "h\u00e4stkappl\u00f6pning"
+  },
+  "d83c_dfc8": {
+    "message": "amerikansk fotboll"
+  },
+  "d83c_dfc9": {
+    "message": "fotboll"
+  },
+  "d83c_dfca": {
+    "message": "simmare"
+  },
+  "d83c_dfe0": {
+    "message": "hus"
+  },
+  "d83c_dfe1": {
+    "message": "hem"
+  },
+  "d83c_dfe2": {
+    "message": "kontorsbyggnad"
+  },
+  "d83c_dfe3": {
+    "message": "japanskt postkontor"
+  },
+  "d83c_dfe4": {
+    "message": "europeiskt postkontor"
+  },
+  "d83c_dfe5": {
+    "message": "sjukhus"
+  },
+  "d83c_dfe6": {
+    "message": "bank"
+  },
+  "d83c_dfe7": {
+    "message": "uttagsautomat"
+  },
+  "d83c_dfe8": {
+    "message": "hotell"
+  },
+  "d83c_dfe9": {
+    "message": "hotell med hj\u00e4rta"
+  },
+  "d83c_dfea": {
+    "message": "butik"
+  },
+  "d83c_dfeb": {
+    "message": "skola"
+  },
+  "d83c_dfec": {
+    "message": "varuhus"
+  },
+  "d83c_dfed": {
+    "message": "fabrik"
+  },
+  "d83c_dfee": {
+    "message": "r\u00f6d lykta"
+  },
+  "d83c_dfef": {
+    "message": "japanskt slott"
+  },
+  "d83c_dff0": {
+    "message": "europeiskt slott"
+  },
+  "d83d_dc00": {
+    "message": "r\u00e5tta"
+  },
+  "d83d_dc01": {
+    "message": "mus"
+  },
+  "d83d_dc02": {
+    "message": "Oxe"
+  },
+  "d83d_dc03": {
+    "message": "vattenbuffel"
+  },
+  "d83d_dc04": {
+    "message": "ko"
+  },
+  "d83d_dc06": {
+    "message": "leopard"
+  },
+  "d83d_dc07": {
+    "message": "kanin"
+  },
+  "d83d_dc08": {
+    "message": "katt"
+  },
+  "d83d_dc09": {
+    "message": "drake"
+  },
+  "d83d_dc0a": {
+    "message": "krokodil"
+  },
+  "d83d_dc0b": {
+    "message": "val"
+  },
+  "d83d_dc0c": {
+    "message": "snigel"
+  },
+  "d83d_dc0d": {
+    "message": "orm"
+  },
+  "d83d_dc0e": {
+    "message": "h\u00e4st"
+  },
+  "d83d_dc0f": {
+    "message": "v\u00e4dur"
+  },
+  "d83d_dc10": {
+    "message": "get"
+  },
+  "d83d_dc11": {
+    "message": "f\u00e5r"
+  },
+  "d83d_dc12": {
+    "message": "apa"
+  },
+  "d83d_dc13": {
+    "message": "tupp"
+  },
+  "d83d_dc14": {
+    "message": "h\u00f6na"
+  },
+  "d83d_dc15": {
+    "message": "hund"
+  },
+  "d83d_dc16": {
+    "message": "gris"
+  },
+  "d83d_dc17": {
+    "message": "vildsvin"
+  },
+  "d83d_dc18": {
+    "message": "elefant"
+  },
+  "d83d_dc19": {
+    "message": "bl\u00e4ckfisk"
+  },
+  "d83d_dc1a": {
+    "message": "sn\u00e4cka"
+  },
+  "d83d_dc1b": {
+    "message": "insekt"
+  },
+  "d83d_dc1c": {
+    "message": "myra"
+  },
+  "d83d_dc1d": {
+    "message": "bi"
+  },
+  "d83d_dc1e": {
+    "message": "nyckelpiga"
+  },
+  "d83d_dc1f": {
+    "message": "fisk"
+  },
+  "d83d_dc20": {
+    "message": "tropisk fisk"
+  },
+  "d83d_dc21": {
+    "message": "bl\u00e5sfisk"
+  },
+  "d83d_dc22": {
+    "message": "sk\u00f6ldpadda"
+  },
+  "d83d_dc23": {
+    "message": "nykl\u00e4ckt kyckling"
+  },
+  "d83d_dc24": {
+    "message": "kycklingansikte"
+  },
+  "d83d_dc25": {
+    "message": "kyckling"
+  },
+  "d83d_dc26": {
+    "message": "f\u00e5gel"
+  },
+  "d83d_dc27": {
+    "message": "pingvin"
+  },
+  "d83d_dc28": {
+    "message": "koala"
+  },
+  "d83d_dc29": {
+    "message": "pudel"
+  },
+  "d83d_dc2a": {
+    "message": "dromedar"
+  },
+  "d83d_dc2b": {
+    "message": "kamel"
+  },
+  "d83d_dc2c": {
+    "message": "delfin"
+  },
+  "d83d_dc2d": {
+    "message": "musansikte"
+  },
+  "d83d_dc2e": {
+    "message": "koansikte"
+  },
+  "d83d_dc2f": {
+    "message": "tigeransikte"
+  },
+  "d83d_dc30": {
+    "message": "kaninansikte"
+  },
+  "d83d_dc31": {
+    "message": "kattansikte"
+  },
+  "d83d_dc32": {
+    "message": "drakansikte"
+  },
+  "d83d_dc33": {
+    "message": "sprutande val"
+  },
+  "d83d_dc34": {
+    "message": "h\u00e4stansikte"
+  },
+  "d83d_dc35": {
+    "message": "apansikte"
+  },
+  "d83d_dc36": {
+    "message": "hundansikte"
+  },
+  "d83d_dc37": {
+    "message": "grisansikte"
+  },
+  "d83d_dc38": {
+    "message": "grodansikte"
+  },
+  "d83d_dc39": {
+    "message": "hamsteransikte"
+  },
+  "d83d_dc3a": {
+    "message": "vargansikte"
+  },
+  "d83d_dc3b": {
+    "message": "bj\u00f6rnansikte"
+  },
+  "d83d_dc3c": {
+    "message": "pandaansikte"
+  },
+  "d83d_dc3d": {
+    "message": "tryne"
+  },
+  "d83d_dc3e": {
+    "message": "tassavtryck"
+  },
+  "d83d_dc40": {
+    "message": "\u00f6gon"
+  },
+  "d83d_dc42": {
+    "message": "\u00f6ra"
+  },
+  "d83d_dc43": {
+    "message": "n\u00e4sa"
+  },
+  "d83d_dc44": {
+    "message": "mun"
+  },
+  "d83d_dc45": {
+    "message": "tunga"
+  },
+  "d83d_dc46": {
+    "message": "upp\u00e5tpekande finger"
+  },
+  "d83d_dc47": {
+    "message": "ned\u00e5tpekande finger"
+  },
+  "d83d_dc48": {
+    "message": "finger som pekar \u00e5t v\u00e4nster"
+  },
+  "d83d_dc49": {
+    "message": "finger som pekar \u00e5t h\u00f6ger"
+  },
+  "d83d_dc4a": {
+    "message": "knuten n\u00e4ve"
+  },
+  "d83d_dc4b": {
+    "message": "hand som vinkar"
+  },
+  "d83d_dc4c": {
+    "message": "handtecken f\u00f6r OK"
+  },
+  "d83d_dc4d": {
+    "message": "tummen upp"
+  },
+  "d83d_dc4e": {
+    "message": "tummen ner"
+  },
+  "d83d_dc4f": {
+    "message": "klappar h\u00e4nderna"
+  },
+  "d83d_dc50": {
+    "message": "\u00f6ppna h\u00e4nder"
+  },
+  "d83d_dc51": {
+    "message": "krona"
+  },
+  "d83d_dc52": {
+    "message": "damhatt"
+  },
+  "d83d_dc53": {
+    "message": "glas\u00f6gon"
+  },
+  "d83d_dc54": {
+    "message": "slips"
+  },
+  "d83d_dc55": {
+    "message": "T-shirt"
+  },
+  "d83d_dc56": {
+    "message": "byxor"
+  },
+  "d83d_dc57": {
+    "message": "kl\u00e4nning"
+  },
+  "d83d_dc58": {
+    "message": "kimono"
+  },
+  "d83d_dc59": {
+    "message": "bikini"
+  },
+  "d83d_dc5a": {
+    "message": "damkl\u00e4der"
+  },
+  "d83d_dc5b": {
+    "message": "pl\u00e5nbok"
+  },
+  "d83d_dc5c": {
+    "message": "handv\u00e4ska"
+  },
+  "d83d_dc5d": {
+    "message": "handv\u00e4ska"
+  },
+  "d83d_dc5e": {
+    "message": "herrsko"
+  },
+  "d83d_dc5f": {
+    "message": "gympasko"
+  },
+  "d83d_dc60": {
+    "message": "h\u00f6gklackat"
+  },
+  "d83d_dc61": {
+    "message": "damsandal"
+  },
+  "d83d_dc62": {
+    "message": "damst\u00f6vel"
+  },
+  "d83d_dc63": {
+    "message": "fotavtryck"
+  },
+  "d83d_dc64": {
+    "message": "skuggbild av \u00f6verkropp"
+  },
+  "d83d_dc65": {
+    "message": "skuggbild av \u00f6verkroppar"
+  },
+  "d83d_dc66": {
+    "message": "pojke"
+  },
+  "d83d_dc67": {
+    "message": "flicka"
+  },
+  "d83d_dc68": {
+    "message": "man"
+  },
+  "d83d_dc69": {
+    "message": "kvinna"
+  },
+  "d83d_dc6a": {
+    "message": "familj"
+  },
+  "d83d_dc6b": {
+    "message": "man och kvinna"
+  },
+  "d83d_dc6c": {
+    "message": "tv\u00e5 m\u00e4n"
+  },
+  "d83d_dc6d": {
+    "message": "tv\u00e5 kvinnor"
+  },
+  "d83d_dc6e": {
+    "message": "polis"
+  },
+  "d83d_dc6f": {
+    "message": "tjej med kanin\u00f6ron"
+  },
+  "d83d_dc70": {
+    "message": "brud"
+  },
+  "d83d_dc71": {
+    "message": "blond person"
+  },
+  "d83d_dc72": {
+    "message": "man med kinesisk huvudbonad"
+  },
+  "d83d_dc73": {
+    "message": "man med turban"
+  },
+  "d83d_dc74": {
+    "message": "\u00e4ldre man"
+  },
+  "d83d_dc75": {
+    "message": "\u00e4ldre kvinna"
+  },
+  "d83d_dc76": {
+    "message": "baby"
+  },
+  "d83d_dc77": {
+    "message": "byggarbetare"
+  },
+  "d83d_dc78": {
+    "message": "prinsessa"
+  },
+  "d83d_dc79": {
+    "message": "monster"
+  },
+  "d83d_dc7a": {
+    "message": "japanskt monster"
+  },
+  "d83d_dc7b": {
+    "message": "sp\u00f6ke"
+  },
+  "d83d_dc7c": {
+    "message": "bebis\u00e4ngel"
+  },
+  "d83d_dc7d": {
+    "message": "utomjording"
+  },
+  "d83d_dc7e": {
+    "message": "monsterutomjording"
+  },
+  "d83d_dc7f": {
+    "message": "lila ansikte med horn"
+  },
+  "d83d_dc80": {
+    "message": "d\u00f6dskalle"
+  },
+  "d83d_dc81": {
+    "message": "informationsdisk"
+  },
+  "d83d_dc82": {
+    "message": "vakt"
+  },
+  "d83d_dc83": {
+    "message": "dansare"
+  },
+  "d83d_dc84": {
+    "message": "l\u00e4ppstift"
+  },
+  "d83d_dc85": {
+    "message": "nagelv\u00e5rd"
+  },
+  "d83d_dc86": {
+    "message": "ansiktsmassage"
+  },
+  "d83d_dc87": {
+    "message": "klipper h\u00e5ret"
+  },
+  "d83d_dc88": {
+    "message": "herrfris\u00f6r"
+  },
+  "d83d_dc89": {
+    "message": "spruta"
+  },
+  "d83d_dc8a": {
+    "message": "piller"
+  },
+  "d83d_dc8b": {
+    "message": "kyssm\u00e4rke"
+  },
+  "d83d_dc8c": {
+    "message": "k\u00e4rleksbrev"
+  },
+  "d83d_dc8d": {
+    "message": "ring"
+  },
+  "d83d_dc8e": {
+    "message": "diamant"
+  },
+  "d83d_dc8f": {
+    "message": "puss"
+  },
+  "d83d_dc90": {
+    "message": "bukett"
+  },
+  "d83d_dc91": {
+    "message": "par"
+  },
+  "d83d_dc92": {
+    "message": "vigselkapell"
+  },
+  "d83d_dc93": {
+    "message": "pulserande hj\u00e4rta"
+  },
+  "d83d_dc94": {
+    "message": "krossat hj\u00e4rta"
+  },
+  "d83d_dc95": {
+    "message": "tv\u00e5 hj\u00e4rtan"
+  },
+  "d83d_dc96": {
+    "message": "gnistrande hj\u00e4rta"
+  },
+  "d83d_dc97": {
+    "message": "hj\u00e4rta som v\u00e4xer"
+  },
+  "d83d_dc98": {
+    "message": "hj\u00e4rta och pil"
+  },
+  "d83d_dc99": {
+    "message": "bl\u00e5tt hj\u00e4rta"
+  },
+  "d83d_dc9a": {
+    "message": "gr\u00f6nt hj\u00e4rta"
+  },
+  "d83d_dc9b": {
+    "message": "gult hj\u00e4rta"
+  },
+  "d83d_dc9c": {
+    "message": "lila hj\u00e4rta"
+  },
+  "d83d_dc9d": {
+    "message": "hj\u00e4rta med rosett"
+  },
+  "d83d_dc9e": {
+    "message": "snurrande hj\u00e4rtan"
+  },
+  "d83d_dc9f": {
+    "message": "hj\u00e4rtdekoration"
+  },
+  "d83d_dca0": {
+    "message": "diamantform"
+  },
+  "d83d_dca1": {
+    "message": "gl\u00f6dlampa"
+  },
+  "d83d_dca2": {
+    "message": "ilska"
+  },
+  "d83d_dca3": {
+    "message": "bomb"
+  },
+  "d83d_dca4": {
+    "message": "tr\u00f6tthetssymbol"
+  },
+  "d83d_dca5": {
+    "message": "kollision"
+  },
+  "d83d_dca6": {
+    "message": "st\u00e4nkande svett"
+  },
+  "d83d_dca7": {
+    "message": "kallsvettig"
+  },
+  "d83d_dca8": {
+    "message": "fartsymbol"
+  },
+  "d83d_dca9": {
+    "message": "bajs"
+  },
+  "d83d_dcaa": {
+    "message": "biceps"
+  },
+  "d83d_dcab": {
+    "message": "yr"
+  },
+  "d83d_dcac": {
+    "message": "pratbubbla"
+  },
+  "d83d_dcad": {
+    "message": "tankebubbla"
+  },
+  "d83d_dcae": {
+    "message": "vit blomma"
+  },
+  "d83d_dcaf": {
+    "message": "full pott"
+  },
+  "d83d_dcb0": {
+    "message": "pengap\u00e5se"
+  },
+  "d83d_dcb1": {
+    "message": "valutav\u00e4xling"
+  },
+  "d83d_dcb2": {
+    "message": "dollartecken"
+  },
+  "d83d_dcb3": {
+    "message": "kreditkort"
+  },
+  "d83d_dcb4": {
+    "message": "sedel \u2013 yen"
+  },
+  "d83d_dcb5": {
+    "message": "dollarsedel"
+  },
+  "d83d_dcb6": {
+    "message": "sedel \u2013 euro"
+  },
+  "d83d_dcb7": {
+    "message": "sedel \u2013 pund"
+  },
+  "d83d_dcb8": {
+    "message": "pengar med vingar"
+  },
+  "d83d_dcb9": {
+    "message": "b\u00f6rsen stiger"
+  },
+  "d83d_dcba": {
+    "message": "s\u00e4te"
+  },
+  "d83d_dcbb": {
+    "message": "PC"
+  },
+  "d83d_dcbc": {
+    "message": "portf\u00f6lj"
+  },
+  "d83d_dcbd": {
+    "message": "minidisc"
+  },
+  "d83d_dcbe": {
+    "message": "diskett"
+  },
+  "d83d_dcbf": {
+    "message": "blu-ray"
+  },
+  "d83d_dcc0": {
+    "message": "DVD"
+  },
+  "d83d_dcc1": {
+    "message": "arkivmapp"
+  },
+  "d83d_dcc2": {
+    "message": "\u00f6ppen mapp"
+  },
+  "d83d_dcc3": {
+    "message": "dokument"
+  },
+  "d83d_dcc4": {
+    "message": "dokument"
+  },
+  "d83d_dcc5": {
+    "message": "kalender"
+  },
+  "d83d_dcc6": {
+    "message": "avdragbar kalender"
+  },
+  "d83d_dcc7": {
+    "message": "kortregister"
+  },
+  "d83d_dcc8": {
+    "message": "upp\u00e5tg\u00e5ende trend"
+  },
+  "d83d_dcc9": {
+    "message": "ned\u00e5tg\u00e5ende trend"
+  },
+  "d83d_dcca": {
+    "message": "stapeldiagram"
+  },
+  "d83d_dccb": {
+    "message": "skrivskiva"
+  },
+  "d83d_dccc": {
+    "message": "h\u00e4ftstift"
+  },
+  "d83d_dccd": {
+    "message": "rund n\u00e5l"
+  },
+  "d83d_dcce": {
+    "message": "gem"
+  },
+  "d83d_dccf": {
+    "message": "linjal"
+  },
+  "d83d_dcd0": {
+    "message": "r\u00e4tvinklig linjal"
+  },
+  "d83d_dcd1": {
+    "message": "bokm\u00e4rkesflikar"
+  },
+  "d83d_dcd2": {
+    "message": "liggare"
+  },
+  "d83d_dcd3": {
+    "message": "anteckningsblock"
+  },
+  "d83d_dcd4": {
+    "message": "dekorerad anteckningsbok"
+  },
+  "d83d_dcd5": {
+    "message": "st\u00e4ngd bok"
+  },
+  "d83d_dcd6": {
+    "message": "\u00f6ppen bok"
+  },
+  "d83d_dcd7": {
+    "message": "gr\u00f6n bok"
+  },
+  "d83d_dcd8": {
+    "message": "bok"
+  },
+  "d83d_dcd9": {
+    "message": "orange bok"
+  },
+  "d83d_dcda": {
+    "message": "b\u00f6cker"
+  },
+  "d83d_dcdb": {
+    "message": "namnskylt"
+  },
+  "d83d_dcdc": {
+    "message": "rulle"
+  },
+  "d83d_dcdd": {
+    "message": "anteckningar"
+  },
+  "d83d_dcde": {
+    "message": "telefon"
+  },
+  "d83d_dcdf": {
+    "message": "persons\u00f6kare"
+  },
+  "d83d_dce0": {
+    "message": "fax"
+  },
+  "d83d_dce1": {
+    "message": "parabolantenn"
+  },
+  "d83d_dce2": {
+    "message": "h\u00f6gtalare"
+  },
+  "d83d_dce3": {
+    "message": "megafon"
+  },
+  "d83d_dce4": {
+    "message": "skickad post"
+  },
+  "d83d_dce5": {
+    "message": "inkorgen"
+  },
+  "d83d_dce6": {
+    "message": "paket"
+  },
+  "d83d_dce7": {
+    "message": "e-post"
+  },
+  "d83d_dce8": {
+    "message": "inkommande post"
+  },
+  "d83d_dce9": {
+    "message": "utg\u00e5ende post"
+  },
+  "d83d_dcea": {
+    "message": "st\u00e4ngd brevl\u00e5da med s\u00e4nkt flagga"
+  },
+  "d83d_dceb": {
+    "message": "st\u00e4ngd brevl\u00e5da med h\u00f6jd flagga"
+  },
+  "d83d_dcec": {
+    "message": "\u00f6ppen brevl\u00e5da med h\u00f6jd flagga"
+  },
+  "d83d_dced": {
+    "message": "\u00f6ppen brevl\u00e5da med s\u00e4nkt flagga"
+  },
+  "d83d_dcee": {
+    "message": "postl\u00e5da"
+  },
+  "d83d_dcef": {
+    "message": "posthorn"
+  },
+  "d83d_dcf0": {
+    "message": "tidning"
+  },
+  "d83d_dcf1": {
+    "message": "mobiltelefon"
+  },
+  "d83d_dcf2": {
+    "message": "mobiltelefon med pil"
+  },
+  "d83d_dcf3": {
+    "message": "vibrationsl\u00e4ge"
+  },
+  "d83d_dcf4": {
+    "message": "avst\u00e4ngd mobil"
+  },
+  "d83d_dcf5": {
+    "message": "mobil f\u00f6rbjuden"
+  },
+  "d83d_dcf6": {
+    "message": "mobilsignaler"
+  },
+  "d83d_dcf7": {
+    "message": "kamera"
+  },
+  "d83d_dcf9": {
+    "message": "videokamera"
+  },
+  "d83d_dcfa": {
+    "message": "TV"
+  },
+  "d83d_dcfb": {
+    "message": "radio"
+  },
+  "d83d_dcfc": {
+    "message": "videoband"
+  },
+  "d83d_dd00": {
+    "message": "korsade pilar"
+  },
+  "d83d_dd01": {
+    "message": "pilar medsols"
+  },
+  "d83d_dd02": {
+    "message": "pilar medsols"
+  },
+  "d83d_dd03": {
+    "message": "uppdatera"
+  },
+  "d83d_dd04": {
+    "message": "pilar motsols"
+  },
+  "d83d_dd05": {
+    "message": "l\u00e5g ljusstyrka"
+  },
+  "d83d_dd06": {
+    "message": "h\u00f6g ljusstyrka"
+  },
+  "d83d_dd07": {
+    "message": "tyst"
+  },
+  "d83d_dd08": {
+    "message": "h\u00f6gtalare"
+  },
+  "d83d_dd09": {
+    "message": "h\u00f6gtalare med l\u00e5g volym"
+  },
+  "d83d_dd0a": {
+    "message": "h\u00f6gtalare med h\u00f6g volym"
+  },
+  "d83d_dd0b": {
+    "message": "batteri"
+  },
+  "d83d_dd0c": {
+    "message": "elkontakt"
+  },
+  "d83d_dd0d": {
+    "message": "f\u00f6rstoringsglas som \u00e4r vinklat \u00e5t v\u00e4nster"
+  },
+  "d83d_dd0e": {
+    "message": "f\u00f6rstoringsglas som \u00e4r vinklat \u00e5t h\u00f6ger"
+  },
+  "d83d_dd0f": {
+    "message": "l\u00e5s med en bl\u00e4ckpenna"
+  },
+  "d83d_dd10": {
+    "message": "st\u00e4ngt l\u00e5s med en nyckel"
+  },
+  "d83d_dd11": {
+    "message": "nyckel"
+  },
+  "d83d_dd12": {
+    "message": "st\u00e4ngt l\u00e5s"
+  },
+  "d83d_dd13": {
+    "message": "\u00f6ppet l\u00e5s"
+  },
+  "d83d_dd14": {
+    "message": "klocka"
+  },
+  "d83d_dd15": {
+    "message": "ingen klocka"
+  },
+  "d83d_dd16": {
+    "message": "bokm\u00e4rke"
+  },
+  "d83d_dd17": {
+    "message": "l\u00e4nksymbol"
+  },
+  "d83d_dd18": {
+    "message": "alternativknapp"
+  },
+  "d83d_dd19": {
+    "message": "bak\u00e5tpil"
+  },
+  "d83d_dd1a": {
+    "message": "Texten End med pil \u00e5t h\u00f6ger"
+  },
+  "d83d_dd1b": {
+    "message": "Texten ON med pil"
+  },
+  "d83d_dd1c": {
+    "message": "Texten Soon med pil \u00e5t h\u00f6ger"
+  },
+  "d83d_dd1d": {
+    "message": "Texten Top med upp\u00e5tpil"
+  },
+  "d83d_dd1e": {
+    "message": "f\u00f6rbjudet f\u00f6r minder\u00e5riga"
+  },
+  "d83d_dd20": {
+    "message": "stora bokst\u00e4ver"
+  },
+  "d83d_dd21": {
+    "message": "sm\u00e5 bokst\u00e4ver"
+  },
+  "d83d_dd22": {
+    "message": "siffror"
+  },
+  "d83d_dd23": {
+    "message": "symboler"
+  },
+  "d83d_dd24": {
+    "message": "latinskt alfabete"
+  },
+  "d83d_dd25": {
+    "message": "eld"
+  },
+  "d83d_dd26": {
+    "message": "ficklampa"
+  },
+  "d83d_dd27": {
+    "message": "skiftnyckel"
+  },
+  "d83d_dd28": {
+    "message": "hammare"
+  },
+  "d83d_dd29": {
+    "message": "skruv och mutter"
+  },
+  "d83d_dd2a": {
+    "message": "k\u00f6kskniv"
+  },
+  "d83d_dd2b": {
+    "message": "vapen"
+  },
+  "d83d_dd2c": {
+    "message": "mikroskop"
+  },
+  "d83d_dd2d": {
+    "message": "teleskop"
+  },
+  "d83d_dd2e": {
+    "message": "sp\u00e5kula"
+  },
+  "d83d_dd2f": {
+    "message": "stj\u00e4rna med prick"
+  },
+  "d83d_dd30": {
+    "message": "gr\u00f6n och gul pil"
+  },
+  "d83d_dd31": {
+    "message": "treudd"
+  },
+  "d83d_dd32": {
+    "message": "fyrkantig knapp med solid ram"
+  },
+  "d83d_dd33": {
+    "message": "fyrkantig knapp med ramkontur"
+  },
+  "d83d_dd34": {
+    "message": "stor r\u00f6d cirkel"
+  },
+  "d83d_dd35": {
+    "message": "stor bl\u00e5 cirkel"
+  },
+  "d83d_dd36": {
+    "message": "stor orange diamant"
+  },
+  "d83d_dd37": {
+    "message": "stor bl\u00e5 diamant"
+  },
+  "d83d_dd38": {
+    "message": "liten orange diamant"
+  },
+  "d83d_dd39": {
+    "message": "liten bl\u00e5 diamant"
+  },
+  "d83d_dd3a": {
+    "message": "upp\u00e5tpekande triangel"
+  },
+  "d83d_dd3b": {
+    "message": "ned\u00e5tpekande triangel"
+  },
+  "d83d_dd3c": {
+    "message": "upp\u00e5tpekande triangel"
+  },
+  "d83d_dd3d": {
+    "message": "ned\u00e5tpekande triangel"
+  },
+  "d83d_dd50": {
+    "message": "klockan ett"
+  },
+  "d83d_dd51": {
+    "message": "klockan tv\u00e5"
+  },
+  "d83d_dd52": {
+    "message": "klockan tre"
+  },
+  "d83d_dd53": {
+    "message": "klockan fyra"
+  },
+  "d83d_dd54": {
+    "message": "klockan fem"
+  },
+  "d83d_dd55": {
+    "message": "klockan sex"
+  },
+  "d83d_dd56": {
+    "message": "klockan sju"
+  },
+  "d83d_dd57": {
+    "message": "klockan \u00e5tta"
+  },
+  "d83d_dd58": {
+    "message": "klockan nio"
+  },
+  "d83d_dd59": {
+    "message": "klockan tio"
+  },
+  "d83d_dd5a": {
+    "message": "klockan elva"
+  },
+  "d83d_dd5b": {
+    "message": "klockan tolv"
+  },
+  "d83d_dd5c": {
+    "message": "halv tv\u00e5"
+  },
+  "d83d_dd5d": {
+    "message": "halv tre"
+  },
+  "d83d_dd5e": {
+    "message": "halv fyra"
+  },
+  "d83d_dd5f": {
+    "message": "halv fem"
+  },
+  "d83d_dd60": {
+    "message": "halv sex"
+  },
+  "d83d_dd61": {
+    "message": "halv sju"
+  },
+  "d83d_dd62": {
+    "message": "halv \u00e5tta"
+  },
+  "d83d_dd63": {
+    "message": "halv nio"
+  },
+  "d83d_dd64": {
+    "message": "halv tio"
+  },
+  "d83d_dd65": {
+    "message": "halv elva"
+  },
+  "d83d_dd66": {
+    "message": "halv tolv"
+  },
+  "d83d_dd67": {
+    "message": "halv ett"
+  },
+  "d83d_ddfb": {
+    "message": "berg"
+  },
+  "d83d_ddfc": {
+    "message": "torn i Tokyo"
+  },
+  "d83d_ddfd": {
+    "message": "Frihetsgudinnan"
+  },
+  "d83d_ddfe": {
+    "message": "karta \u00f6ver Japan"
+  },
+  "d83d_ddff": {
+    "message": "staty"
+  },
+  "d83d_de00": {
+    "message": "flin"
+  },
+  "d83d_de01": {
+    "message": " leende \u00f6gon och visar t\u00e4nderna"
+  },
+  "d83d_de02": {
+    "message": "gl\u00e4djet\u00e5rar"
+  },
+  "d83d_de03": {
+    "message": "leende med \u00f6ppen mun"
+  },
+  "d83d_de04": {
+    "message": "ler med \u00f6gonen och \u00f6ppen mun"
+  },
+  "d83d_de05": {
+    "message": "leende med svettdroppe"
+  },
+  "d83d_de06": {
+    "message": " ler med \u00f6ppen mun och st\u00e4ngda \u00f6gon"
+  },
+  "d83d_de07": {
+    "message": "ler med gloria"
+  },
+  "d83d_de08": {
+    "message": "ler med horn"
+  },
+  "d83d_de09": {
+    "message": "flirtar"
+  },
+  "d83d_de0a": {
+    "message": "ler"
+  },
+  "d83d_de0b": {
+    "message": "slickar sig om munnen"
+  },
+  "d83d_de0c": {
+    "message": "l\u00e4ttat ansikte"
+  },
+  "d83d_de0d": {
+    "message": "leende ansikte"
+  },
+  "d83d_de0e": {
+    "message": "cool"
+  },
+  "d83d_de0f": {
+    "message": "flin"
+  },
+  "d83d_de10": {
+    "message": "neutralt ansikte"
+  },
+  "d83d_de11": {
+    "message": "uttrycksl\u00f6s"
+  },
+  "d83d_de12": {
+    "message": "inte road"
+  },
+  "d83d_de13": {
+    "message": "kallsvettig"
+  },
+  "d83d_de14": {
+    "message": "t\u00e4nkande ansikte"
+  },
+  "d83d_de15": {
+    "message": "f\u00f6rvirrat ansikte"
+  },
+  "d83d_de16": {
+    "message": "f\u00f6rvirrat ansikte"
+  },
+  "d83d_de17": {
+    "message": "kyssande ansikte"
+  },
+  "d83d_de18": {
+    "message": "sl\u00e4ngkyssar"
+  },
+  "d83d_de19": {
+    "message": "kysser och ler"
+  },
+  "d83d_de1a": {
+    "message": "kysser med st\u00e4ngda \u00f6gon"
+  },
+  "d83d_de1b": {
+    "message": "r\u00e4cker ut tungan"
+  },
+  "d83d_de1c": {
+    "message": "tungan ut och blinkar"
+  },
+  "d83d_de1d": {
+    "message": "bl\u00e4"
+  },
+  "d83d_de1e": {
+    "message": "besviken"
+  },
+  "d83d_de1f": {
+    "message": "orolig"
+  },
+  "d83d_de20": {
+    "message": "arg"
+  },
+  "d83d_de21": {
+    "message": "sur uppsyn"
+  },
+  "d83d_de22": {
+    "message": "gr\u00e5ter"
+  },
+  "d83d_de23": {
+    "message": "attans"
+  },
+  "d83d_de24": {
+    "message": "n\u00f6jt ansikte"
+  },
+  "d83d_de25": {
+    "message": "besviket men l\u00e4ttat ansikte"
+  },
+  "d83d_de26": {
+    "message": "bistert ansikte"
+  },
+  "d83d_de27": {
+    "message": "\u00e5ngestladdat ansikte"
+  },
+  "d83d_de28": {
+    "message": "skr\u00e4mt ansikte"
+  },
+  "d83d_de29": {
+    "message": "bedr\u00f6vad"
+  },
+  "d83d_de2a": {
+    "message": "s\u00f6mnig"
+  },
+  "d83d_de2b": {
+    "message": "tr\u00f6tt"
+  },
+  "d83d_de2c": {
+    "message": "grimaserar"
+  },
+  "d83d_de2d": {
+    "message": "stortjuter"
+  },
+  "d83d_de2e": {
+    "message": "ansikte med \u00f6ppen mun"
+  },
+  "d83d_de2f": {
+    "message": "ansikte som tiger"
+  },
+  "d83d_de30": {
+    "message": "kallsvettigt ansikte med \u00f6ppen mun"
+  },
+  "d83d_de31": {
+    "message": "skr\u00e4ckfyllt ansikte"
+  },
+  "d83d_de32": {
+    "message": "f\u00f6rv\u00e5nat ansikte"
+  },
+  "d83d_de33": {
+    "message": "generad"
+  },
+  "d83d_de34": {
+    "message": "sover"
+  },
+  "d83d_de35": {
+    "message": "yr"
+  },
+  "d83d_de36": {
+    "message": "ansikte utan mun"
+  },
+  "d83d_de37": {
+    "message": "ansikte med mask"
+  },
+  "d83d_de38": {
+    "message": "skrattande kattansikte"
+  },
+  "d83d_de39": {
+    "message": "kattansikte med gl\u00e4djet\u00e5rar"
+  },
+  "d83d_de3a": {
+    "message": "leende kattansikte"
+  },
+  "d83d_de3b": {
+    "message": "leende kattansikte"
+  },
+  "d83d_de3c": {
+    "message": "katt med snett leende"
+  },
+  "d83d_de3d": {
+    "message": "kyssande katt"
+  },
+  "d83d_de3e": {
+    "message": "surt kattansikte"
+  },
+  "d83d_de3f": {
+    "message": "gr\u00e5tande kattansikte"
+  },
+  "d83d_de40": {
+    "message": "bedr\u00f6vat kattansikte"
+  },
+  "d83d_de45": {
+    "message": "Gest f\u00f6r inte bra"
+  },
+  "d83d_de46": {
+    "message": "gest f\u00f6r OK"
+  },
+  "d83d_de47": {
+    "message": "f\u00f6rl\u00e5t"
+  },
+  "d83d_de48": {
+    "message": "ser inget"
+  },
+  "d83d_de49": {
+    "message": "h\u00f6r inget"
+  },
+  "d83d_de4a": {
+    "message": "s\u00e4ger inget"
+  },
+  "d83d_de4b": {
+    "message": "glad person"
+  },
+  "d83d_de4c": {
+    "message": "hurra"
+  },
+  "d83d_de4d": {
+    "message": "dyster person"
+  },
+  "d83d_de4e": {
+    "message": "sur uppsyn"
+  },
+  "d83d_de4f": {
+    "message": "kn\u00e4ppta h\u00e4nder"
+  },
+  "d83d_de80": {
+    "message": "raket"
+  },
+  "d83d_de81": {
+    "message": "helikopter"
+  },
+  "d83d_de82": {
+    "message": "\u00e5nglok"
+  },
+  "d83d_de83": {
+    "message": "t\u00e5g"
+  },
+  "d83d_de84": {
+    "message": "snabbt\u00e5g"
+  },
+  "d83d_de85": {
+    "message": "snabbt\u00e5g med spetsig front"
+  },
+  "d83d_de86": {
+    "message": "t\u00e5g"
+  },
+  "d83d_de87": {
+    "message": "tunnelbana"
+  },
+  "d83d_de88": {
+    "message": "snabbsp\u00e5rv\u00e4g"
+  },
+  "d83d_de89": {
+    "message": "j\u00e4rnv\u00e4gsstation"
+  },
+  "d83d_de8a": {
+    "message": "sp\u00e5rvagn"
+  },
+  "d83d_de8b": {
+    "message": "sp\u00e5rvagn"
+  },
+  "d83d_de8c": {
+    "message": "buss"
+  },
+  "d83d_de8d": {
+    "message": "m\u00f6tande buss"
+  },
+  "d83d_de8e": {
+    "message": "tr\u00e5dbuss"
+  },
+  "d83d_de8f": {
+    "message": "bussh\u00e5llplats"
+  },
+  "d83d_de90": {
+    "message": "minibuss"
+  },
+  "d83d_de91": {
+    "message": "ambulans"
+  },
+  "d83d_de92": {
+    "message": "brandbil"
+  },
+  "d83d_de93": {
+    "message": "polisbil"
+  },
+  "d83d_de94": {
+    "message": "m\u00f6tande polisbil"
+  },
+  "d83d_de95": {
+    "message": "taxi"
+  },
+  "d83d_de96": {
+    "message": "m\u00f6tande taxi"
+  },
+  "d83d_de97": {
+    "message": "bil"
+  },
+  "d83d_de98": {
+    "message": "m\u00f6tande bil"
+  },
+  "d83d_de99": {
+    "message": "bl\u00e5 bil"
+  },
+  "d83d_de9a": {
+    "message": "sk\u00e5pbil"
+  },
+  "d83d_de9b": {
+    "message": "lastbil"
+  },
+  "d83d_de9c": {
+    "message": "traktor"
+  },
+  "d83d_de9d": {
+    "message": "balkbana"
+  },
+  "d83d_de9e": {
+    "message": "bergsbana"
+  },
+  "d83d_de9f": {
+    "message": "h\u00e4ngbana"
+  },
+  "d83d_dea0": {
+    "message": "linbana"
+  },
+  "d83d_dea1": {
+    "message": "kabinbana"
+  },
+  "d83d_dea2": {
+    "message": "fartyg"
+  },
+  "d83d_dea3": {
+    "message": "roddb\u00e5t"
+  },
+  "d83d_dea4": {
+    "message": "motorb\u00e5t"
+  },
+  "d83d_dea5": {
+    "message": "v\u00e5gr\u00e4ta trafikljus"
+  },
+  "d83d_dea6": {
+    "message": "lodr\u00e4ta trafikljus"
+  },
+  "d83d_dea7": {
+    "message": "byggomr\u00e5de"
+  },
+  "d83d_dea8": {
+    "message": "polissiren"
+  },
+  "d83d_dea9": {
+    "message": "trekantig platsflagga"
+  },
+  "d83d_deaa": {
+    "message": "d\u00f6rr"
+  },
+  "d83d_deab": {
+    "message": "f\u00f6rbjuden ing\u00e5ng"
+  },
+  "d83d_deac": {
+    "message": "symbol f\u00f6r r\u00f6kning"
+  },
+  "d83d_dead": {
+    "message": "r\u00f6kning f\u00f6rbjuden"
+  },
+  "d83d_deae": {
+    "message": "papperskorg"
+  },
+  "d83d_deaf": {
+    "message": "sl\u00e4ng inte skr\u00e4p h\u00e4r"
+  },
+  "d83d_deb0": {
+    "message": "dricksvatten"
+  },
+  "d83d_deb1": {
+    "message": "ej dricksvatten"
+  },
+  "d83d_deb2": {
+    "message": "cykel"
+  },
+  "d83d_deb3": {
+    "message": "ingen cykel"
+  },
+  "d83d_deb4": {
+    "message": "cyklist"
+  },
+  "d83d_deb5": {
+    "message": "mountainbike\u00e5kare"
+  },
+  "d83d_deb6": {
+    "message": "fotg\u00e4ngare"
+  },
+  "d83d_deb7": {
+    "message": "inga fotg\u00e4ngare"
+  },
+  "d83d_deb8": {
+    "message": "passerande barn"
+  },
+  "d83d_deb9": {
+    "message": "F\u00f6r herrar"
+  },
+  "d83d_deba": {
+    "message": "F\u00f6r damer"
+  },
+  "d83d_debb": {
+    "message": "wc-skylt"
+  },
+  "d83d_debc": {
+    "message": "F\u00f6r barn"
+  },
+  "d83d_debd": {
+    "message": "toalett"
+  },
+  "d83d_debe": {
+    "message": "wc"
+  },
+  "d83d_debf": {
+    "message": "dusch"
+  },
+  "d83d_dec0": {
+    "message": "bada"
+  },
+  "d83d_dec1": {
+    "message": "badkar"
+  },
+  "d83d_dec2": {
+    "message": "passkontroll"
+  },
+  "d83d_dec3": {
+    "message": "tullen"
+  },
+  "d83d_dec4": {
+    "message": "bagageutl\u00e4mning"
+  },
+  "d83d_dec5": {
+    "message": "kvargl\u00f6mt bagage"
+  },
+  "de_ger_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r tyskt tangentbord"
+  },
+  "de_neo_ger_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r tyskt Neo 2-tangentbord"
+  },
+  "dictionarytoolcategorytitle": {
+    "message": "Kategori"
+  },
+  "dictionarytoolcommentnewinput": {
+    "message": "Kommentar"
+  },
+  "dictionarytoolcommenttitle": {
+    "message": "Kommentar"
+  },
+  "dictionarytooldeletedictionaryconfirm": {
+    "message": "Vill du ta bort [object Object]?"
+  },
+  "dictionarytooldeletedictionarytitle": {
+    "message": "Ta bort ordlista"
+  },
+  "dictionarytooldictionarylisttitle": {
+    "message": "Ordlistor"
+  },
+  "dictionarytooldictionaryname": {
+    "message": "Ordlistans namn"
+  },
+  "dictionarytooldonebutton": {
+    "message": "Klart"
+  },
+  "dictionarytoolexportbutton": {
+    "message": "Exportera"
+  },
+  "dictionarytoolimportbutton": {
+    "message": "Importera \u2026"
+  },
+  "dictionarytoolmenutitle": {
+    "message": "Ordlistehantering"
+  },
+  "dictionarytoolnewdictionarynameplaceholder": {
+    "message": "Ny ordlista"
+  },
+  "dictionarytoolpagetitle": {
+    "message": "Egna ordlistor"
+  },
+  "dictionarytoolreadingnewinput": {
+    "message": "Ny l\u00e4sning"
+  },
+  "dictionarytoolreadingtitle": {
+    "message": "L\u00e4sning"
+  },
+  "dictionarytoolstatuserrordictionarynamecontainsinvalidcharacter": {
+    "message": "Namnet inneh\u00e5ller minst ett ogiltigt tecken."
+  },
+  "dictionarytoolstatuserrordictionarynameduplicated": {
+    "message": "Namnet finns redan."
+  },
+  "dictionarytoolstatuserrordictionarynameempty": {
+    "message": "Skriv ett namn p\u00e5 ordlistan."
+  },
+  "dictionarytoolstatuserrordictionarynametoolong": {
+    "message": "Namnet \u00e4r f\u00f6r l\u00e5ngt."
+  },
+  "dictionarytoolstatuserrordictionarysizelimitexceeded": {
+    "message": "Det g\u00e5r inte att skapa fler ordlistor."
+  },
+  "dictionarytoolstatuserroremptyfile": {
+    "message": "Filen \u00e4r tom."
+  },
+  "dictionarytoolstatuserrorentrysizelimitexceeded": {
+    "message": "Det g\u00e5r inte att skapa fler poster i den h\u00e4r ordlistan."
+  },
+  "dictionarytoolstatuserrorfilenotfound": {
+    "message": "Det gick inte att \u00f6ppna filen."
+  },
+  "dictionarytoolstatuserrorfilesizelimitexceeded": {
+    "message": "Storleken p\u00e5 data \u00f6verskrider gr\u00e4nsen f\u00f6r filstorleken."
+  },
+  "dictionarytoolstatuserrorgeneral": {
+    "message": "\u00c5tg\u00e4rden misslyckades."
+  },
+  "dictionarytoolstatuserrorimportinvalidentries": {
+    "message": "Vissa ord importerades inte."
+  },
+  "dictionarytoolstatuserrorimporttoomanywords": {
+    "message": "Importk\u00e4llan inneh\u00e5ller f\u00f6r m\u00e5nga ord."
+  },
+  "dictionarytoolstatuserrorinvalidfileformat": {
+    "message": "Filen gick inte att l\u00e4sa."
+  },
+  "dictionarytoolstatuserrornoundohistory": {
+    "message": "Inga fler \u00e5tg\u00e4rder som kan \u00e5ngras."
+  },
+  "dictionarytoolstatuserrorreadingcontainsinvalidcharacter": {
+    "message": "L\u00e4sningen inneh\u00e5ller minst ett ogiltigt tecken. Du kan anv\u00e4nda ASCII-tecken, hiragana, tecknet f\u00f6r tonande ljud (\u309b), tecknet f\u00f6r halvtonande ljud (\u309c), halvh\u00f6g punkt (\u30fb), tecknet f\u00f6r l\u00e5ngt ljud (\u30fc), japanskt komma (\u3001), japansk punkt (\u3002), japanska parenteser (\u300c\u300d\u300e\u300f) och japanskt v\u00e5gstreck (\u301c) i l\u00e4sningen."
+  },
+  "dictionarytoolstatuserrorreadingempty": {
+    "message": "Skriv l\u00e4sningen."
+  },
+  "dictionarytoolstatuserrorreadingtoolong": {
+    "message": "L\u00e4sningen \u00e4r f\u00f6r l\u00e5ng."
+  },
+  "dictionarytoolstatuserrortitleaddentry": {
+    "message": "Ett fel uppstod n\u00e4r posten skulle l\u00e4ggas till"
+  },
+  "dictionarytoolstatuserrortitlecreatedictionary": {
+    "message": "Ett fel uppstod n\u00e4r ordlistan skulle skapas"
+  },
+  "dictionarytoolstatuserrortitledeletedictionary": {
+    "message": "Ett fel uppstod n\u00e4r ordlistan skulle tas bort"
+  },
+  "dictionarytoolstatuserrortitledeleteentry": {
+    "message": "Ett fel uppstod n\u00e4r posten skulle tas bort"
+  },
+  "dictionarytoolstatuserrortitleeditentry": {
+    "message": "Ett fel uppstod n\u00e4r posten skulle \u00e4ndras"
+  },
+  "dictionarytoolstatuserrortitleimportdata": {
+    "message": "Ett fel uppstod vid importen"
+  },
+  "dictionarytoolstatuserrortitlerenamedictionary": {
+    "message": "Ett fel uppstod vid bytet av namn p\u00e5 ordlistan"
+  },
+  "dictionarytoolstatuserrorwordcontainsinvalidcharacter": {
+    "message": "Ordet inneh\u00e5ller minst ett ogiltigt tecken."
+  },
+  "dictionarytoolstatuserrorwordempty": {
+    "message": "Skriv ordet."
+  },
+  "dictionarytoolstatuserrorwordtoolong": {
+    "message": "Ordet \u00e4r f\u00f6r l\u00e5ngt."
+  },
+  "dictionarytoolwordnewinput": {
+    "message": "Nytt ord"
+  },
+  "dictionarytoolwordtitle": {
+    "message": "Ord"
+  },
+  "dismiss_menu": {
+    "message": "d\u00f6lj tangentbordsmeny"
+  },
+  "dk_dan_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r danskt tangentbord"
+  },
+  "double_space_period": {
+    "message": "Skriv punkt med hj\u00e4lp av dubbelt mellanslag"
+  },
+  "down_arrow": {
+    "message": "ned\u00e5tpil"
+  },
+  "ee_est_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r estniskt tangentbord"
+  },
+  "emoji_tab_emoticon": {
+    "message": "Emoji-kategori, uttryckssymboler"
+  },
+  "emoji_tab_face": {
+    "message": "Emoji-kategori, ansikten"
+  },
+  "emoji_tab_hot": {
+    "message": "Popul\u00e4r emoji-kategori"
+  },
+  "emoji_tab_nature": {
+    "message": "Emoji-kategori, natur"
+  },
+  "emoji_tab_object": {
+    "message": "Emoji-kategori, objekt"
+  },
+  "emoji_tab_place": {
+    "message": "Emoji-kategori, platser"
+  },
+  "emoji_tab_recent": {
+    "message": "Senaste emoji-kategori"
+  },
+  "emoji_tab_symbol": {
+    "message": "Emoji-kategori, symboler"
+  },
+  "enable_capitalization": {
+    "message": "Automatiska versaler"
+  },
+  "enable_completion": {
+    "message": "Aktivera slutf\u00f6rande"
+  },
+  "enable_prediction": {
+    "message": "Aktivera f\u00f6rslag f\u00f6r n\u00e4sta ord"
+  },
+  "enter": {
+    "message": "retur"
+  },
+  "es_cat_cat_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r katalanskt tangentbord"
+  },
+  "es_spa_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r spanskt tangentbord"
+  },
+  "expand": {
+    "message": "Ut\u00f6ka"
+  },
+  "expand_candidates": {
+    "message": "visa fler alternativ"
+  },
+  "fi_fin_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r finskt tangentbord"
+  },
+  "footer_emoji_button": {
+    "message": "byt till emoji"
+  },
+  "footer_handwriting_button": {
+    "message": "byt till handskrift"
+  },
+  "footer_settings_button": {
+    "message": "\u00f6ppna inst\u00e4llningar f\u00f6r inmatningsmetod"
+  },
+  "fr_fra_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r franskt tangentbord"
+  },
+  "fuzzy_pinyin": {
+    "message": "Aktivera Fuzzy-Pinyin-l\u00e4ge"
+  },
+  "gb_dvorak_eng_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r Dvorak-tangentbord f\u00f6r Storbritannien (engelska)"
+  },
+  "gb_extd_eng_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r brittiskt tangentbord (engelska)"
+  },
+  "ge_geo_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r georgiskt tangentbord"
+  },
+  "globe": {
+    "message": "byt till f\u00f6reg\u00e5ende tangentbord"
+  },
+  "got_it": {
+    "message": "OK"
+  },
+  "gr_gre_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r grekiskt tangentbord"
+  },
+  "handwriting_back": {
+    "message": "Tillbaka"
+  },
+  "handwriting_netowrk_error": {
+    "message": "Eftersom n\u00e4tverket inte \u00e4r tillg\u00e4ngligt kan du tyv\u00e4rr inte skriva f\u00f6r hand."
+  },
+  "handwriting_privacy_info": {
+    "message": "Inmatningen skickas till Googles servrar f\u00f6r textigenk\u00e4nning."
+  },
+  "hide_keyboard": {
+    "message": "d\u00f6lj tangentbord"
+  },
+  "hr_scr_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r kroatiskt tangentbord"
+  },
+  "hu_hun_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r ungerskt tangentbord"
+  },
+  "ie_ga_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r irl\u00e4ndskt tangentbord"
+  },
+  "ignore_correction": {
+    "message": "Ignorera korrigeringen av"
+  },
+  "ignore_correction_short": {
+    "message": "Ignorera korrigeringen"
+  },
+  "il_heb_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r hebreiskt tangentbord"
+  },
+  "init_lang": {
+    "message": "Det ursprungliga inmatningsspr\u00e5ket \u00e4r kinesiska"
+  },
+  "init_punc": {
+    "message": "Den ursprungliga punktbredden \u00e4r full"
+  },
+  "init_sbc": {
+    "message": "Den ursprungliga teckenbredden \u00e4r full"
+  },
+  "input_hangul": {
+    "message": "Hangul-l\u00e4ge"
+  },
+  "input_hanja": {
+    "message": "Hanja-l\u00e4ge"
+  },
+  "inputmethod_array": {
+    "message": "Inmatningsmetoden Array"
+  },
+  "inputmethod_cangjie": {
+    "message": "Inmatningsmetoden Cangjie"
+  },
+  "inputmethod_dayi": {
+    "message": "Inmatningsmetoden Dayi"
+  },
+  "inputmethod_hangul": {
+    "message": "Koreansk inmatningsmetod"
+  },
+  "inputmethod_pinyin": {
+    "message": "Inmatningsmetoden Pinyin"
+  },
+  "inputmethod_quick": {
+    "message": "Snabb inmatningsmetod"
+  },
+  "inputmethod_traditional_pinyin": {
+    "message": "Inmatningsmetoden Pinyin f\u00f6r traditionell kinesiska"
+  },
+  "inputmethod_wubi": {
+    "message": "Inmatningsmetoden Wubi"
+  },
+  "inputmethod_zhuyin": {
+    "message": "Inmatningsmetoden Zhuyin"
+  },
+  "is_ice_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r isl\u00e4ndskt tangentbord"
+  },
+  "it_ita_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r italienskt tangentbord"
+  },
+  "jp_jpn_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r japanskt tangentbord"
+  },
+  "keyboard_arabic": {
+    "message": "Arabiskt tangentbord"
+  },
+  "keyboard_armenian_phonetic": {
+    "message": "Armeniskt fonetiskt tangentbord"
+  },
+  "keyboard_belarusian": {
+    "message": "Vitryskt tangentbord"
+  },
+  "keyboard_belgian": {
+    "message": "Belgiskt tangentbord"
+  },
+  "keyboard_bengali_phonetic": {
+    "message": "Tangentbord f\u00f6r bengaliska (fonetiskt)"
+  },
+  "keyboard_brazilian": {
+    "message": "Brasilianskt tangentbord"
+  },
+  "keyboard_bulgarian": {
+    "message": "Bulgariskt tangentbord"
+  },
+  "keyboard_bulgarian_phonetic": {
+    "message": "Bulgariskt fonetiskt tangentbord"
+  },
+  "keyboard_canadian_english": {
+    "message": "Kanadensiskt-engelskt tangentbord"
+  },
+  "keyboard_canadian_french": {
+    "message": "Kanadensisk-franskt tangentbord"
+  },
+  "keyboard_canadian_multilingual": {
+    "message": "Kanadensiskt flerspr\u00e5kigt tangentbord"
+  },
+  "keyboard_catalan": {
+    "message": "Katalanskt tangentbord"
+  },
+  "keyboard_croatian": {
+    "message": "Kroatiskt tangentbord"
+  },
+  "keyboard_czech": {
+    "message": "Tjeckiskt tangentbord"
+  },
+  "keyboard_czech_qwerty": {
+    "message": "Tjeckiskt QWERTY-tangentbord"
+  },
+  "keyboard_danish": {
+    "message": "Danskt tangentbord"
+  },
+  "keyboard_devanagari_phonetic": {
+    "message": "Tangentbord f\u00f6r devanagari (fonetiskt)"
+  },
+  "keyboard_estonian": {
+    "message": "Estniskt tangentbord"
+  },
+  "keyboard_ethiopic": {
+    "message": "Tangentbord f\u00f6r etiopiska"
+  },
+  "keyboard_finnish": {
+    "message": "Finskt tangentbord"
+  },
+  "keyboard_french": {
+    "message": "Franskt tangentbord"
+  },
+  "keyboard_georgian": {
+    "message": "Georgiskt tangentbord"
+  },
+  "keyboard_german": {
+    "message": "Tyskt tangentbord"
+  },
+  "keyboard_german_neo_2": {
+    "message": "Tyskt Neo 2-tangentbord"
+  },
+  "keyboard_greek": {
+    "message": "Grekiskt tangentbord"
+  },
+  "keyboard_gujarati_phonetic": {
+    "message": "Tangentbord f\u00f6r gujarati (fonetiskt)"
+  },
+  "keyboard_hebrew": {
+    "message": "Hebreiskt tangentbord"
+  },
+  "keyboard_hungarian": {
+    "message": "Ungerskt tangentbord"
+  },
+  "keyboard_icelandic": {
+    "message": "Isl\u00e4ndskt tangentbord"
+  },
+  "keyboard_inscript": {
+    "message": "Tangentbord (InScript)"
+  },
+  "keyboard_irish": {
+    "message": "Irl\u00e4ndskt tangentbord"
+  },
+  "keyboard_italian": {
+    "message": "Italienskt tangentbord"
+  },
+  "keyboard_itrans": {
+    "message": "Tangentbord (itrans)"
+  },
+  "keyboard_japanese": {
+    "message": "Japanskt tangentbord"
+  },
+  "keyboard_kannada_phonetic": {
+    "message": "Tangentbord f\u00f6r kannada (fonetiskt)"
+  },
+  "keyboard_kedmanee": {
+    "message": "Tangentbord (Kedmanee)"
+  },
+  "keyboard_khmer": {
+    "message": "Khmeriskt tangentbord"
+  },
+  "keyboard_lao": {
+    "message": "Laotiskt tangentbord"
+  },
+  "keyboard_latin_american": {
+    "message": "Latinamerikanskt tangentbord"
+  },
+  "keyboard_latvian": {
+    "message": "Lettiskt tangentbord"
+  },
+  "keyboard_lithuanian": {
+    "message": "Litauiskt tangentbord"
+  },
+  "keyboard_malayalam_phonetic": {
+    "message": "Tangentbord f\u00f6r malayalam (fonetiskt)"
+  },
+  "keyboard_maltese": {
+    "message": "Maltesiskt tangentbord"
+  },
+  "keyboard_mongolian": {
+    "message": "Mongoliskt tangentbord"
+  },
+  "keyboard_myanmar": {
+    "message": "Myanmar MM3-tangentbord"
+  },
+  "keyboard_myanmar_myansan": {
+    "message": "Myanmar myansan-tangentbord"
+  },
+  "keyboard_nepali_inscript": {
+    "message": "Nepalesiskt tangentbord (InScript)"
+  },
+  "keyboard_nepali_phonetic": {
+    "message": "Nepalesiskt tangentbord (fonetiskt)"
+  },
+  "keyboard_netherlands": {
+    "message": "Tangentbord \u2013 nederl\u00e4ndska"
+  },
+  "keyboard_none": {
+    "message": "Tangentbord"
+  },
+  "keyboard_norwegian": {
+    "message": "Norskt tangentbord"
+  },
+  "keyboard_pattachote": {
+    "message": "Tangentbord (Pattachote)"
+  },
+  "keyboard_persian": {
+    "message": "Tangentbord f\u00f6r persiska"
+  },
+  "keyboard_phonetic": {
+    "message": "Tangentbord (fonetiskt)"
+  },
+  "keyboard_polish": {
+    "message": "Polskt tangentbord"
+  },
+  "keyboard_portuguese": {
+    "message": "Portugisiskt tangentbord"
+  },
+  "keyboard_romanian": {
+    "message": "Rum\u00e4nskt tangentbord"
+  },
+  "keyboard_romanian_standard": {
+    "message": "Rum\u00e4nskt standardtangentbord"
+  },
+  "keyboard_russian": {
+    "message": "Ryskt tangentbord"
+  },
+  "keyboard_russian_phonetic": {
+    "message": "Ryskt fonetiskt tangentbord"
+  },
+  "keyboard_russian_phonetic_aatseel": {
+    "message": "Ryskt fonetiskt tangentbord (AATSEEL)"
+  },
+  "keyboard_russian_phonetic_yazhert": {
+    "message": "Ryskt fonetiskt tangentbord (YaZHert)"
+  },
+  "keyboard_serbian": {
+    "message": "Serbiskt tangentbord"
+  },
+  "keyboard_sinhala": {
+    "message": "Sinhalesiskt tangentbord"
+  },
+  "keyboard_slovakian": {
+    "message": "Slovakiskt tangentbord"
+  },
+  "keyboard_slovenian": {
+    "message": "Slovenskt tangentbord"
+  },
+  "keyboard_soranikurdish_ar": {
+    "message": "Tangentbord baserat p\u00e5 sorani/kurdiska och arabiska"
+  },
+  "keyboard_soranikurdish_en": {
+    "message": "Tangentbord p\u00e5 sorani/kurdiska och engelska"
+  },
+  "keyboard_spanish": {
+    "message": "Spanskt tangentbord"
+  },
+  "keyboard_swedish": {
+    "message": "Svenskt tangentbord"
+  },
+  "keyboard_swiss": {
+    "message": "Schweiziskt tangentbord"
+  },
+  "keyboard_swiss_french": {
+    "message": "Schweiziskt-franskt tangentbord"
+  },
+  "keyboard_tamil99": {
+    "message": "Tangentbord (Tamil99)"
+  },
+  "keyboard_tamil_inscript": {
+    "message": "Tangentbord f\u00f6r tamil (InScript)"
+  },
+  "keyboard_tamil_itrans": {
+    "message": "Tangentbord f\u00f6r tamil (itrans)"
+  },
+  "keyboard_tamil_phonetic": {
+    "message": "Tangentbord f\u00f6r tamil (fonetiskt)"
+  },
+  "keyboard_tamil_tamil99": {
+    "message": "Tangentbord f\u00f6r tamil (Tamil99)"
+  },
+  "keyboard_tamil_typewriter": {
+    "message": "Tangentbord f\u00f6r tamil tangentbord (skrivmaskin)"
+  },
+  "keyboard_tcvn": {
+    "message": "Tangentbord (TCVN)"
+  },
+  "keyboard_telex": {
+    "message": "Tangentbord (Telex)"
+  },
+  "keyboard_telugu_phonetic": {
+    "message": "Tangentbord f\u00f6r telugu (fonetiskt)"
+  },
+  "keyboard_thai_kedmanee": {
+    "message": "Tangentbord f\u00f6r thail\u00e4ndska (Kedmanee)"
+  },
+  "keyboard_thai_pattachote": {
+    "message": "Tangentbord f\u00f6r thail\u00e4ndska (Pattachote)"
+  },
+  "keyboard_thai_tis": {
+    "message": "Tangentbord f\u00f6r thail\u00e4ndska (TIS 820-2531)"
+  },
+  "keyboard_tis": {
+    "message": "Tangentbord (TIS 820-2531)"
+  },
+  "keyboard_turkish": {
+    "message": "Turkiskt tangentbord"
+  },
+  "keyboard_typewriter": {
+    "message": "Tangentbord (skrivmaskin)"
+  },
+  "keyboard_uk": {
+    "message": "Brittiskt tangentbord"
+  },
+  "keyboard_uk_dvorak": {
+    "message": "Dvorak-tangentbord f\u00f6r USA"
+  },
+  "keyboard_ukrainian": {
+    "message": "Ukrainskt tangentbord"
+  },
+  "keyboard_us": {
+    "message": "USA-tangentbord"
+  },
+  "keyboard_us_colemak": {
+    "message": "Colemak-tangentbord f\u00f6r USA"
+  },
+  "keyboard_us_dvorak": {
+    "message": "Dvorak-tangentbord f\u00f6r USA"
+  },
+  "keyboard_us_extended": {
+    "message": "Ut\u00f6kat tangentbord f\u00f6r USA"
+  },
+  "keyboard_us_international": {
+    "message": "Internationellt tangentbord f\u00f6r USA"
+  },
+  "keyboard_vietnamese_tcvn": {
+    "message": "Tangentbord f\u00f6r vietnamesiska (TCVN)"
+  },
+  "keyboard_vietnamese_telex": {
+    "message": "Tangentbord f\u00f6r vietnamesiska (Telex)"
+  },
+  "keyboard_vietnamese_viqr": {
+    "message": "Tangentbord f\u00f6r vietnamesiska (VIQR)"
+  },
+  "keyboard_vietnamese_vni": {
+    "message": "Tangentbord f\u00f6r vietnamesiska (VNI)"
+  },
+  "keyboard_viqr": {
+    "message": "Tangentbord (VIQR)"
+  },
+  "keyboard_vni": {
+    "message": "Tangentbord (VNI)"
+  },
+  "korean_hanja_display": {
+    "message": "Hanja Candidate-l\u00e4ge"
+  },
+  "korean_keyboard_layout": {
+    "message": "Koreansk tangentbordslayout"
+  },
+  "korean_settings_page": {
+    "message": "Inst\u00e4llningssida f\u00f6r koreansk inmatningsmetod"
+  },
+  "korean_syllable_input": {
+    "message": "Mata in en stavelse i taget"
+  },
+  "latam_spa_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r latinamerikanskt tangentbord (spanskt)"
+  },
+  "latin_settings_page": {
+    "message": "Inst\u00e4llningar"
+  },
+  "left_arrow": {
+    "message": "v\u00e4nsterpil"
+  },
+  "lt_lit_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r litauiskt tangentbord"
+  },
+  "lv_apostrophe_lav_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r lettiskt tangentbord (lettiskt)"
+  },
+  "menu_key": {
+    "message": "\u00f6ppna tangentbordsmenyn"
+  },
+  "mn_mon_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r mongoliskt tangentbord"
+  },
+  "move_page_key_above": {
+    "message": "Anv\u00e4nd tangenterna - och = om du vill s\u00f6ka i en kandidatlista"
+  },
+  "move_page_key_below": {
+    "message": "Anv\u00e4nd tangenterna , och . om du vill s\u00f6ka i en kandidatlista"
+  },
+  "never_auto_correct": {
+    "message": "Av"
+  },
+  "no_nob_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r norskt tangentbord"
+  },
+  "pause": {
+    "message": "Paus"
+  },
+  "physical_auto_correction_level": {
+    "message": "Automatisk korrigering"
+  },
+  "physical_enable_capitalization": {
+    "message": "Automatiska versaler"
+  },
+  "physical_keyboard": {
+    "message": "Fysiskt tangentbord"
+  },
+  "pinyin_settings_page": {
+    "message": "Inst\u00e4llningssida f\u00f6r pinyin"
+  },
+  "pl_pol_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r polskt tangentbord"
+  },
+  "pt_por_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r portugisiskt tangentbord"
+  },
+  "right_arrow": {
+    "message": "h\u00f6gerpil"
+  },
+  "ro_rum_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r rum\u00e4nskt tangentbord"
+  },
+  "rs_srp_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r serbiskt tangentbord"
+  },
+  "ru_phonetic_rus_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r ryskt fonetiskt tangentbord"
+  },
+  "ru_rus_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r ryskt tangentbord"
+  },
+  "se_swe_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r svenskt tangentbord"
+  },
+  "settings": {
+    "message": "Inst\u00e4llningar"
+  },
+  "shift": {
+    "message": "skift"
+  },
+  "shift_lock": {
+    "message": "skift l\u00e5st"
+  },
+  "show_candidate_mode": {
+    "message": "F\u00f6rdr\u00f6jning av f\u00f6rslag i rullgardinsmeny"
+  },
+  "show_candidates_1000": {
+    "message": "Visa f\u00f6rslag i rullgardinsmeny efter 1 s"
+  },
+  "show_candidates_2000": {
+    "message": "Visa f\u00f6rslag i rullgardinsmeny efter 2 s"
+  },
+  "show_candidates_500": {
+    "message": "Visa f\u00f6rslag i rullgardinsmeny efter 500 ms"
+  },
+  "show_candidates_5000": {
+    "message": "Visa f\u00f6rslag i rullgardinsmeny efter 5 s"
+  },
+  "show_candidates_backspace": {
+    "message": "Visa f\u00f6rslag i rullgardinsmeny vid backsteg"
+  },
+  "show_hangul_candidate": {
+    "message": "Visa kandidater i Hangul-l\u00e4ge"
+  },
+  "shrink_candidates": {
+    "message": "visa f\u00e4rre alternativ"
+  },
+  "si_slv_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r slovenskt tangentbord"
+  },
+  "sk_slo_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r slovakiskt tangentbord"
+  },
+  "smiley": {
+    "message": "k\u00e4nsloikon"
+  },
+  "sometimes_auto_correct": {
+    "message": "Ibland"
+  },
+  "sound_on_keypress": {
+    "message": "Knappljud"
+  },
+  "space": {
+    "message": "blanksteg"
+  },
+  "switch_to": {
+    "message": "byt till "
+  },
+  "switch_to_compact_layout": {
+    "message": "Byt till kompakt layout"
+  },
+  "switch_to_full_layout": {
+    "message": "Byt till fullst\u00e4ndig layout"
+  },
+  "switch_to_keyboard_prefix": {
+    "message": "byt till "
+  },
+  "switched_to": {
+    "message": "bytte till "
+  },
+  "tab": {
+    "message": "tabb"
+  },
+  "touch_keyboard": {
+    "message": "Sk\u00e4rmtangentbord"
+  },
+  "tr_tur_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r turkiskt tangentbord"
+  },
+  "transliteration_am": {
+    "message": "Translitterering (salam \u2192 \u1230\u120b\u121d)"
+  },
+  "transliteration_ar": {
+    "message": "Translitterering (marhaban \u2190 \u0645\u0631\u062d\u0628\u0627)"
+  },
+  "transliteration_be": {
+    "message": "Translitterering (pryvitannie \u2192 \u043f\u0440\u044b\u0432\u0456\u0442\u0430\u043d\u043d\u0435)"
+  },
+  "transliteration_bg": {
+    "message": "Translitterering (zdrasti \u2192 \u0437\u0434\u0440\u0430\u0441\u0442\u0438)"
+  },
+  "transliteration_bn": {
+    "message": "Translitterering (namaskar \u2192 \u09a8\u09ae\u09b8\u09cd\u0995\u09be\u09b0)"
+  },
+  "transliteration_el": {
+    "message": "Translitterering (geia \u2192 \u03b3\u03b5\u03b9\u03b1)"
+  },
+  "transliteration_fa": {
+    "message": "Translitterering (salam \u2190 \u0633\u0644\u0627\u0645)"
+  },
+  "transliteration_gu": {
+    "message": "Translitterering (namaste \u2192 \u0aa8\u0aae\u0ab8\u0acd\u0aa4\u0ac7)"
+  },
+  "transliteration_he": {
+    "message": "Translitterering (shalom \u2190 \u05e9\u05dc\u05d5\u05dd)"
+  },
+  "transliteration_hi": {
+    "message": "Translitterering (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_kn": {
+    "message": "Translitterering (namaskaram \u2192 \u0ca8\u0cae\u0cb8\u0ccd\u0c95\u0cbe\u0cb0)"
+  },
+  "transliteration_ml": {
+    "message": "Translitterering (namaskar \u2192 \u0d28\u0d2e\u0d38\u0d4d\u0d15\u0d3e\u0d30\u0d02)"
+  },
+  "transliteration_mr": {
+    "message": "Translitterering (namaste \u2192 \u0928\u092e\u0938\u094d\u0915\u093e\u0930)"
+  },
+  "transliteration_ne": {
+    "message": "Translitterering (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_or": {
+    "message": "Translitterering (mausam \u2192 \u0b28\u0b2e\u0b38\u0b4d\u0b24\u0b47)"
+  },
+  "transliteration_pa": {
+    "message": "Translitterering (mausam \u2192 \u0a2e\u0a4c\u0a38\u0a2e)"
+  },
+  "transliteration_ru": {
+    "message": "Translitterering (privet \u2192 \u043f\u0440\u0438\u0432\u0435\u0442)"
+  },
+  "transliteration_sa": {
+    "message": "Translitterering (namaste \u2192 \u0928\u092e\u0938\u094d\u0924\u0947)"
+  },
+  "transliteration_si": {
+    "message": "Translitterering (halo \u2192 \u0dc4\u0dbd\u0ddd)"
+  },
+  "transliteration_sr": {
+    "message": "Translitterering (zdravo \u2192 \u0437\u0434\u0440\u0430\u0432\u043e)"
+  },
+  "transliteration_ta": {
+    "message": "Translitterering (vanakkam \u2192 \u0bb5\u0ba3\u0b95\u0bcd\u0b95\u0bae\u0bcd)"
+  },
+  "transliteration_te": {
+    "message": "Translitterering (emandi \u2192 \u0c0f\u0c2e\u0c02\u0c21\u0c40)"
+  },
+  "transliteration_ti": {
+    "message": "Translitterering (selam \u2192 \u1230\u120b\u121d)"
+  },
+  "transliteration_uk": {
+    "message": "Translitterering (pryvit \u2192 \u043f\u0440\u0438\u0432\u0456\u0442)"
+  },
+  "transliteration_ur": {
+    "message": "Translitterering (salam \u2190 \u0633\u0644\u0627\u0645)"
+  },
+  "transliteration_vi": {
+    "message": "Translitterering (chao \u2192 ch\u00e0o)"
+  },
+  "ua_ukr_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r ukrainskt tangentbord"
+  },
+  "up_arrow": {
+    "message": "upp\u00e5tpil"
+  },
+  "us_altgr_intl_eng_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r ut\u00f6kat tangentbord f\u00f6r USA (engelska)"
+  },
+  "us_colemak_eng_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r Colemak-tangentbord f\u00f6r USA"
+  },
+  "us_dvorak_eng_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r Dvorak-tangentbord f\u00f6r USA"
+  },
+  "us_eng_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r tangentbord f\u00f6r USA (engelska)"
+  },
+  "us_fil_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r tangentbord f\u00f6r USA (filippinska)"
+  },
+  "us_ind_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r tangentbord f\u00f6r USA (indonesiska)"
+  },
+  "us_intl_eng_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r internationellt tangentbord f\u00f6r USA"
+  },
+  "us_intl_nld_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r internationellt tangentbord f\u00f6r USA (nederl\u00e4ndska)"
+  },
+  "us_intl_por_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r internationellt tangentbord f\u00f6r USA (brasiliansk portugisiska)"
+  },
+  "us_msa_settings_page": {
+    "message": "Inst\u00e4llningssidan f\u00f6r tangentbord f\u00f6r USA (malaysiska)"
+  },
+  "user_dict": {
+    "message": "Aktivera egen ordlista"
+  },
+  "user_dict_add": {
+    "message": "L\u00e4gg till"
+  },
+  "user_dict_clear": {
+    "message": "Ta bort alla"
+  },
+  "user_dict_manage": {
+    "message": "Hantera personlig ordlista ..."
+  },
+  "user_dict_new_word": {
+    "message": "Nytt ord"
+  },
+  "user_dict_remove": {
+    "message": "Ta bort markerade poster"
+  },
+  "user_dict_reset": {
+    "message": "\u00c5terst\u00e4ll alla \u00e4ndringar i ordlistan"
+  },
+  "user_dict_save": {
+    "message": "Spara"
+  },
+  "user_dict_sync": {
+    "message": "Synkronisera personlig ordlista"
+  },
+  "user_dict_title": {
+    "message": "Personlig ordlista"
+  },
+  "voice": {
+    "message": "R\u00f6st"
+  },
+  "voice_privacy_info": {
+    "message": "R\u00f6stinmatningen skickas till Googles servrar f\u00f6r textigenk\u00e4nning."
+  },
+  "voice_turn_off": {
+    "message": "inaktivera verktyg f\u00f6r r\u00f6stinmatning"
+  },
+  "voice_turn_on": {
+    "message": "aktivera verktyg f\u00f6r r\u00f6stinmatning"
+  },
+  "wait": {
+    "message": "V\u00e4nta"
+  },
+  "zhuyin_keyboard_layout": {
+    "message": "Typ av tangentbord"
+  },
+  "zhuyin_page_size": {
+    "message": "Antal kandidater som ska visas per sida"
+  },
+  "zhuyin_select_keys": {
+    "message": "Valtangenter"
+  },
+  "zhuyin_settings_page": {
+    "message": "Inst\u00e4llningssida f\u00f6r zhuyin"
+  }
+}

@@ -1,0 +1,14 @@
+<link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-checkbox/paper-checkbox.html">
+
+<dom-module id="cr-checkbox">
+  <link rel="import" type="css" href="cr_checkbox.css">
+  <template>
+    <cr-events id="events"></cr-events>
+    <paper-checkbox id="checkbox" checked="{{checked}}" disabled="[[disabled]]"
+        class="layout horizontal centered">
+      <content></content>
+    </paper-checkbox>
+  </template>
+  <script src="cr_checkbox.js"></script>
+</dom-module>

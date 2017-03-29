@@ -1,0 +1,91 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef REMOTING_TEST_TEST_VIDEO_RENDERER_H_
+#define REMOTING_TEST_TEST_VIDEO_RENDERER_H_
+
+#include "base/memory/scoped_ptr.h"
+#include "base/memory/weak_ptr.h"
+#include "base/threading/thread_checker.h"
+#include "media/base/video_frame.h"
+#include "remoting/client/video_renderer.h"
+#include "remoting/protocol/session_config.h"
+#include "remoting/protocol/video_stub.h"
+
+namespace base {
+class Thread;
+class SingleThreadTaskRunner;
+}
+
+namespace webrtc {
+class DesktopFrame;
+class DesktopRect;
+}
+
+typedef uint32 RgbaColor;
+
+namespace remoting {
+namespace test {
+
+// Processes video packets as they are received from the remote host. Must be
+// used from a thread running a message loop and this class will use that
+// message loop to execute the done callbacks passed by the caller of
+// ProcessVideoPacket.
+class TestVideoRenderer : public VideoRenderer, public protocol::VideoStub {
+ public:
+  TestVideoRenderer();
+  ~TestVideoRenderer() override;
+
+  // VideoRenderer interface.
+  void OnSessionConfig(const protocol::SessionConfig& config) override;
+  ChromotingStats* GetStats() override;
+  protocol::VideoStub* GetVideoStub() override;
+
+  // protocol::VideoStub interface.
+  void ProcessVideoPacket(scoped_ptr<VideoPacket> video_packet,
+                          const base::Closure& done) override;
+
+  // Initialize a decoder to decode video packets.
+  void SetCodecForDecoding(const protocol::ChannelConfig::Codec codec);
+
+  // Returns a copy of the current buffer.
+  scoped_ptr<webrtc::DesktopFrame> GetBufferForTest() const;
+
+  // Gets a weak pointer for this object.
+  base::WeakPtr<TestVideoRenderer> GetWeakPtr() {
+    return weak_factory_.GetWeakPtr();
+  }
+
+  // Set expected image pattern for comparison and the callback will be called
+  // when the pattern is matched.
+  void SetImagePatternAndMatchedCallback(
+      const webrtc::DesktopRect& expected_rect,
+      const RgbaColor& expected_color,
+      const base::Closure& image_pattern_matched_callback);
+
+ private:
+  // The actual implementation resides in Core class.
+  class Core;
+  scoped_ptr<Core> core_;
+
+  // Used to ensure TestVideoRenderer methods are called on the same thread.
+  base::ThreadChecker thread_checker_;
+
+  // Used to decode and process video packets.
+  scoped_ptr<base::Thread>  video_decode_thread_;
+
+  // Used to post tasks to video decode thread.
+  scoped_refptr<base::SingleThreadTaskRunner> video_decode_task_runner_;
+
+  // Used to weakly bind |this| to methods.
+  // NOTE: Weak pointers must be invalidated before all other member variables.
+  base::WeakPtrFactory<TestVideoRenderer> weak_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestVideoRenderer);
+};
+
+}  // namespace test
+}  // namespace remoting
+
+#endif  // REMOTING_TEST_TEST_VIDEO_RENDERER_H_

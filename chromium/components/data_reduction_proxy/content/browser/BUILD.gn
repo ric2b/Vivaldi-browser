@@ -1,0 +1,68 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+static_library("browser") {
+  sources = [
+    "data_reduction_proxy_message_filter.cc",
+    "data_reduction_proxy_message_filter.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/data_reduction_proxy/content/common",
+    "//content/public/browser",
+    "//ipc",
+    "//net",
+  ]
+
+  if (is_android) {
+    sources += [
+      "content_data_reduction_proxy_debug_ui_service.cc",
+      "content_data_reduction_proxy_debug_ui_service.h",
+      "data_reduction_proxy_debug_blocking_page.cc",
+      "data_reduction_proxy_debug_blocking_page.h",
+      "data_reduction_proxy_debug_resource_throttle.cc",
+      "data_reduction_proxy_debug_resource_throttle.h",
+      "data_reduction_proxy_debug_ui_manager.cc",
+      "data_reduction_proxy_debug_ui_manager.h",
+    ]
+
+    deps += [
+      "//components/resources",
+      "//components/strings",
+      "//skia",
+      "//ui/base",
+    ]
+  }
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "data_reduction_proxy_message_filter_unittest.cc",
+  ]
+
+  deps = [
+    ":browser",
+    "//base",
+    "//components/data_reduction_proxy/core/browser:test_support",
+    "//components/data_reduction_proxy/core/common:test_support",
+    "//net",
+    "//testing/gtest",
+    "//testing/gmock",
+  ]
+
+  if (is_android) {
+    sources += [
+      "data_reduction_proxy_debug_blocking_page_unittest.cc",
+      "data_reduction_proxy_debug_resource_throttle_unittest.cc",
+      "data_reduction_proxy_debug_ui_manager_unittest.cc",
+    ]
+
+    deps += [
+      "//skia",
+      "//third_party/mojo/src/mojo/public/cpp/bindings",
+    ]
+  }
+}

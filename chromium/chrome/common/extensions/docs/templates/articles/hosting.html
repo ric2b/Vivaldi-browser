@@ -1,0 +1,99 @@
+<h1>Hosting</h1>
+
+<p class="warning"><b>Warning:</b>
+As of Chrome 33,
+Windows users can only download extensions
+hosted in the Chrome Web store,
+except for installs via
+<a href="https://support.google.com/chrome/a/answer/188453">enterprise policy</a>
+or
+<a href="getstarted#unpacked">developer mode</a>
+ (see
+ <a href="http://blog.chromium.org/2013/11/protecting-windows-users-from-malicious.html">Protecting Windows users from malicious extensions</a>).
+As of Chrome 44, no external installs are allowed from a path to a local .crx on Mac
+(see
+<a href="http://blog.chromium.org/2015/05/continuing-to-protect-chrome-users-from.html">Continuing to protect Chrome users from malicious extensions</a>).
+</p> 
+
+<p>
+This page tells you how to host <code>.crx</code> files
+on your own server.
+If you distribute your extension, app, or theme solely through the
+<a href="http://chrome.google.com/webstore">Chrome Web Store</a>,
+you don't need this page.
+Instead, consult the
+<a href="https://support.google.com/chrome_webstore/">store help</a> and
+<a href="http://code.google.com/chrome/webstore/index">developer documentation</a>.
+</p>
+
+<p>
+By convention, extensions,
+installable web apps, and themes are served&mdash;whether
+by the Chrome Web Store or by a custom server&mdash;as
+<code>.crx</code> files.
+When you upload a ZIP file with the
+<a href="https://chrome.google.com/webstore/developer/dashboard">Chrome Developer Dashboard</a>,
+the dashboard creates the <code>.crx</code> file for you.
+</p>
+
+<p>
+If you aren't publishing using the dashboard,
+you need to create the <code>.crx</code> file yourself,
+as described in <a href="packaging">Packaging</a>.
+You can also specify
+<a href="autoupdate">autoupdate</a> information to ensure that
+your users will have the latest copy of the <code>.crx</code> file.
+</p>
+
+<p>
+A server that hosts <code>.crx</code> files
+must use appropriate HTTP headers,
+so that users can install the file
+by clicking a link to it.
+</p>
+
+<p>
+Google Chrome considers a file to be installable
+if <b>either</b> of the following is true:
+</p>
+
+<ul>
+  <li>
+    The file has the content type
+    <code>application/x-chrome-extension</code>
+  </li>
+  <li>
+    The file suffix is <code>.crx</code>
+    and <b>both</b> of the following are true:
+    <ul>
+      <li>
+        The file <b>is not</b> served with
+        the HTTP header <code>X-Content-Type-Options: nosniff</code>
+      </li>
+      <li>
+        The file <b>is</b> served
+        with one of the following content types:
+        <ul>
+          <li> empty string </li>
+          <li> "text/plain" </li>
+          <li> "application/octet-stream" </li>
+          <li> "unknown/unknown" </li>
+          <li> "application/unknown" </li>
+          <li> "*/*" </li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+</ul>
+
+<p>
+The most common reason for failing to recognize an installable file
+is that the server sends the header
+<code>X-Content-Type-Options: nosniff</code>.
+The second most common reason
+is that the server sends an unknown content type&mdash;one
+that isn't in the previous list.
+To fix an HTTP header issue,
+either change the configuration of the server
+or try hosting the <code>.crx</code> file at another server.
+</p>

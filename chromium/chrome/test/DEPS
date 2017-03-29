@@ -1,0 +1,25 @@
+include_rules = [
+  # The test directory can do whatever it wants in chrome, and may
+  # rely on components.
+  "+ash",
+  "+chrome",
+  "+chrome/grit",  # For generated headers
+  "+chromeos",
+  "+components",
+  "+extensions",
+
+  # Tests under chrome/ shouldn't need to access the internals of content/ and
+  # as such are allowed only content/public. If you find yourself wanting to
+  # write such a test, or a test that depends primarily on content, think about
+  # whether the test belongs under content/, or should be split up into a test
+  # within content/ and a test within chrome/.
+  "+content/public",
+
+  "+gin/public",
+  "+grit",  # For generated headers. TODO(thestig): Remove.
+  "+media/base",
+  "+sandbox/win/tests",
+  "+third_party/mojo/src/mojo/edk/embedder",
+  "+third_party/ocmock",
+  "+win8/test",
+]

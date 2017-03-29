@@ -1,0 +1,7 @@
+AXWebArea
+++AXGroup
+++++AXUnknown
+++++++AXUnknown
+++++++++AXStaticText AXValue='ruby text'
+++++++AXGroup
+++++++++AXStaticText AXValue='ruby base'
